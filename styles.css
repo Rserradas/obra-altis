@@ -707,3 +707,10 @@ a.li { text-decoration: none; color: inherit; }
 }
 button.kpi { font: inherit; cursor: pointer; }
 .kpi.sel { box-shadow: 0 0 0 2px var(--accent); }
+/* Trabalhos: as duas percentagens */
+.tbl td.pctc2 { white-space: nowrap; }
+.p2 { color: var(--muted); font-weight: 400; }
+.p2.conta { color: var(--ink); font-weight: 700; }
+.p2wrap.dif { background: var(--crit-soft); border-radius: 6px; padding: 1px 5px; }
+.p2wrap.dif .p2.conta { color: var(--crit); }
+.p2.sv { font-size: .85em; }

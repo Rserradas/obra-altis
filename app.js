@@ -999,7 +999,7 @@ function planoView() {
     const ck = atr ? `<td class="ck"><input type="checkbox" data-ck="${a.id}" ${p.selec.has(a.id) ? "checked" : ""} aria-label="Escolher ${esc(nomeAtiv(a) + " " + a.unidade)}"></td>` : "";
     return `<tr ${ed ? "" : atr ? `data-tck="${a.id}" class="${p.selec.has(a.id) ? "sel" : ""}"` : `data-a="${a.id}"`}>${ck}<td class="mono">${esc(a.unidade)}</td>
       <td>${ed ? `<button class="lnk-b" data-a="${a.id}"><b>${esc(nomeAtiv(a))}</b></button>` : `<b>${esc(nomeAtiv(a))}</b>`}${a.equipa ? `<div class="note">${esc(a.equipa)}</div>` : atr ? `<div class="note semeq">sem equipa</div>` : ""}${espera.length ? `<div class="wait">À espera de: ${esc(espera.slice(0, 2).join(", "))}${espera.length > 2 ? "..." : ""}</div>` : ""}</td>
-      <td>${ed || can("executar") ? estadoEdHTML(a, r) : `<span class="pill st-${r.estado}">${ESTADO[r.estado]}</span>`}</td><td>${cIni}</td><td>${cFim}</td><td>${p.f === "porconfirmar" && can("executar") ? `<button class="btn sm" data-conf="${a.id}" title="A data mostrada está certa">Confirmar</button>` : deltaHTML(r.atraso)}</td><td class="mono num">${ed ? pctEdHTML(a) : Math.round(pctEfetiva(a)) + "%"}</td></tr>`;
+      <td>${ed || can("executar") ? estadoEdHTML(a, r) : `<span class="pill st-${r.estado}">${ESTADO[r.estado]}</span>`}</td><td>${cIni}</td><td>${cFim}</td><td>${p.f === "porconfirmar" && can("executar") ? `<button class="btn sm" data-conf="${a.id}" title="A data mostrada está certa">Confirmar</button>` : deltaHTML(r.atraso)}</td><td class="mono num pctc2">${ed ? pctEdHTML(a) + pctFiscalHTML(a, true) : pctDuasHTML(a)}</td></tr>`;
   };
   const html = `
     <div class="card-h"><h1>Trabalhos</h1><div class="row">
@@ -1032,7 +1032,7 @@ function planoView() {
       <button class="btn pri" id="atrOk" ${p.selec.size ? "" : "disabled"}>Atribuir</button>
       <span class="note">Use os filtros (por exemplo Atividade e Equipa "Sem equipa") para chegar aos trabalhos certos, escolha-os e atribua.</span></div>` : ""}
     <div class="note num">${list.length} atividade${list.length === 1 ? "" : "s"}${esconde ? ` · concluídas escondidas <button class="btn sm ghost" id="pmostra" style="min-height:24px;padding:0 6px;text-decoration:underline">mostrar</button>` : ""}</div>
-    ${shown.length ? `<div class="tbl-wrap"><table class="tbl ${ed ? "editing" : ""}"><thead><tr>${atr ? `<th class="ck"><input type="checkbox" id="atrCkAll" ${shown.length && shown.every(({ a }) => p.selec.has(a.id)) ? "checked" : ""} aria-label="Escolher todas"></th>` : ""}${[["unidade", "Fração"], ["atividade", "Atividade"], ["estado", "Estado"], ["inicio", ed ? "Início" : "Início previsto"], ["fim", ed ? "Fim" : "Fim previsto"], ["desvio", "Atraso"], ["pct", "%"]].map(([k, l]) => {
+    ${shown.length ? `<div class="tbl-wrap"><table class="tbl ${ed ? "editing" : ""}"><thead><tr>${atr ? `<th class="ck"><input type="checkbox" id="atrCkAll" ${shown.length && shown.every(({ a }) => p.selec.has(a.id)) ? "checked" : ""} aria-label="Escolher todas"></th>` : ""}${[["unidade", "Fração"], ["atividade", "Atividade"], ["estado", "Estado"], ["inicio", ed ? "Início" : "Início previsto"], ["fim", ed ? "Fim" : "Fim previsto"], ["desvio", "Atraso"], ["pct", "% · F"]].map(([k, l]) => {
       const on = p.sort && p.sort.col === k;
       return `<th aria-sort="${on ? (p.sort.dir === "desc" ? "descending" : "ascending") : "none"}"><button class="th-sort ${on ? "on" : ""}" data-sort="${k}" title="Ordenar por ${l.toLowerCase()}">${l}<span class="arr">${on ? (p.sort.dir === "desc" ? "▼" : "▲") : "↕"}</span></button></th>`;
     }).join("")}</tr></thead><tbody>
@@ -1149,6 +1149,17 @@ function estadoEdHTML(a, r) {
   return `<div class="fpick estpick"><button type="button" class="pill st-${r.estado} estb" data-estm="${a.id}" aria-haspopup="menu" title="Mudar o estado">${ESTADO[r.estado]} ▾</button>
     <div class="fmenu" hidden data-estmenu="${a.id}" role="menu">${op.map(([k, l]) => `<button type="button" class="fopt" role="menuitem" data-esta="${a.id}|${k}"><span><b>${l}</b>${k === "ini" || k === "fim" ? `<small>${fd(S.hoje, true)}</small>` : ""}</span></button>`).join("")}</div></div>`;
 }
+/** As duas percentagens (empreiteiro e fiscal), com a que conta destacada; avisa quando não estão de acordo. */
+function pctDuasHTML(a) {
+  const e = Math.round(Number(a.pctEmp) || 0), f = a.pctFiscal == null ? null : Math.round(Number(a.pctFiscal));
+  if (a.concluido) return `<span class="p2 conta" title="Concluída">100%</span>`;
+  if (f == null) return `<span class="p2 conta" title="Empreiteiro: ${e}%. Ainda sem vistoria do fiscal.">${e}%</span> <span class="p2 sv" title="Sem vistoria">· F s/v</span>`;
+  const contaF = !!(a.fiscalEm && (!a.empEm || a.fiscalEm >= a.empEm));
+  const dif = Math.abs(e - f) >= 15;
+  const dica = `Empreiteiro ${e}%, fiscal ${f}%. Conta a ${contaF ? "do fiscal" : "do empreiteiro"}, por ser a mais recente.${dif ? " Diferença de " + Math.abs(e - f) + " pontos." : ""}`;
+  return `<span class="p2wrap ${dif ? "dif" : ""}" title="${esc(dica)}"><span class="p2 ${contaF ? "" : "conta"}">${e}%</span> · <span class="p2 ${contaF ? "conta" : ""}">F ${f}%</span></span>`;
+}
+const pctFiscalHTML = (a) => `<span class="p2 sv"> F ${a.pctFiscal == null ? "s/v" : Math.round(Number(a.pctFiscal)) + "%"}</span>`;
 const pctEdHTML = (a) => `<label class="pct-ed" title="Percentagem feita (empreiteiro)"><input class="inp num" type="number" min="0" max="100" step="5" inputmode="numeric" data-pcted="${a.id}" value="${Math.round(Number(a.pctEmp) || 0)}" aria-label="Percentagem feita de ${esc(nomeAtiv(a))} em ${esc(a.unidade)}"><span>%</span></label>`;
 /** Pede confirmação e conclui a atividade hoje (com os avisos das seguintes). */
 async function concluirHoje(id) {
