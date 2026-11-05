@@ -27,7 +27,7 @@ service cloud.firestore {
       allow delete: if isDono();
       allow update: if isDono()
         || (papel() == "empreiteiro" && soMuda(["realInicio", "realFim", "concluido", "pctEmp", "empEm", "inicioPrevisto", "fimPrevisto",
-              "motivo", "duracaoManual", "equipa", "depsExtra", "depsIgnorar", "dataOk", "atualizadoEm", "atualizadoPor"]))
+              "motivo", "duracaoManual", "equipa", "unidade", "depsExtra", "depsIgnorar", "dataOk", "atualizadoEm", "atualizadoPor"]))
         || (papel() == "fiscal" && soMuda(["pctFiscal", "fiscalEm", "fiscalPor", "fiscalNota", "fiscalNotaEm", "atualizadoEm", "atualizadoPor"]));
     }
     match /fotos/{id} {

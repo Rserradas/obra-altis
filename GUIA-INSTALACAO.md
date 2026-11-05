@@ -96,7 +96,7 @@ No ecrã de cada apartamento, o separador **Atividades** mostra uma atividade po
 
 ## A minha semana (empreiteiro)
 
-O empreiteiro entra diretamente em **A minha semana**: o que está em curso (com quantas acabam esta semana), o que deve começar nos próximos 7 dias e o que está à espera de outras atividades, com o motivo. Pode filtrar por equipa e por bloco. Os botões **Iniciar**, **+10%** e **Concluir** gravam logo, sem abrir a ficha, e podem ser anulados.
+O empreiteiro entra diretamente em **A minha semana**: o que está em curso (com quantas acabam esta semana), o que deve começar nos próximos 7 dias e o que está à espera de outras atividades, com o motivo. Pode filtrar por equipa e por bloco, e mostrar só uma das três listas (Em curso, Para começar ou À espera de outras) tocando no cartão do topo ou nos botões por baixo; voltar a tocar mostra tudo. Os botões **Iniciar**, **+10%** e **Concluir** gravam logo, sem abrir a ficha, e podem ser anulados.
 
 ## Ficha da atividade
 
@@ -135,6 +135,7 @@ O botão **Repor filtros** (no menu lateral; no telemóvel, "Repor" na barra de 
 * **Esconder concluídas:** ligado por defeito, tira da lista tudo o que já está 100% concluído, para ver só o que falta fazer. Combina com os outros filtros. Para voltar a ver tudo, desligue a opção ou carregue em "mostrar". No estado "Concluídas" não se aplica.
 * **Ordenar:** clique no título de qualquer coluna (Fração, Atividade, Estado, Início, Fim, Atraso, %). O segundo clique inverte a ordem e o terceiro volta à ordem normal. No Atraso e na percentagem, o primeiro clique mostra os maiores primeiro.
 * **Editar datas:** o botão **Editar datas** (dono de obra e empreiteiro) transforma as colunas de início e fim em campos de data. Cada alteração fica guardada logo e as atividades que dependem dela acertam-se sozinhas.
+* **Estado e percentagem:** nos Trabalhos (sempre, e também no modo Editar datas) e no ecrã de cada apartamento (no modo Editar datas), o estado passa a ser um botão com as opções **Iniciar hoje**, **Concluir hoje**, **Reabrir** ou **Anular o início**, e a percentagem passa a ser um campo. Antes de concluir, a aplicação pede sempre confirmação (também no botão Concluir hoje da ficha e em A minha semana). Escrever 100% conclui a atividade hoje, depois de confirmar; escrever uma percentagem numa atividade por iniciar dá-a como iniciada hoje. Os avisos de atividade anterior por acabar e de atividades seguintes aparecem como nos outros ecrãs.
   * Atividade por iniciar: o início é a nova previsão. Se as anteriores só acabarem mais tarde, a aplicação avisa e usa essa data. Um início igual ou anterior a hoje marca a atividade como iniciada. O fim define a duração, que se mantém se o início for empurrado.
   * Atividade em curso: o início corrige a data real em que começou e o fim é a nova previsão de conclusão.
   * Atividade concluída: as duas datas corrigem as datas reais.
@@ -149,6 +150,12 @@ Em **Definições**, separador **Equipas de trabalho**, estão as equipas que fa
 * **Atribuir a um trabalho:** na ficha do trabalho, no campo **Equipa**. Também se pode criar uma equipa nova a partir daí.
 * **Atribuir a vários de uma vez:** em **Trabalhos**, toque em **Atribuir equipa**. Aparece uma caixa de escolha em cada linha. Use os filtros (por exemplo Atividade "Azulejos WC" e Equipa "Sem equipa"), escolha as linhas ou **Escolher as N da lista**, escolha a equipa e toque em **Atribuir**. Também dá para retirar a equipa.
 * O filtro **Equipa** dos Trabalhos tem a opção **Sem equipa**, e em **A minha semana** o empreiteiro filtra pela sua equipa.
+
+## Reutilizar ou mudar uma atividade de fração
+
+* **Copiar para outras frações:** na ficha de uma atividade, o botão **Copiar para outras frações** abre a Nova atividade já preenchida com o nome, os dias e a equipa dessa atividade. Escolhe os apartamentos, lojas, zonas comuns ou o geral e exteriores, e cria-a lá.
+* **Atividades já criadas:** na Nova atividade, a lista "Atividade" tem também o grupo **Outras atividades já criadas**, com as atividades de nome próprio que existem na obra (as que não são especialidades), para as poder pôr noutras frações sem as escrever de novo.
+* **Mudar para outra fração:** na ficha, a caixa **Mudar para outra fração** (dono de obra e empreiteiro) passa a atividade para outro apartamento, loja, zona comum ou para o geral, com as mesmas datas, percentagens, ligações e histórico. Se essa fração já tiver a mesma especialidade, a aplicação avisa. As fotografias já tiradas ficam na galeria da fração de origem.
 
 ## Criar e eliminar frações
 
