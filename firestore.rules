@@ -1,12 +1,12 @@
 rules_version = '2';
 // Regras de acesso à base de dados da obra.
-// Dono de obra: tudo. Empreiteiro: execução, previsões e ligações. Fiscal: vistorias. Todos: ver e juntar fotografias.
+// Dono de obra e administrador: tudo. Empreiteiro: execução, previsões e ligações. Fiscal: vistorias. Todos: ver e juntar fotografias.
 service cloud.firestore {
   match /databases/{database}/documents {
     function email() { return request.auth.token.email.lower(); }
     function perfil() { return get(/databases/$(database)/documents/utilizadores/$(email())).data; }
     function temPerfil() { return request.auth != null && exists(/databases/$(database)/documents/utilizadores/$(email())); }
-    function isDono() { return request.auth != null && (email() == "rodrigo.serradas@haegergroup.com" || (temPerfil() && perfil().papel == "dono")); }
+    function isDono() { return request.auth != null && (email() == "rodrigo.serradas@haegergroup.com" || (temPerfil() && perfil().papel in ["dono", "admin"])); }
     function membro() { return isDono() || temPerfil(); }
     function papel() { return temPerfil() ? perfil().papel : ""; }
     function soMuda(campos) { return request.resource.data.diff(resource.data).affectedKeys().hasOnly(campos); }

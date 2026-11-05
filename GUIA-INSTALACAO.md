@@ -56,7 +56,7 @@ Em **Sequência** está uma proposta de ordem entre especialidades (por exemplo,
 
 Para mudar o nome de uma especialidade, clique no lápis ao lado do nome, escreva o novo e clique em **Guardar** (ou Enter). O nome muda logo em todos os ecrãs e em todos os trabalhos dessa especialidade; as datas, as ligações e o histórico ficam iguais. O dono de obra e o empreiteiro podem fazê-lo.
 
-Para mudar a ordem das especialidades na lista, use as setas ▲ ▼ à esquerda de cada uma ou, no computador, arraste a linha para cima ou para baixo. O botão **Ordenar pela sequência** põe cada especialidade depois daquelas de que depende. Esta ordem é a das colunas do mapa do Painel e a das atividades em cada apartamento; não muda as datas, que dependem só das condições «Só começa depois de».
+Para mudar a ordem das especialidades na lista, use as setas ▲ ▼ à esquerda de cada uma ou, no computador, arraste a linha para cima ou para baixo. O botão **Ordenar pela sequência** põe cada especialidade depois daquelas de que depende. Para ver a lista de outra forma, clique no título de uma coluna: **Especialidade** ordena por ordem alfabética, **Dias por fração** e **Só começa depois de** pelos maiores primeiro; o segundo clique inverte e o terceiro volta à ordem da lista. Isto só muda a forma de ver; para ficar como ordem da lista, use **Guardar como ordem da lista**. Esta ordem é a das colunas do mapa do Painel e a das atividades em cada apartamento; não muda as datas, que dependem só das condições «Só começa depois de».
 
 Tudo neste ecrã (condições, ordem, nomes, dias por fração e novas especialidades) pode ser mudado pelo dono de obra e pelo empreiteiro. O fiscal não vê este ecrã.
 
@@ -66,9 +66,19 @@ Tudo neste ecrã (condições, ordem, nomes, dias por fração e novas especiali
 
 | Perfil | Pode |
 |---|---|
+| Administrador | Os mesmos direitos do dono de obra, e escolhe a vista (dono, empreiteiro ou fiscal) para ver o que cada perfil vê |
 | Dono de obra | Ver tudo, definir a sequência e as durações, criar especialidades, eliminar atividades, gerir os acessos, e tudo o que os outros fazem |
 | Empreiteiro | Iniciar e concluir atividades, atualizar a percentagem, indicar nova data e motivo, ligar atividades entre si, acrescentar atividades, gerir as equipas e as especialidades (sequência, ordem, nomes, dias por fração, criar novas) |
 | Fiscal | Fazer vistorias por apartamento (percentagem por especialidade, nota e fotografias) |
+
+## Administrador: ver como cada perfil
+
+O perfil **Administrador** tem os mesmos direitos do dono de obra, mas ao entrar escolhe a vista: **Dono de obra**, **Empreiteiro** ou **Fiscal**. Em cada vista vê exatamente os ecrãs, os menus e os botões que esse perfil vê, para confirmar o que cada um pode e não pode fazer. Para mudar de vista use **Ver como**, no menu lateral (no telemóvel, na faixa azul no topo).
+
+* A conta do dono de obra principal (o email que está no `config.js` e nas regras) é administrador automaticamente.
+* Para dar este perfil a outra pessoa, em **Definições** > **Acessos** escolha o perfil **Administrador**.
+* O que fizer numa vista fica registado no histórico em seu nome, como Administrador. Se gravar uma vistoria na vista de fiscal, por exemplo, ela conta como vistoria a sério.
+* A vista escolhida dura até fechar o navegador ou sair; na próxima entrada a aplicação volta a perguntar.
 
 ## Apartamento: lista de atividades
 

@@ -7,6 +7,21 @@ const nowISO = () => new Date().toISOString();
 class Emitter {
   constructor() { this._l = new Set(); }
   on(fn) { this._l.add(fn); return () => this._l.delete(fn); }
+  /** Administrador: escolhe a vista (dono, empreiteiro ou fiscal) sem mudar as permissões reais. */
+  get admin() { return !!this.user && this.user.papelReal === "admin"; }
+  setVista(p) {
+    if (!this.admin) return;
+    this.user.papel = p || null;
+    try { if (p) sessionStorage.setItem("obra-vista", p); else sessionStorage.removeItem("obra-vista"); } catch (e) {}
+    this.emit("auth");
+  }
+  _comoAdmin() {
+    if (this.user && this.user.papel === "admin") {
+      this.user.papelReal = "admin";
+      let v = null; try { v = sessionStorage.getItem("obra-vista"); } catch (e) {}
+      this.user.papel = ["dono", "empreiteiro", "fiscal"].includes(v) ? v : null;
+    }
+  }
   emit(...a) { for (const f of this._l) try { f(...a); } catch (e) { console.error(e); } }
 }
 
@@ -34,6 +49,7 @@ export class DemoStore extends Emitter {
         { email: "dono@demo", nome: "Dono de obra", papel: "dono" },
         { email: "empreiteiro@demo", nome: "Empreiteiro", papel: "empreiteiro" },
         { email: "fiscal@demo", nome: "Fiscal", papel: "fiscal" },
+        { email: "admin@demo", nome: "Administrador", papel: "admin" },
       ],
     };
     if (saved) {
@@ -65,17 +81,18 @@ export class DemoStore extends Emitter {
     let p = null;
     try { p = localStorage.getItem(this.KEY + "-papel"); } catch (e) {}
     const u = p && this.state.utilizadores.find((x) => x.papel === p);
-    if (u) this.user = { ...u };
+    if (u) { this.user = { ...u }; this._comoAdmin(); }
     return true;
   }
   needsLogin() { return !this.user; }
   async loginDemo(papel) {
     const u = this.state.utilizadores.find((x) => x.papel === papel);
     this.user = { ...u };
-    try { localStorage.setItem(this.KEY + "-papel", papel); } catch (e) {}
+    try { localStorage.setItem(this.KEY + "-papel", papel); sessionStorage.removeItem("obra-vista"); } catch (e) {}
+    this._comoAdmin();
     this.emit("auth");
   }
-  async logout() { this.user = null; try { localStorage.removeItem(this.KEY + "-papel"); } catch (e) {} this.emit("auth"); }
+  async logout() { this.user = null; try { localStorage.removeItem(this.KEY + "-papel"); sessionStorage.removeItem("obra-vista"); } catch (e) {} this.emit("auth"); }
   get data() { return this.state; }
   async updateAtividade(id, patch, registo) {
     const a = this.state.atividades[id];
@@ -102,7 +119,7 @@ export class DemoStore extends Emitter {
   }
   _reg(ativ, unidade, r) {
     this.state.registos.push({ id: "g" + Date.now() + Math.random().toString(36).slice(2, 6), ativ, unidade,
-      por: this.user.email, nomePor: this.user.nome, papel: this.user.papel, em: nowISO(), ...r });
+      por: this.user.email, nomePor: this.user.nome, papel: this.user.papelReal || this.user.papel, em: nowISO(), ...r });
   }
   async setConfig(patch, registo) {
     Object.assign(this.state.config, patch);
@@ -197,9 +214,11 @@ export class CloudStore extends Emitter {
       if (snap.exists()) perfil = snap.data();
     } catch (e) { console.warn("perfil", e); }
     const isAdmin = email === String(this.cfg.adminEmail || "").toLowerCase();
-    if (!perfil && isAdmin) perfil = { nome: "Dono de obra", papel: "dono" };
+    if (!perfil && isAdmin) perfil = { nome: "Administrador", papel: "admin" };
+    if (isAdmin && perfil.papel === "dono") perfil = { ...perfil, papel: "admin" }; // o dono principal pode ver todas as vistas
     if (!perfil) { this.user = { email, nome: email, papel: "sem_acesso" }; return; }
     this.user = { email, nome: perfil.nome || email, papel: perfil.papel };
+    this._comoAdmin();
     this._listen();
   }
   _listen() {
@@ -241,10 +260,10 @@ export class CloudStore extends Emitter {
   }
   get data() { return this.state; }
   async login(email, senha) { await this.fb.signInWithEmailAndPassword(this.auth, email.trim(), senha); }
-  async logout() { await this.fb.signOut(this.auth); }
+  async logout() { try { sessionStorage.removeItem("obra-vista"); } catch (e) {} await this.fb.signOut(this.auth); }
   async resetSenha(email) { await this.fb.sendPasswordResetEmail(this.auth, email.trim()); }
   _regDoc(ativ, unidade, r) {
-    return { ativ: ativ || null, unidade: unidade || null, por: this.user.email, nomePor: this.user.nome, papel: this.user.papel, em: nowISO(), ...r };
+    return { ativ: ativ || null, unidade: unidade || null, por: this.user.email, nomePor: this.user.nome, papel: this.user.papelReal || this.user.papel, em: nowISO(), ...r };
   }
   async updateAtividade(id, patch, registo) {
     const fb = this.fb;

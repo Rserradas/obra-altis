@@ -21,7 +21,17 @@ const deltaHTML = (n, txt) => {
   return `<span class="delta ${cls}" title="${esc(dica)}">${s}</span>`;
 };
 const ESTADO = { concluida: "Concluída", em_curso: "Em curso", bloqueada: "Bloqueada", por_iniciar: "Por iniciar" };
-const PAPEL = { dono: "Dono de obra", empreiteiro: "Empreiteiro", fiscal: "Fiscal", sem_acesso: "Sem acesso" };
+const PAPEL = { dono: "Dono de obra", empreiteiro: "Empreiteiro", fiscal: "Fiscal", admin: "Administrador", sem_acesso: "Sem acesso" };
+const VISTAS = [["dono", "Dono de obra", "Ponto de situação, mapa dos apartamentos, sequência, equipas e acessos"], ["empreiteiro", "Empreiteiro", "A minha semana, trabalhos, iniciar e concluir, datas, equipas e sequência"], ["fiscal", "Fiscal", "Vistoria apartamento a apartamento, com percentagem, comentários e fotografias"]];
+function mudarVista(p) {
+  if (ui.sheet) closeSheet();
+  if (ui.nova) closeNova();
+  document.querySelectorAll('[data-dw]').forEach((e) => e.remove());
+  if (location.hash) history.replaceState(null, "", location.pathname + location.search);
+  store.setVista(p);
+  if (p) toast(`A ver como ${PAPEL[p]}`);
+}
+const vistaSelHTML = (id) => `<label class="vista-sel" title="Administrador: escolha como quer ver a aplicação"><span>Ver como</span><select class="inp" id="${id}">${VISTAS.map(([k, l]) => `<option value="${k}" ${store.user.papel === k ? "selected" : ""}>${l}</option>`).join("")}</select></label>`;
 const CURTO = { cabelagem: "Cabelagem", telecom: "Telecom", ac_tubagem: "AC tubagem", ac_esgotos: "AC esgotos", pint_barramento: "Barramento",
   teto_falso: "Teto falso", mosaicos: "Mosaicos", azul_wc: "Azulejo WC", azul_cozinha: "Azulejo coz.", pint_primario: "Primário",
   caix_portas: "Portas/estores", caix_guarda: "Guarda-corpos", caix_ac: "Arm. AC", carp_cozinha: "Carp. cozinha", carp_roupeiros: "Roupeiros",
@@ -48,6 +58,7 @@ const ui = { bloco: "todos", plano: PLANO_PADRAO(), unidadeTab: "ativ", vistoria
 function filtrosAlterados() {
   const p = ui.plano, d = PLANO_PADRAO(), g = ui.gantt;
   const planoMudou = ["bloco", "tipo", "unidade", "ativ", "equipa", "q", "soAtr", "editar", "atribuir"].some((k) => !!p[k] !== !!d[k]) || p.semConc === false || !!p.sort || (p.f || "todas") !== "todas";
+  if (ui.regSort) return true;
   const ganttMudou = g && (g.bloco || g.unidade || g.ativ || g.abertas === false || g.ligacoes === false || g.zoom !== "semana" || (g.abertosB && g.abertosB.size) || (g.abertos && g.abertos.size) || g.sel);
   return !!(planoMudou || ganttMudou || ui.bloco !== "todos" || ui.unitEdit || ui.uSemConc === false || !!ui.porVist);
 }
@@ -59,6 +70,7 @@ function reporFiltros() {
   ui.unitEdit = false;
   ui.uSemConc = true;
   ui.porVist = false;
+  ui.regSort = null;
   ui.semana = null;
   ui.delUnit = null;
   ui.lastUnit = null;
@@ -229,6 +241,17 @@ function render() {
     $("#sair").onclick = () => store.logout();
     return;
   }
+  if (store.admin && !store.user.papel) {
+    app.innerHTML = `<div class="login"><div class="login-box">
+      <div class="brand"><div class="brand-mark">AL</div><div><b>Olá, ${esc(store.user.nome)}</b><span>Administrador</span></div></div>
+      <p>Escolha como quer ver a aplicação. Vê exatamente os ecrãs e os botões que esse perfil vê. Pode mudar de vista a qualquer momento, em "Ver como".</p>
+      <div class="roles">${VISTAS.map(([k, l, d]) => `<button data-vista="${k}"><b>${l}</b><span>${d}</span></button>`).join("")}</div>
+      <button class="btn ghost sm" id="sair">Sair</button></div></div>`;
+    app.querySelectorAll("[data-vista]").forEach((b) => (b.onclick = () => mudarVista(b.dataset.vista)));
+    $("#sair").onclick = () => store.logout();
+    lastView = "vista";
+    return;
+  }
   const view = routeView();
   const nav = navItems();
   const scrollY = window.scrollY;
@@ -241,17 +264,20 @@ function render() {
       <nav class="nav">${nav.map((n) => `<a href="#${n.id}" class="${view.nav === n.id ? "on" : ""}">${ICON[n.id]}<span>${n.label}</span></a>`).join("")}</nav>
       <div class="side-foot">
         <div id="syncA"></div>
-        <div class="who"><b>${esc(store.user.nome)}</b><span class="role">${PAPEL[store.user.papel]}</span></div>
+        <div class="who"><b>${esc(store.user.nome)}</b><span class="role">${store.admin ? "Administrador" : PAPEL[store.user.papel]}</span></div>
+        ${store.admin ? vistaSelHTML("vistaD") : ""}
         <button class="btn sm" data-ajuda>Ajuda</button>
         <button class="btn sm" data-repor title="Voltar todos os ecrãs aos filtros padrão">Repor filtros</button>
         <button class="btn sm" data-sair>Sair</button>
       </div>
     </aside>
+    ${store.admin ? `<div class="vista-band">A ver como <b>${PAPEL[store.user.papel]}</b>${vistaSelHTML("vistaM")}</div>` : ""}
     <header class="topbar">${brandHTML(true)}<div class="row" style="gap:4px"><div id="syncB"></div>${filtrosAlterados() ? `<button class="btn sm ghost" data-repor title="Repor filtros">Repor</button>` : ""}<button class="btn sm ghost" data-psqm aria-label="Procurar" title="Procurar">${ICON.lupa}</button><button class="btn sm ghost" data-ajuda aria-label="Ajuda" title="Ajuda">?</button><button class="btn sm ghost" data-sair>Sair</button></div></header>
     <main class="main"><div class="main-in" id="view">${view.html}</div></main>
     <nav class="tabbar">${nav.filter((n) => !n.soLado).map((n) => `<a href="#${n.id}" class="${view.nav === n.id ? "on" : ""}">${ICON[n.id]}<span>${n.short || n.label}</span></a>`).join("")}</nav>
   </div>`;
   app.querySelectorAll("[data-sair]").forEach((b) => (b.onclick = () => store.logout()));
+  ["#vistaD", "#vistaM"].forEach((id) => { const sl = $(id); if (sl) sl.onchange = () => mudarVista(sl.value); });
   app.querySelectorAll("[data-repor]").forEach((b) => (b.onclick = reporFiltros));
   app.querySelectorAll("[data-ajuda]").forEach((b) => (b.onclick = () => abrirGuia(true)));
   const pd = $("#psqD"); if (pd && S) ligarPesquisa(pd);
@@ -317,6 +343,7 @@ function loginHTML() {
       <div class="brand"><div class="brand-mark">${nome.slice(0, 2)}</div><div><b>Controlo de obra ${nome}</b><span>Versão de demonstração</span></div></div>
       <p>Esta versão usa os dados reais do cronograma, mas guarda as alterações só neste dispositivo. Escolha um perfil para experimentar:</p>
       <div class="roles">
+        <button data-p="admin"><b>Administrador</b><span>Escolhe a vista: dono de obra, empreiteiro ou fiscal, para ver o que cada um pode fazer</span></button>
         <button data-p="dono"><b>Dono de obra</b><span>Ponto de situação, mapa dos apartamentos, sequência e equipa</span></button>
         <button data-p="empreiteiro"><b>Empreiteiro</b><span>Trabalhos, iniciar e concluir, reportar atrasos</span></button>
         <button data-p="fiscal"><b>Fiscal</b><span>Vistoria apartamento a apartamento, com percentagem e fotografias</span></button>
@@ -1801,19 +1828,31 @@ function regrasView() {
   const seq = dono || store.user.papel === "empreiteiro"; // dono e empreiteiro podem mudar tudo neste ecrã
   const esp = [...S.cfg.especialidades].sort((a, b) => a.ordem - b.ordem);
   const regras = S.cfg.regras || {}, dur = S.cfg.duracoes || {};
+  // ordenação só de visualização (clicar no título da coluna); a ordem guardada não muda
+  const vs = ui.regSort || null;
+  const chave = { nome: (e) => e.nome, dias: (e) => Number(dur[e.key] ?? -1), cond: (e) => (regras[e.key] || []).length };
+  const vista = vs ? [...esp].sort((a, b) => {
+    const x = chave[vs.col](a), y = chave[vs.col](b);
+    const c = typeof x === "string" ? x.localeCompare(y, "pt", { sensitivity: "base", numeric: true }) : x - y;
+    return (vs.dir === "desc" ? -c : c) || a.ordem - b.ordem;
+  }) : esp;
+  const mexe = seq && !vs; // setas e arrastar só na ordem guardada
+  const NOMES_COL = { nome: "ordem alfabética", dias: "dias por fração", cond: "número de condições" };
+  const th = (col, l) => { const on = vs && vs.col === col; return `<button class="th-sort ${on ? "on" : ""}" data-rsort="${col}" title="Ordenar por ${l.toLowerCase()}">${l}<span class="arr">${on ? (vs.dir === "desc" ? "▼" : "▲") : "↕"}</span></button>`; };
   const nAp = S.unidades.filter((u) => u.tipo === "Apartamento").length;
   const html = `
     ${defTabs("regras")}
     <div class="card-h"><h1>Sequência dos trabalhos</h1>${seq ? `<div class="row"><button class="btn" id="ordSeq" title="Põe cada especialidade depois das de que depende">Ordenar pela sequência</button><button class="btn pri" data-nova="esp">+ Nova especialidade</button></div>` : ""}</div>
     <p style="max-width:70ch">Cada especialidade só pode arrancar num apartamento quando as especialidades da coluna «Só começa depois de» estiverem concluídas <b>nesse mesmo apartamento</b>. Uma regra aqui aplica-se de uma vez aos ${nAp} apartamentos. Se uma atividade se atrasar, todas as que dependem dela andam para a frente sozinhas.</p>
     ${seq ? "" : `<div class="banner">Só o dono de obra e o empreiteiro podem alterar esta sequência.</div>`}
+    ${vs ? `<div class="banner"><span>A ver por <b>${NOMES_COL[vs.col]}</b>${vs.dir === "desc" ? " (decrescente)" : ""}. A ordem guardada da lista não mudou.</span><span class="row" style="gap:6px">${seq ? `<button class="btn sm" id="rsGuardar">Guardar como ordem da lista</button>` : ""}<button class="btn sm" id="rsVoltar">Voltar à ordem da lista</button></span></div>` : ""}
     <div class="rules">
-      <div class="rule rule-h ${seq ? "ordenavel" : ""}">${seq ? "<span></span>" : ""}<span>Especialidade</span><span>Dias por fração</span><span>Só começa depois de</span></div>
-      ${esp.map((e) => {
+      <div class="rule rule-h ${mexe ? "ordenavel" : ""}">${mexe ? "<span></span>" : ""}<span>${th("nome", "Especialidade")}</span><span>${th("dias", "Dias por fração")}</span><span>${th("cond", "Só começa depois de")}</span></div>
+      ${vista.map((e) => {
         const pre = regras[e.key] || [];
         const disp = esp.filter((x) => x.key !== e.key && !pre.includes(x.key));
         const i = esp.indexOf(e);
-        return `<div class="rule ${seq ? "ordenavel" : ""}" data-rk="${e.key}" ${seq ? 'draggable="true"' : ""}>${seq ? `<div class="ordb"><button class="ord-b" data-ord="${e.key}|-1" ${i === 0 ? "disabled" : ""} title="Subir" aria-label="Subir ${esc(e.nome)}">▲</button><button class="ord-b" data-ord="${e.key}|1" ${i === esp.length - 1 ? "disabled" : ""} title="Descer" aria-label="Descer ${esc(e.nome)}">▼</button></div>` : ""}<div class="rnome" data-rnome="${e.key}"><b>${esc(e.nome)}</b>${seq ? `<button class="ren-b" data-ren="${e.key}" title="Mudar o nome" aria-label="Mudar o nome de ${esc(e.nome)}"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20h4L18.5 9.5a2.1 2.1 0 0 0-3-3L5 17v3z"/><path d="M14 8l3 3"/></svg></button>` : ""}</div>
+        return `<div class="rule ${mexe ? "ordenavel" : ""}" data-rk="${e.key}" ${mexe ? 'draggable="true"' : ""}>${mexe ? `<div class="ordb"><button class="ord-b" data-ord="${e.key}|-1" ${i === 0 ? "disabled" : ""} title="Subir" aria-label="Subir ${esc(e.nome)}">▲</button><button class="ord-b" data-ord="${e.key}|1" ${i === esp.length - 1 ? "disabled" : ""} title="Descer" aria-label="Descer ${esc(e.nome)}">▼</button></div>` : ""}<div class="rnome" data-rnome="${e.key}"><b>${esc(e.nome)}</b>${seq ? `<button class="ren-b" data-ren="${e.key}" title="Mudar o nome" aria-label="Mudar o nome de ${esc(e.nome)}"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20h4L18.5 9.5a2.1 2.1 0 0 0-3-3L5 17v3z"/><path d="M14 8l3 3"/></svg></button>` : ""}</div>
           <input class="inp num" type="number" min="0" max="365" value="${dur[e.key] ?? ""}" data-dur="${e.key}" ${seq ? "" : "disabled"} aria-label="Dias por fração de ${esc(e.nome)}">
           <div class="tags">${pre.map((k) => `<span class="tag ${seq ? "" : "ro"}">${esc(S.espIdx[k] ? S.espIdx[k].nome : k)}${seq ? `<button data-rm="${e.key}|${k}" aria-label="Retirar">×</button>` : ""}</span>`).join("") || `<span class="note">Sem condições</span>`}
           ${seq ? `<select class="inp" data-add="${e.key}"><option value="">+ acrescentar</option>${disp.map((x) => `<option value="${x.key}">${esc(x.nome)}</option>`).join("")}</select>` : ""}</div></div>`;
@@ -1822,7 +1861,22 @@ function regrasView() {
     <p class="note">As ligações que já existiam no Excel (por exemplo a sequência da Equipa 4 de apartamento em apartamento) continuam ativas além destas regras.</p>`;
   return {
     html, bind: () => {
+      document.querySelectorAll("[data-rsort]").forEach((b) => (b.onclick = () => {
+        const col = b.dataset.rsort, d0 = col === "nome" ? "asc" : "desc";
+        if (!vs || vs.col !== col) ui.regSort = { col, dir: d0 };
+        else if (vs.dir === d0) ui.regSort = { col, dir: d0 === "asc" ? "desc" : "asc" };
+        else ui.regSort = null; // terceiro clique: volta à ordem da lista
+        render();
+      }));
+      const rv = $("#rsVoltar"); if (rv) rv.onclick = () => { ui.regSort = null; render(); };
       if (!seq) return;
+      const rg = $("#rsGuardar");
+      if (rg) rg.onclick = async () => {
+        const pos = Object.fromEntries(vista.map((e, i) => [e.key, i + 1]));
+        await store.setConfig({ especialidades: S.cfg.especialidades.map((x) => ({ ...x, ordem: pos[x.key] ?? x.ordem })) }, { tipo: "regras", texto: `Especialidades ordenadas por ${NOMES_COL[vs.col]}` });
+        ui.regSort = null;
+        toast("Ordem da lista guardada");
+      };
       document.querySelectorAll("[data-nova]").forEach((b) => (b.onclick = () => openNova(b.dataset.nova)));
       const save = (patch, texto) => store.setConfig(patch, { tipo: "regras", texto }).then(() => toast("Sequência atualizada"));
       document.querySelectorAll("[data-rm]").forEach((b) => (b.onclick = () => {
@@ -1909,7 +1963,7 @@ function equipaView() {
   const html = `
     ${defTabs("equipa")}
     <h1>Acessos</h1>
-    <p style="max-width:70ch">Cada pessoa entra com o seu email e palavra-passe. O perfil define o que pode fazer: o <b>empreiteiro</b> inicia, conclui e reporta atrasos; o <b>fiscal</b> regista vistorias e fotografias; o <b>dono de obra</b> vê tudo e define a sequência.</p>
+    <p style="max-width:70ch">Cada pessoa entra com o seu email e palavra-passe. O perfil define o que pode fazer: o <b>empreiteiro</b> inicia, conclui e reporta atrasos; o <b>fiscal</b> regista vistorias e fotografias; o <b>dono de obra</b> vê tudo e define a sequência; o <b>administrador</b> tem os mesmos direitos do dono de obra e escolhe como quer ver a aplicação (como dono, empreiteiro ou fiscal), para confirmar o que cada um vê.</p>
     <section class="card"><h2>Pessoas com acesso</h2><div class="list" id="ulist"><div class="note">A carregar...</div></div></section>
     <section class="card"><h2>Adicionar pessoa</h2>
       ${demo ? `<div class="banner warn">Na demonstração não se criam contas reais. Na versão instalada, isto cria a conta e o perfil de uma vez.</div>` : ""}
@@ -1917,7 +1971,7 @@ function equipaView() {
         <label class="f">Nome<input class="inp" id="un" required></label>
         <label class="f">Email<input class="inp" id="ue" type="email" required></label>
         <label class="f">Palavra-passe inicial<input class="inp" id="us" type="text" minlength="6" placeholder="mínimo 6 caracteres" ${demo ? "" : "required"}></label>
-        <label class="f">Perfil<select class="inp" id="up"><option value="empreiteiro">Empreiteiro</option><option value="fiscal">Fiscal</option><option value="dono">Dono de obra</option></select></label>
+        <label class="f">Perfil<select class="inp" id="up"><option value="empreiteiro">Empreiteiro</option><option value="fiscal">Fiscal</option><option value="dono">Dono de obra</option><option value="admin">Administrador (vê como qualquer perfil)</option></select></label>
         <div class="row"><button class="btn pri" type="submit">Adicionar</button><span class="note" id="ust"></span></div>
       </form>
     </section>
