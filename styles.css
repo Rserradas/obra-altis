@@ -454,9 +454,10 @@ a.btn.pri { color: var(--accent-ink); }
 @media (max-width: 900px) { .arow.linha { grid-template-columns: 12px minmax(0, 1fr) 140px 60px; } .arow.linha .tl, .arow.linha .pcts { display: none; } }
 @media (max-width: 520px) { .arow.linha { grid-template-columns: 12px minmax(0, 1fr) auto; gap: 8px; padding: 8px 10px; } .arow.linha .dv1 { display: none; } .arow.linha .dt1 { font-size: .74rem; }
   .arow.linha.editing { grid-template-columns: 12px minmax(0, 1fr); } .arow.linha.editing .dt1 { grid-column: 2; justify-content: flex-start; } .arow.linha.editing .dt-in { width: 50%; } .ubar .legend { display: none; } }
-.arow.linha .nm1 b { flex: 0 1 auto; min-width: 0; max-width: 100%; }
-.arow.linha .nm1 .wait1, .arow.linha .nm1 .eq1 { flex: 1 1 0; min-width: 0; }
-@media (max-width: 640px) { .arow.linha .nm1 .wait1, .arow.linha .nm1 .eq1 { display: none; } }
+.arow.linha .nm1 b { flex: 0 0 auto; min-width: 0; max-width: 100%; }
+.arow.linha .nm1 .wait1, .arow.linha .nm1 .eq1, .arow.linha .nm1 .seg1 { flex: 0 1 auto; min-width: 0; }
+.arow.linha .nm1 .seg1 { color: var(--accent); font-size: .8rem; overflow: hidden; text-overflow: ellipsis; }
+@media (max-width: 640px) { .arow.linha .nm1 .wait1, .arow.linha .nm1 .eq1, .arow.linha .nm1 .seg1 { display: none; } }
 
 /* fotografias: menu de origem, miniaturas por guardar, apagar */
 .fpick { position: relative; display: inline-block; }

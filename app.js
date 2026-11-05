@@ -600,11 +600,12 @@ function unidadeView(id) {
   const rowsAtiv = visiveis.map((a) => {
     const r = S.res.get(a.id);
     const espera = [...new Set(r.bloqueadaPor.map((pid) => S.acts[pid]).filter(Boolean).map((p) => nomeAtiv(p) + (p.unidade !== a.unidade ? " (" + p.unidade + ")" : "")))];
+    const seguintes = [...new Set(r.succ.map((sid) => S.acts[sid]).filter(Boolean).map((x) => nomeAtiv(x) + (x.unidade !== a.unidade ? " (" + x.unidade + ")" : "")))];
     const pe = a.pctEmp ?? 0, pf = a.pctFiscal;
-    const dica = [ESTADO[r.estado] + (r.atrasada ? ", atrasada" : ""), a.equipa, espera.length && r.estado === "bloqueada" ? "À espera de: " + espera.join(", ") : ""].filter(Boolean).join(" · ");
+    const dica = [ESTADO[r.estado] + (r.atrasada ? ", atrasada" : ""), a.equipa, espera.length && r.estado === "bloqueada" ? "À espera de: " + espera.join(", ") : "", seguintes.length ? "Segue-se: " + seguintes.join(", ") : ""].filter(Boolean).join(" · ");
     return `<div class="arow linha ${edU ? "editing" : ""}" ${edU ? "" : `data-a="${a.id}"`} title="${esc(dica)}">
       <span class="dot st-${r.estado}${r.atrasada ? " atr" : ""}" aria-label="${esc(ESTADO[r.estado] + (r.atrasada ? ", atrasada" : ""))}"></span>
-      <div class="nm1">${edU ? `<button class="lnk-b" data-a="${a.id}"><b>${esc(nomeAtiv(a))}</b></button>` : `<b>${esc(nomeAtiv(a))}</b>`}${espera.length && r.estado === "bloqueada" ? `<span class="wait1">à espera de ${esc(espera[0])}${espera.length > 1 ? " +" + (espera.length - 1) : ""}</span>` : a.equipa ? `<span class="eq1">${esc(a.equipa)}</span>` : ""}</div>
+      <div class="nm1">${edU ? `<button class="lnk-b" data-a="${a.id}"><b>${esc(nomeAtiv(a))}</b></button>` : `<b>${esc(nomeAtiv(a))}</b>`}${espera.length && r.estado === "bloqueada" ? `<span class="wait1">à espera de ${esc(espera[0])}${espera.length > 1 ? " +" + (espera.length - 1) : ""}</span>` : a.equipa ? `<span class="eq1">${esc(a.equipa)}</span>` : ""}${seguintes.length ? `<span class="seg1">segue-se ${esc(seguintes[0])}${seguintes.length > 1 ? " +" + (seguintes.length - 1) : ""}</span>` : ""}</div>
       <div class="tl" aria-hidden="true">
         <div class="fc st-${r.estado}" style="left:${pos(r.inicio)}%;width:${Math.max(0.8, pos(r.fim) - pos(r.inicio))}%"></div>
         ${S.hoje >= t0 && S.hoje <= t1 ? `<div class="today" style="left:${pos(S.hoje)}%"></div>` : ""}
