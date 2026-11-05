@@ -12,3 +12,5 @@
   for = "/*.js"
   [headers.values]
     Cache-Control = "no-cache"
+
+# Publicado a partir do GitHub (Rserradas/obra-altis).
