@@ -664,7 +664,11 @@ function unidadeView(id) {
         <span class="vf-slot" data-vfotos="${a.id}"></span>
         ${fotoPickerHTML(a.id, nf)}
       </div>
-      <div class="vpct">${pctCtlHTML(a.id, cur, v && v.pct != null)}</div>
+      <div class="vpct">${pctCtlHTML(a.id, cur, v && v.pct != null)}${(() => {
+        const ref = a.pctFiscal != null ? Math.round(a.pctFiscal) : Math.round(Number(a.pctEmp) || 0);
+        const on = v && v.confirmado;
+        return `<button type="button" class="btn sm vmant ${on ? "on" : ""}" data-vmant="${a.id}" aria-pressed="${!!on}" title="${a.pctFiscal != null ? "Vi e está igual à última vistoria" : "Vi e confirmo a percentagem do empreiteiro"}: fica registado que esta especialidade foi vistoriada">${on ? "✓ " : ""}${a.pctFiscal != null ? "Mantém" : "Confirma"} ${ref}%</button>`;
+      })()}</div>
       ${comAberto || nf ? `<div class="vextra">
         ${comAberto ? `<input class="inp" data-vct="${a.id}" value="${esc((v && v.coment) || "")}" placeholder="Comentário sobre ${esc(nomeAtiv(a).toLowerCase())}: o que viu, não conformidades">` : ""}
         ${pendentesHTML(a.id, v && v.fotos)}</div>` : ""}
@@ -717,11 +721,17 @@ function bindUnidade(u) {
   document.querySelectorAll("[data-tab]").forEach((b) => (b.onclick = () => { ui.unidadeTab = b.dataset.tab; render(); }));
   bindPctCtl(document.querySelector("#view") || document,
     (id) => { const v = ui.vistoria[id], a = S.acts[id]; return v && v.pct != null ? v.pct : a.pctFiscal != null ? Math.round(a.pctFiscal) : Math.round(a.pctEmp ?? 0); },
-    (id, val) => { ui.vistoria[id] = { ...(ui.vistoria[id] || { unidade: u.id }), unidade: u.id, pct: val }; render(); });
+    (id, val) => { ui.vistoria[id] = { ...(ui.vistoria[id] || { unidade: u.id }), unidade: u.id, pct: val, confirmado: false }; render(); });
   const vist = (id) => (ui.vistoria[id] = { ...(ui.vistoria[id] || { unidade: u.id }), unidade: u.id });
   const view = document.querySelector("#view");
   if (ui.unidadeTab === "vist" && view) {
     bindFotoPickers(view, (id, fotos) => { const v = vist(id); v.fotos = (v.fotos || []).concat(fotos); render(); });
+    view.querySelectorAll("[data-vmant]").forEach((b) => (b.onclick = () => {
+      const id = b.dataset.vmant, a = S.acts[id], v = vist(id);
+      const ref = a.pctFiscal != null ? Math.round(a.pctFiscal) : Math.round(Number(a.pctEmp) || 0);
+      if (v.confirmado) { v.confirmado = false; v.pct = null; } else { v.confirmado = true; v.pct = ref; }
+      render();
+    }));
     view.querySelectorAll("[data-prm]").forEach((b) => (b.onclick = () => { const [id, i] = b.dataset.prm.split("|"); ui.vistoria[id].fotos.splice(+i, 1); render(); }));
     view.querySelectorAll("[data-vc]").forEach((b) => (b.onclick = () => { const v = vist(b.dataset.vc); v.abrirC = !v.abrirC || !!(v.coment && v.coment.length); render(); const i = view.querySelector(`[data-vct="${b.dataset.vc}"]`); if (i) i.focus(); }));
     const contar = () => {
@@ -750,8 +760,10 @@ function bindUnidade(u) {
       const patch = {};
       if (v.pct != null) Object.assign(patch, { pctFiscal: v.pct, fiscalEm: agora, fiscalPor: store.user.email });
       if (texto) Object.assign(patch, { fiscalNota: texto, fiscalNotaEm: agora });
-      const partes = [v.pct != null ? `${v.pct}% (empreiteiro dizia ${Math.round(a.pctEmp ?? 0)}%)` : "", nf ? `${nf} fotografia${nf > 1 ? "s" : ""}` : "", texto ? "comentário: " + texto : ""].filter(Boolean);
-      const dados = { esp: nomeAtiv(a), antes: a.pctFiscal ?? null, depois: v.pct ?? null, emp: Math.round(Number(a.pctEmp) || 0), nota: texto || null, nfotos: nf };
+      const partes = [v.pct != null ? `${v.pct}% (empreiteiro dizia ${Math.round(a.pctEmp ?? 0)}%)${v.confirmado ? ", confirmado sem alteração" : ""}` : "", nf ? `${nf} fotografia${nf > 1 ? "s" : ""}` : "", texto ? "comentário: " + texto : ""].filter(Boolean);
+      const antes = a.pctFiscal != null ? Math.round(a.pctFiscal) : null;
+      const confirmado = !!v.confirmado && v.pct != null && v.pct === (antes != null ? antes : Math.round(Number(a.pctEmp) || 0));
+      const dados = { esp: nomeAtiv(a), antes, depois: v.pct ?? null, emp: Math.round(Number(a.pctEmp) || 0), nota: texto || null, nfotos: nf, confirmado };
       await store.updateAtividade(id, patch, { tipo: "vistoria", texto: `Vistoria ${nomeAtiv(a)} em ${a.unidade}: ${partes.join(", ")}`, dados });
       delete ui.vistoria[id]; n++;
     }
@@ -2169,9 +2181,17 @@ function relVistView() {
         const d0 = prim.dados || {}, d1 = ult.dados || {};
         const depois = [...x.regs].reverse().map((r) => r.dados && r.dados.depois).find((v) => v != null);
         const notas = [...new Set(x.regs.map((r) => r.dados ? r.dados.nota : (/comentário: (.*)$/.exec(r.texto || "") || [])[1]).filter(Boolean))];
-        return { ...x, a, nome: (a && nomeAtiv(a)) || d1.esp || "Atividade", antes: d0.antes ?? null, depois: depois ?? null, emp: d1.emp ?? (a ? Math.round(Number(a.pctEmp) || 0) : null), notas, semDados: !prim.dados, texto: ult.texto };
+        // vistoria anterior ao período (de qualquer fiscal), para ver se a obra andou
+        const ini0 = new Date(dias[0] + "T00:00:00").toISOString();
+        const ant = x.ativ ? regs.filter((r) => r.ativ === x.ativ && r.em < ini0).sort((p, q) => q.em.localeCompare(p.em))[0] : null;
+        const valDe = (r) => (r.dados && r.dados.depois != null ? r.dados.depois : (() => { const m = /: (\d+)% \(empreiteiro/.exec(r.texto || ""); return m ? Number(m[1]) : null; })());
+        const prev = ant ? { pct: valDe(ant), em: ant.em } : null;
+        const confirmado = x.regs.some((r) => r.dados && r.dados.confirmado);
+        return { ...x, a, nome: (a && nomeAtiv(a)) || d1.esp || "Atividade", antes: d0.antes ?? null, depois: depois ?? null, emp: d1.emp ?? (a ? Math.round(Number(a.pctEmp) || 0) : null), notas, semDados: !prim.dados, texto: ult.texto, prev, confirmado };
       });
       const atencao = linhas.filter((l) => l.depois != null && l.emp != null && Math.abs(l.depois - l.emp) >= 15);
+      const diasEntre = (a, b) => Math.round((new Date(b) - new Date(a)) / 86400000);
+      const parado = linhas.filter((l) => l.prev && l.prev.pct != null && l.depois != null && l.depois < 100 && l.depois <= l.prev.pct && diasEntre(l.prev.em, (l.regs[l.regs.length - 1] || {}).em || new Date().toISOString()) >= 7);
       const porU = new Map();
       for (const l of linhas) { const k = l.unidade || "?"; (porU.get(k) || porU.set(k, []).get(k)).push(l); }
       const ordemU = ordenaUnidades([...porU.keys()].map((id) => S.uMap[id] || { id, bloco: "?", piso: 99 })).map((u) => u.id);
@@ -2211,23 +2231,35 @@ function relVistView() {
           <div><b>${porU.size}</b><span>${porU.size === 1 ? "fração visitada" : "frações visitadas"}</span></div>
           <div><b>${linhas.length}</b><span>${linhas.length === 1 ? "especialidade vistoriada" : "especialidades vistoriadas"}</span></div>
           <div><b>${fotos.length}</b><span>${fotos.length === 1 ? "fotografia" : "fotografias"}</span></div>
-          <div class="${atencao.length ? "mau" : ""}"><b>${atencao.length}</b><span>${atencao.length === 1 ? "ponto de atenção" : "pontos de atenção"}</span></div>
+          <div class="${atencao.length ? "mau" : ""}"><b>${atencao.length}</b><span>${atencao.length === 1 ? "diferença com o empreiteiro" : "diferenças com o empreiteiro"}</span></div>
+          <div class="${parado.length ? "aviso" : ""}"><b>${parado.length}</b><span>sem avanço desde a vistoria anterior</span></div>
         </div>
 
         <section class="rv-sec"><h2>${++sec}. Pontos de atenção</h2>
+          <h3 class="rv-sub">Diferenças entre o fiscal e o empreiteiro</h3>
           ${atencao.length ? `<p class="rv-nota">Especialidades em que a percentagem verificada pelo fiscal difere 15 pontos ou mais da indicada pelo empreiteiro.</p>
           <table class="rv-t"><thead><tr><th>Fração</th><th>Especialidade</th><th class="n">Fiscal</th><th class="n">Empreiteiro</th><th class="n">Diferença</th></tr></thead><tbody>
           ${atencao.map((l) => `<tr><td class="mono">${esc(nomeU(l.unidade))}</td><td>${esc(l.nome)}</td><td class="n"><b>${pctTxt(l.depois)}</b></td><td class="n">${pctTxt(l.emp)}</td><td class="n mau">${l.depois - l.emp > 0 ? "+" : ""}${l.depois - l.emp} pp</td></tr>`).join("")}
           </tbody></table>` : `<p class="rv-nota">Sem diferenças relevantes entre o fiscal e o empreiteiro.</p>`}
+          <h3 class="rv-sub">Sem avanço desde a vistoria anterior</h3>
+          ${parado.length ? `<p class="rv-nota">Especialidades por concluir que estão com a mesma percentagem (ou menos) do que na vistoria anterior, feita há 7 dias ou mais.</p>
+          <table class="rv-t"><thead><tr><th>Fração</th><th>Especialidade</th><th class="n">Vistoria anterior</th><th class="n">Agora</th><th class="n">Parado há</th></tr></thead><tbody>
+          ${parado.map((l) => `<tr><td class="mono">${esc(nomeU(l.unidade))}</td><td>${esc(l.nome)}${l.confirmado ? ` <span class="rv-conf">confirmado</span>` : ""}</td><td class="n">${pctTxt(l.prev.pct)} · ${fd(diaLocal(l.prev.em))}</td><td class="n"><b>${pctTxt(l.depois)}</b></td><td class="n aviso">${diasEntre(l.prev.em, l.regs[l.regs.length - 1].em)} dias</td></tr>`).join("")}
+          </tbody></table>` : `<p class="rv-nota">Todas as especialidades com vistoria anterior avançaram (ou não tinham vistoria anterior).</p>`}
         </section>
 
         <section class="rv-sec"><h2>${++sec}. Registo por fração</h2>
-          <p class="rv-nota">"Antes" é a percentagem do fiscal antes da primeira gravação nestes dias e "Depois" a da última; s/v quer dizer sem vistoria anterior. Fn remete para o registo fotográfico.</p>
+          <p class="rv-nota">"Vistoria anterior" é a última vistoria antes deste período; "Agora" é a percentagem verificada no fim do período; "Evolução" é a diferença entre as duas, em pontos percentuais (pp). Fn remete para o registo fotográfico.</p>
           ${ordemU.map((uid) => `<div class="rv-u"><h3><span class="mono">${esc(nomeU(uid))}</span><small>${esc(descU(uid))}</small></h3>
-            <table class="rv-t"><thead><tr><th>Especialidade</th><th class="n">Antes</th><th class="n">Depois</th><th class="n">Empreiteiro</th><th>Observações</th><th>Fotos</th></tr></thead><tbody>
+            <table class="rv-t"><thead><tr><th>Especialidade</th><th class="n">Vistoria anterior</th><th class="n">Agora</th><th class="n">Evolução</th><th class="n">Empreiteiro</th><th>Observações</th><th>Fotos</th></tr></thead><tbody>
             ${porU.get(uid).map((l) => `<tr class="${atencao.includes(l) ? "at" : ""}"><td><b>${esc(l.nome)}</b>${l.a ? ` <button class="lnk-b no-print rv-fic" data-a="${l.a.id}">ficha</button>` : ""}</td>
-              ${l.semDados ? `<td colspan="3" class="rv-ant">${esc(l.texto || "")}</td>` : `<td class="n">${pctTxt(l.antes)}</td><td class="n"><b>${pctTxt(l.depois)}</b></td><td class="n">${pctTxt(l.emp)}</td>`}
-              <td>${l.notas.map((t) => esc(t)).join("<br>") || `<span class="rv-vazio">sem observações</span>`}</td><td class="rv-refs">${refsDe(l.ativ)}</td></tr>`).join("")}
+              ${l.semDados && l.depois == null ? `<td colspan="4" class="rv-ant">${esc(l.texto || "")}</td>` : (() => {
+                const base = l.prev && l.prev.pct != null ? l.prev.pct : null;
+                const ev = base != null && l.depois != null ? l.depois - base : null;
+                const evTxt = ev == null ? `<span class="rv-vazio">primeira</span>` : ev > 0 ? `<span class="bom">+${ev} pp</span><small>em ${diasEntre(l.prev.em, l.regs[l.regs.length - 1].em)} d</small>` : parado.includes(l) ? `<span class="aviso">sem avanço</span><small>${diasEntre(l.prev.em, l.regs[l.regs.length - 1].em)} d</small>` : ev < 0 ? `<span class="mau">${ev} pp</span>` : `<span>0 pp</span>`;
+                return `<td class="n">${l.prev ? `${pctTxt(l.prev.pct)}<small>${fd(diaLocal(l.prev.em))}</small>` : `<span class="rv-vazio">sem vistoria</span>`}</td><td class="n"><b>${pctTxt(l.depois)}</b></td><td class="n rv-ev">${evTxt}</td><td class="n">${pctTxt(l.emp)}</td>`;
+              })()}
+              <td>${l.confirmado ? `<span class="rv-conf">Confirmado sem alteração</span>${l.notas.length ? "<br>" : ""}` : ""}${l.notas.map((t) => esc(t)).join("<br>") || (l.confirmado ? "" : `<span class="rv-vazio">sem observações</span>`)}</td><td class="rv-refs">${refsDe(l.ativ)}</td></tr>`).join("")}
             </tbody></table></div>`).join("")}
         </section>
 
