@@ -237,6 +237,7 @@ async function boot() {
 let lastView = "";
 function render() {
   const app = $("#app");
+  if (!location.hash.startsWith("#relvist")) document.title = "Controlo de Obra ALTIS";
   if (store.needsLogin()) { app.innerHTML = loginHTML(); bindLogin(); lastView = "login"; return; }
   if (store.user.papel === "sem_acesso") {
     app.innerHTML = `<div class="login"><div class="login-box"><h2>Conta sem acesso</h2><p>A conta <b>${esc(store.user.email)}</b> entrou, mas ainda não tem perfil nesta obra. Peça ao dono de obra para o adicionar em Equipa.</p><button class="btn" id="sair">Sair</button></div></div>`;
@@ -2174,38 +2175,78 @@ function relVistView() {
       const porU = new Map();
       for (const l of linhas) { const k = l.unidade || "?"; (porU.get(k) || porU.set(k, []).get(k)).push(l); }
       const ordemU = ordenaUnidades([...porU.keys()].map((id) => S.uMap[id] || { id, bloco: "?", piso: 99 })).map((u) => u.id);
-      const nfotos = sel.reduce((t, r) => t + ((r.dados && r.dados.nfotos) || 0), 0);
       const pctTxt = (v) => (v == null ? "s/v" : v + "%");
       const nomeU = (id) => { const u = S.uMap[id]; return u ? (u.tipo === "Apartamento" || /-L\d+$/.test(u.id) ? u.id : u.nome) : id; };
-      box.innerHTML = `<article class="relv">
-        <header class="relv-h"><div class="eyebrow">Relatório de vistoria · ${esc(S.cfg.nome || "Obra ALTIS")}</div>
-          <h1>${dias.length === 1 ? diaNome(dias[0]) : `${dias.length} dias: ${dias.map((d) => fd(d)).join(", ")}`}</h1>
-          <p class="note">Fiscal: <b>${esc(fiscais.join(", "))}</b> · ${dias.map((d) => { const rs = sel.filter((r) => diaLocal(r.em) === d); return `${fd(d)} das ${hora(rs[0].em)} às ${hora(rs[rs.length - 1].em)}`; }).join(" · ")}</p>
-          <div class="relv-tot num"><span><b>${porU.size}</b> ${porU.size === 1 ? "fração" : "frações"}</span><span><b>${linhas.length}</b> ${linhas.length === 1 ? "especialidade" : "especialidades"}</span><span><b>${nfotos}</b> ${nfotos === 1 ? "fotografia" : "fotografias"}</span><span><b>${linhas.filter((l) => l.notas.length).length}</b> com comentário</span></div></header>
-        ${atencao.length ? `<section class="relv-at"><h2>Pontos de atenção <span class="note">fiscal e empreiteiro diferem 15 pontos ou mais</span></h2><ul>${atencao.map((l) => `<li><b>${esc(nomeU(l.unidade))}</b> · ${esc(l.nome)}: fiscal <b>${pctTxt(l.depois)}</b>, empreiteiro ${pctTxt(l.emp)}</li>`).join("")}</ul></section>` : ""}
-        ${ordemU.map((uid) => `<section class="relv-u"><h2>${esc(nomeU(uid))}${S.uMap[uid] && S.uMap[uid].tipo !== "Apartamento" ? ` <span class="note">${esc(S.uMap[uid].tipo)}</span>` : ""}</h2>
-          <div class="relv-l">${porU.get(uid).map((l) => `<div class="relv-r ${atencao.includes(l) ? "at" : ""}">
-            <div class="relv-n"><b>${esc(l.nome)}</b>${l.a ? `<button class="lnk-b no-print" data-a="${l.a.id}">ficha</button>` : ""}</div>
-            <div class="relv-p num">${l.semDados ? `<span class="note">${esc(l.texto || "")}</span>` : `${pctTxt(l.antes)} → <b>${pctTxt(l.depois)}</b><span class="note">empreiteiro ${pctTxt(l.emp)}</span>`}</div>
-            ${l.notas.length ? `<div class="relv-c">${l.notas.map((t) => `<p>${esc(t)}</p>`).join("")}</div>` : ""}
-            <div class="relv-f" data-rvf="${esc(l.ativ || "")}"></div>
-          </div>`).join("")}</div></section>`).join("")}
-        <footer class="note relv-p2">Gerado a ${fdt(new Date().toISOString())} por ${esc(store.user.nome)}. Antes → depois é a percentagem do fiscal antes da primeira e depois da última gravação nestes dias.</footer>
-      </article>`;
-      bindCommon();
-      // fotografias dos dias escolhidos, deste(s) fiscal(is)
+      const descU = (id) => { const u = S.uMap[id]; if (!u) return ""; return [u.tipo, u.bloco && u.bloco !== "Geral" ? "Bloco " + u.bloco : "", u.tipo === "Apartamento" ? "Piso " + u.piso : ""].filter(Boolean).join(" · "); };
+      const iniciais = (t) => String(t).split(/[\s@.]+/).filter(Boolean).slice(0, 2).map((x) => x[0].toUpperCase()).join("");
+      const ref = `RV-${dias[0].replace(/-/g, "")}${dias.length > 1 ? "-" + dias[dias.length - 1].replace(/-/g, "") : ""}-${iniciais(fiscais[0] || "F")}`;
+      const horario = dias.map((d) => { const rs = sel.filter((r) => diaLocal(r.em) === d); return `${fd(d, true)}, das ${hora(rs[0].em)} às ${hora(rs[rs.length - 1].em)}`; });
+      const nCom = linhas.filter((l) => l.notas.length).length;
+      // fotografias dos dias escolhidos, do(s) fiscal(is) do relatório
       const pors = new Set(sel.map((r) => r.por));
+      box.innerHTML = `<div class="note">A carregar as fotografias...</div>`;
       let fotos = [];
       for (const d of dias) {
         const ini = new Date(d + "T00:00:00").toISOString(), fim = new Date(new Date(d + "T00:00:00").getTime() + 86400000).toISOString();
         try { fotos = fotos.concat(await store.getFotosEntre(ini, fim)); } catch (e) { /* sem fotografias */ }
       }
-      fotos = fotos.filter((f) => pors.has(f.por)).sort((a, b) => (a.em || "").localeCompare(b.em || ""));
-      box.querySelectorAll("[data-rvf]").forEach((el) => {
-        const fs = fotos.filter((f) => f.ativ && f.ativ === el.dataset.rvf);
-        el.innerHTML = fs.map((f, i) => `<button class="relv-th" data-rvi="${i}" aria-label="Ver fotografia"><img src="${f.data}" alt="" loading="lazy"></button>`).join("");
-        el.querySelectorAll("[data-rvi]").forEach((b) => (b.onclick = () => abrirGaleria(fs, +b.dataset.rvi)));
-      });
+      const ativsSel = new Set(linhas.map((l) => l.ativ));
+      fotos = fotos.filter((f) => pors.has(f.por) && ativsSel.has(f.ativ));
+      // numeração pela ordem do relatório (fração, especialidade, hora)
+      const ordemL = ordemU.flatMap((uid) => porU.get(uid));
+      fotos.sort((a, b) => ordemL.findIndex((l) => l.ativ === a.ativ) - ordemL.findIndex((l) => l.ativ === b.ativ) || (a.em || "").localeCompare(b.em || ""));
+      fotos.forEach((f, i) => (f.num = i + 1));
+      const refsDe = (ativ) => fotos.filter((f) => f.ativ === ativ).map((f) => `<a href="#rvf${f.num}" class="rv-fr">F${f.num}</a>`).join(" ");
+      let sec = 0;
+      box.innerHTML = `<article class="rv">
+        <header class="rv-cab">
+          <div class="rv-marca"><div class="brand-mark">AL</div><div><b>${esc(S.cfg.nome || "Obra ALTIS")}</b><span>Controlo de obra</span></div></div>
+          <div class="rv-tit"><h1>Relatório de vistoria</h1><span class="mono">${esc(ref)}</span></div>
+        </header>
+        <table class="rv-id"><tbody>
+          <tr><th>${dias.length === 1 ? "Data" : "Datas"}</th><td>${dias.length === 1 ? diaNome(dias[0]) : dias.map((d) => diaNome(d)).join("; ")}</td><th>Fiscal</th><td>${esc(fiscais.join(", "))}</td></tr>
+          <tr><th>Horário</th><td>${horario.join("<br>")}</td><th>Emitido</th><td>${fdt(new Date().toISOString())}, por ${esc(store.user.nome)}</td></tr>
+        </tbody></table>
+        <div class="rv-res num">
+          <div><b>${porU.size}</b><span>${porU.size === 1 ? "fração visitada" : "frações visitadas"}</span></div>
+          <div><b>${linhas.length}</b><span>${linhas.length === 1 ? "especialidade vistoriada" : "especialidades vistoriadas"}</span></div>
+          <div><b>${fotos.length}</b><span>${fotos.length === 1 ? "fotografia" : "fotografias"}</span></div>
+          <div class="${atencao.length ? "mau" : ""}"><b>${atencao.length}</b><span>${atencao.length === 1 ? "ponto de atenção" : "pontos de atenção"}</span></div>
+        </div>
+
+        <section class="rv-sec"><h2>${++sec}. Pontos de atenção</h2>
+          ${atencao.length ? `<p class="rv-nota">Especialidades em que a percentagem verificada pelo fiscal difere 15 pontos ou mais da indicada pelo empreiteiro.</p>
+          <table class="rv-t"><thead><tr><th>Fração</th><th>Especialidade</th><th class="n">Fiscal</th><th class="n">Empreiteiro</th><th class="n">Diferença</th></tr></thead><tbody>
+          ${atencao.map((l) => `<tr><td class="mono">${esc(nomeU(l.unidade))}</td><td>${esc(l.nome)}</td><td class="n"><b>${pctTxt(l.depois)}</b></td><td class="n">${pctTxt(l.emp)}</td><td class="n mau">${l.depois - l.emp > 0 ? "+" : ""}${l.depois - l.emp} pp</td></tr>`).join("")}
+          </tbody></table>` : `<p class="rv-nota">Sem diferenças relevantes entre o fiscal e o empreiteiro.</p>`}
+        </section>
+
+        <section class="rv-sec"><h2>${++sec}. Registo por fração</h2>
+          <p class="rv-nota">"Antes" é a percentagem do fiscal antes da primeira gravação nestes dias e "Depois" a da última; s/v quer dizer sem vistoria anterior. Fn remete para o registo fotográfico.</p>
+          ${ordemU.map((uid) => `<div class="rv-u"><h3><span class="mono">${esc(nomeU(uid))}</span><small>${esc(descU(uid))}</small></h3>
+            <table class="rv-t"><thead><tr><th>Especialidade</th><th class="n">Antes</th><th class="n">Depois</th><th class="n">Empreiteiro</th><th>Observações</th><th>Fotos</th></tr></thead><tbody>
+            ${porU.get(uid).map((l) => `<tr class="${atencao.includes(l) ? "at" : ""}"><td><b>${esc(l.nome)}</b>${l.a ? ` <button class="lnk-b no-print rv-fic" data-a="${l.a.id}">ficha</button>` : ""}</td>
+              ${l.semDados ? `<td colspan="3" class="rv-ant">${esc(l.texto || "")}</td>` : `<td class="n">${pctTxt(l.antes)}</td><td class="n"><b>${pctTxt(l.depois)}</b></td><td class="n">${pctTxt(l.emp)}</td>`}
+              <td>${l.notas.map((t) => esc(t)).join("<br>") || `<span class="rv-vazio">sem observações</span>`}</td><td class="rv-refs">${refsDe(l.ativ)}</td></tr>`).join("")}
+            </tbody></table></div>`).join("")}
+        </section>
+
+        ${fotos.length ? `<section class="rv-sec rv-fotos"><h2>${++sec}. Registo fotográfico</h2>
+          <div class="rv-fg">${fotos.map((f, i) => { const l = linhas.find((x) => x.ativ === f.ativ); return `<figure id="rvf${f.num}"><button class="rv-img" data-rvi="${i}" aria-label="Ver a fotografia F${f.num} em grande"><img src="${f.data}" alt="F${f.num}: ${esc((l && l.nome) || "")} em ${esc(nomeU(f.unidade))}"></button>
+            <figcaption><b>F${f.num}</b> · <span class="mono">${esc(nomeU(f.unidade))}</span> · ${esc((l && l.nome) || "")} · ${fd(diaLocal(f.em))} ${hora(f.em)}${f.nota ? `<br><span>${esc(f.nota)}</span>` : ""}</figcaption></figure>`; }).join("")}</div>
+        </section>` : ""}
+
+        <section class="rv-sec rv-ass"><h2>${++sec}. Validação</h2>
+          <div class="rv-assg">
+            <div><span>O fiscal</span><b>${esc(fiscais.join(", "))}</b><i></i><small>Assinatura e data</small></div>
+            <div><span>Tomei conhecimento: o empreiteiro</span><b>&nbsp;</b><i></i><small>Assinatura e data</small></div>
+          </div>
+        </section>
+        <footer class="rv-pe">${esc(ref)} · ${esc(S.cfg.nome || "Obra ALTIS")} · Relatório gerado pela aplicação de controlo de obra</footer>
+      </article>`;
+      bindCommon();
+      box.querySelectorAll("[data-rvi]").forEach((b) => (b.onclick = () => abrirGaleria(fotos, +b.dataset.rvi)));
+      document.title = ref + " · Relatório de vistoria";
     },
   };
 }

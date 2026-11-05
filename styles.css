@@ -752,3 +752,82 @@ button.kpi { font: inherit; cursor: pointer; }
   .relv-th img { width: 120px; height: 90px; }
   .vdbar { display: none; }
 }
+/* relatório de vistoria: aspeto de documento */
+.rv { background: #fff; color: #1a1e1c; border: 1px solid var(--line); border-radius: 6px; padding: 28px 32px; max-width: 920px; margin: 0 auto; width: 100%; box-shadow: var(--shadow); display: flex; flex-direction: column; gap: 18px; font-size: 14px; line-height: 1.45; }
+.rv .mono { font-family: var(--f-mono, ui-monospace, monospace); }
+.rv-cab { display: flex; justify-content: space-between; align-items: flex-end; gap: 16px; padding-bottom: 12px; border-bottom: 3px solid #1E4D8C; }
+.rv-marca { display: flex; align-items: center; gap: 10px; }
+.rv-marca .brand-mark { width: 40px; height: 40px; }
+.rv-marca b { display: block; font-size: 15px; }
+.rv-marca span { font-size: 12px; color: #5b635e; }
+.rv-tit { text-align: right; }
+.rv-tit h1 { margin: 0; font-size: 22px; letter-spacing: .01em; color: #1E4D8C; }
+.rv-tit span { font-size: 12px; color: #5b635e; }
+.rv-id { width: 100%; border-collapse: collapse; font-size: 13px; }
+.rv-id th { text-align: left; font-weight: 600; color: #5b635e; width: 1%; white-space: nowrap; padding: 6px 12px 6px 0; vertical-align: top; }
+.rv-id td { padding: 6px 18px 6px 0; vertical-align: top; }
+.rv-id tr + tr th, .rv-id tr + tr td { border-top: 1px solid #e3e6e2; }
+.rv-res { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); border: 1px solid #d5d9d4; border-radius: 4px; }
+.rv-res > div { padding: 10px 12px; display: flex; flex-direction: column; gap: 2px; }
+.rv-res > div + div { border-left: 1px solid #d5d9d4; }
+.rv-res b { font-size: 22px; line-height: 1; }
+.rv-res span { font-size: 12px; color: #5b635e; }
+.rv-res .mau b { color: #b42318; }
+.rv-sec h2 { font-size: 15px; margin: 0 0 6px; padding-bottom: 4px; border-bottom: 1px solid #d5d9d4; color: #1E4D8C; text-transform: uppercase; letter-spacing: .04em; }
+.rv-nota { margin: 0 0 8px; font-size: 12px; color: #5b635e; }
+.rv-t { width: 100%; border-collapse: collapse; font-size: 13px; }
+.rv-t th { text-align: left; font-size: 11px; text-transform: uppercase; letter-spacing: .04em; color: #5b635e; background: #f1f3f0; padding: 6px 8px; border-bottom: 1px solid #d5d9d4; }
+.rv-t td { padding: 7px 8px; border-bottom: 1px solid #e3e6e2; vertical-align: top; }
+.rv-t .n { text-align: right; white-space: nowrap; width: 1%; }
+.rv-t tr.at td { background: #fdf1f0; }
+.rv-t tr.at td.n b, .rv-t .mau { color: #b42318; }
+.rv-t tr { break-inside: avoid; }
+.rv-u { margin-top: 12px; break-inside: avoid-page; }
+.rv-u h3 { display: flex; align-items: baseline; gap: 10px; margin: 0 0 4px; font-size: 15px; }
+.rv-u h3 small { font-weight: 400; font-size: 12px; color: #5b635e; }
+.rv-vazio { color: #9aa39d; }
+.rv-ant { color: #5b635e; font-size: 12px; }
+.rv-refs { white-space: nowrap; width: 1%; }
+.rv-fr { font-family: var(--f-mono, monospace); font-size: 12px; color: #1E4D8C; text-decoration: none; }
+.rv-fic { font-size: 11px; color: #1E4D8C; margin-left: 4px; }
+.rv-fg { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+.rv-fg figure { margin: 0; border: 1px solid #d5d9d4; border-radius: 4px; overflow: hidden; break-inside: avoid; display: flex; flex-direction: column; background: #fff; }
+.rv-img { border: 0; padding: 0; background: #f1f3f0; cursor: zoom-in; display: flex; align-items: center; justify-content: center; aspect-ratio: 4 / 3; }
+.rv-img img { max-width: 100%; max-height: 100%; width: auto; height: auto; object-fit: contain; display: block; }
+.rv-fg figcaption { padding: 7px 9px; font-size: 12px; border-top: 1px solid #e3e6e2; }
+.rv-fg figcaption span { color: #3d4440; }
+.rv-assg { display: grid; grid-template-columns: 1fr 1fr; gap: 28px; margin-top: 6px; }
+.rv-assg > div { display: flex; flex-direction: column; gap: 4px; font-size: 12px; }
+.rv-assg span { color: #5b635e; }
+.rv-assg i { display: block; height: 44px; border-bottom: 1px solid #1a1e1c; }
+.rv-assg small { color: #9aa39d; }
+.rv-pe { font-size: 11px; color: #9aa39d; border-top: 1px solid #e3e6e2; padding-top: 8px; text-align: center; }
+@media (max-width: 640px) {
+  .rv { padding: 16px; font-size: 13px; }
+  .rv-cab { flex-direction: column; align-items: flex-start; } .rv-tit { text-align: left; }
+  .rv-res { grid-template-columns: repeat(2, minmax(0, 1fr)); } .rv-res > div:nth-child(3) { border-left: 0; } .rv-res > div:nth-child(n+3) { border-top: 1px solid #d5d9d4; }
+  .rv-id th, .rv-id td { display: block; padding: 2px 0; border: 0 !important; } .rv-id td { padding-bottom: 6px; }
+  .rv-t thead { display: none; } .rv-t tr { display: grid; grid-template-columns: repeat(3, auto) 1fr; gap: 2px 10px; padding: 8px 0; border-bottom: 1px solid #e3e6e2; }
+  .rv-t td { border: 0; padding: 0; } .rv-t td:first-child, .rv-t td:nth-child(5), .rv-t td:nth-child(6) { grid-column: 1 / -1; } .rv-t .n { text-align: left; }
+  .rv-fg { grid-template-columns: minmax(0, 1fr); }
+  .rv-assg { grid-template-columns: 1fr; }
+}
+@page { size: A4; margin: 14mm 12mm 16mm; @bottom-right { content: "Página " counter(page) " de " counter(pages); font: 9pt sans-serif; color: #777; } }
+@media print {
+  .vista-band { display: none !important; }
+  .rv { border: 0; box-shadow: none; padding: 0; max-width: none; font-size: 10.5pt; gap: 12px; }
+  .rv, .rv * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  .rv-sec h2 { break-after: avoid; }
+  .rv-u h3 { break-after: avoid; }
+  .rv-fotos { break-before: page; }
+  .rv-fg { gap: 8mm 6mm; }
+  .rv-img { aspect-ratio: auto; height: 95mm; background: #fff; }
+  .rv-img img { max-height: 95mm; }
+  .rv-ass { break-inside: avoid; }
+}
+.rv-u .rv-t td:first-child, .rv-u .rv-t th:first-child { width: 28%; }
+.rv-img { aspect-ratio: auto; height: 300px; }
+.rv-img img { max-height: 300px; }
+.rv-fg figure { align-self: start; }
+@media (max-width: 640px) { .rv-img { height: 240px; } .rv-img img { max-height: 240px; } }
+@media print { .rv-img { height: 95mm; } .rv-img img { max-height: 95mm; } }
