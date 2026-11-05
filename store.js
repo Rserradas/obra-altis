@@ -165,6 +165,8 @@ export class DemoStore extends Emitter {
   }
   async getRegistos(ativ) { return this.state.registos.filter((r) => r.ativ === ativ).sort((a, b) => b.em.localeCompare(a.em)); }
   async getRegistosDesde(iso) { return this.state.registos.filter((r) => r.em >= iso).sort((a, b) => b.em.localeCompare(a.em)); }
+  async getRegistosTipo(tipo) { return this.state.registos.filter((r) => r.tipo === tipo).sort((a, b) => b.em.localeCompare(a.em)); }
+  async getFotosEntre(ini, fim) { return this.state.fotos.filter((f) => f.em >= ini && f.em < fim); }
   recentes(n = 30) { return [...this.state.registos].sort((a, b) => b.em.localeCompare(a.em)).slice(0, n); }
   async listUsers() { return this.state.utilizadores; }
   async addUser({ nome, email, papel }) {
@@ -342,6 +344,17 @@ export class CloudStore extends Emitter {
   async getFotos(unidade) {
     const fb = this.fb;
     const s = await fb.getDocs(fb.query(fb.collection(this.db, "fotos"), fb.where("unidade", "==", unidade)));
+    return s.docs.map((d) => ({ id: d.id, ...d.data() }));
+  }
+  /** Registos de um tipo (ex.: todas as vistorias). Só igualdade: não precisa de índice composto. */
+  async getRegistosTipo(tipo) {
+    const fb = this.fb;
+    const q = await fb.getDocs(fb.query(fb.collection(this.db, "registos"), fb.where("tipo", "==", tipo)));
+    return q.docs.map((d) => ({ id: d.id, ...d.data() })).sort((a, b) => (b.em || "").localeCompare(a.em || ""));
+  }
+  async getFotosEntre(ini, fim) {
+    const fb = this.fb;
+    const s = await fb.getDocs(fb.query(fb.collection(this.db, "fotos"), fb.where("em", ">=", ini), fb.where("em", "<", fim)));
     return s.docs.map((d) => ({ id: d.id, ...d.data() }));
   }
   async getRegistosDesde(iso) {

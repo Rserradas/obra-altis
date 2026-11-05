@@ -38,6 +38,7 @@ const CURTO = { cabelagem: "Cabelagem", telecom: "Telecom", ac_tubagem: "AC tuba
   carp_wc: "Carp. WC", loucas: "Louças", loucas_div: "Torneiras", piso_flut: "Piso flut.", aparelhagem: "Aparelhagem", ac_aparelhos: "AC aparelhos",
   pint_final: "Pintura final", acab_teto: "Acab. teto", acab_piso: "Acab. piso", acab_mosaicos: "Acab. mosaicos" };
 const ICON = {
+  vistorias: '<svg viewBox="0 0 24 24"><rect x="5" y="4" width="14" height="17" rx="2"/><path d="M9 4V3h6v1"/><path d="m8.5 12 2 2 4-4M8.5 17h7"/></svg>',
   semana: '<svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/><path d="m8.5 15 2.2 2.2 4.8-4.8"/></svg>',
   painel: '<svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/></svg>',
   unidades: '<svg viewBox="0 0 24 24"><path d="M4 21V5l8-3 8 3v16"/><path d="M9 21v-4h6v4M8 8h2M14 8h2M8 12h2M14 12h2"/></svg>',
@@ -316,9 +317,10 @@ function navItems() {
     { id: "regras", label: "Definições", short: "Definições" },
     { id: "gantt", label: "Gantt", short: "Gantt" },
   ];
-  if (p === "empreiteiro") return [{ id: "semana", label: "A minha semana", short: "Semana" }, items[2], items[4], items[1], items[0], { ...items[3], soLado: true }];
-  if (p === "fiscal") return [items[1], items[0], items[2], items[4]];
-  return [items[0], items[1], items[2], items[4], items[3]];
+  const vist = { id: "vistorias", label: "Relatórios de vistoria", short: "Relatórios" };
+  if (p === "empreiteiro") return [{ id: "semana", label: "A minha semana", short: "Semana" }, items[2], items[4], items[1], items[0], { ...vist, soLado: true }, { ...items[3], soLado: true }];
+  if (p === "fiscal") return [items[1], vist, items[0], items[2], items[4]];
+  return [items[0], items[1], items[2], items[4], { ...vist, soLado: true }, items[3]];
 }
 function routeView() {
   let h = location.hash.replace("#", "");
@@ -331,9 +333,9 @@ function routeView() {
   }
   if (h === "equipa" && store.user.papel !== "dono") h = "painel";
   if (h === "equipas" && !can("executar")) h = "painel";
-  const v = { painel: painelView, unidades: unidadesView, plano: planoView, regras: regrasView, equipa: equipaView, equipas: equipasView, gantt: ganttView, semana: semanaView, relatorio: relatorioView }[h] || painelView;
-  const navDe = { equipa: "regras", equipas: "regras", relatorio: "painel" };
-  return { nav: navDe[h] || (h in { painel: 1, unidades: 1, plano: 1, regras: 1, gantt: 1, semana: 1 } ? h : "painel"), ...v() };
+  const v = { painel: painelView, unidades: unidadesView, plano: planoView, regras: regrasView, equipa: equipaView, equipas: equipasView, gantt: ganttView, semana: semanaView, relatorio: relatorioView, vistorias: vistoriasView, relvist: relVistView }[h] || painelView;
+  const navDe = { equipa: "regras", equipas: "regras", relatorio: "painel", relvist: "vistorias" };
+  return { nav: navDe[h] || (h in { painel: 1, unidades: 1, plano: 1, regras: 1, gantt: 1, semana: 1, vistorias: 1 } ? h : "painel"), ...v() };
 }
 
 /* ============================================================ login */
@@ -689,7 +691,7 @@ function unidadeView(id) {
       ${can("executar") && tab !== "vist" && tab !== "fotos" ? `<button id="uEdit" class="tab-act ${edU ? "on" : ""}">${edU ? "Terminar edição" : "Editar datas"}</button>` : ""}
     </div>
     ${edU && tab === "ativ" ? `<div class="banner">Altere as datas e a percentagem de cada atividade, ou toque no estado para a iniciar ou concluir hoje. Cada alteração fica guardada logo e as atividades seguintes acertam-se sozinhas.</div>` : ""}
-    ${tab === "vist" && fiscal ? `<p class="note">Escolha a percentagem que verificou em cada especialidade e tire as fotografias. No fim, guarde a vistoria de uma só vez. Funciona sem rede.</p>
+    ${tab === "vist" && fiscal ? `<div class="row" style="justify-content:space-between;gap:8px"><p class="note" style="margin:0;flex:1 1 300px">Escolha a percentagem que verificou em cada especialidade e tire as fotografias. No fim, guarde a vistoria de uma só vez. Funciona sem rede.</p><button class="btn sm" data-relhoje>Relatório de hoje</button></div>
       <label class="f">Nota da vistoria (opcional)<input class="inp" id="vnota" value="${esc(ui.vnota || "")}" placeholder="Ex.: humidade no teto do WC, falta silicone na base de duche"></label>
       ${barraConc}
       <div class="arows">${rowsVist || `<div class="empty">Tudo concluído nesta fração.</div>`}</div>
@@ -748,7 +750,8 @@ function bindUnidade(u) {
       if (v.pct != null) Object.assign(patch, { pctFiscal: v.pct, fiscalEm: agora, fiscalPor: store.user.email });
       if (texto) Object.assign(patch, { fiscalNota: texto, fiscalNotaEm: agora });
       const partes = [v.pct != null ? `${v.pct}% (empreiteiro dizia ${Math.round(a.pctEmp ?? 0)}%)` : "", nf ? `${nf} fotografia${nf > 1 ? "s" : ""}` : "", texto ? "comentário: " + texto : ""].filter(Boolean);
-      await store.updateAtividade(id, patch, { tipo: "vistoria", texto: `Vistoria ${nomeAtiv(a)} em ${a.unidade}: ${partes.join(", ")}` });
+      const dados = { esp: nomeAtiv(a), antes: a.pctFiscal ?? null, depois: v.pct ?? null, emp: Math.round(Number(a.pctEmp) || 0), nota: texto || null, nfotos: nf };
+      await store.updateAtividade(id, patch, { tipo: "vistoria", texto: `Vistoria ${nomeAtiv(a)} em ${a.unidade}: ${partes.join(", ")}`, dados });
       delete ui.vistoria[id]; n++;
     }
     ui.vnota = "";
@@ -756,6 +759,8 @@ function bindUnidade(u) {
     toast(`Vistoria guardada (${n} especialidade${n > 1 ? "s" : ""})`, seg ? { acao: { label: `Seguinte: ${seg}`, fn: () => (location.hash = "#u-" + seg) } } : {});
     render();
   };
+  const rh = document.querySelector("[data-relhoje]");
+  if (rh) rh.onclick = () => { ui.relVist = { dias: [diaLocal(new Date().toISOString())], por: store.user.email }; location.hash = "#relvist"; };
   if (ui.unidadeTab === "fotos") loadFotos(u.id, $("#fotos"));
   botoesFotosLinhas(u.id, document.querySelector("#view") || document);
 }
@@ -2078,6 +2083,133 @@ function equipaView() {
   };
 }
 
+/* ============================================================ relatórios de vistoria */
+const diaLocal = (iso) => { const d = new Date(iso); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`; };
+const DIAS_SEM = ["dom", "seg", "ter", "qua", "qui", "sex", "sáb"];
+const diaNome = (dia) => { const d = new Date(dia + "T12:00:00"); return `${DIAS_SEM[d.getDay()]}, ${fd(dia, true)}`; };
+const hora = (iso) => { const d = new Date(iso); return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`; };
+/** Agrupa os registos de vistoria por dia e por fiscal. */
+function resumoVistorias(regs) {
+  const dias = new Map();
+  for (const r of regs) {
+    const dia = diaLocal(r.em);
+    const k = dia + "|" + r.por;
+    const x = dias.get(k) || { dia, por: r.por, nome: r.nomePor || r.por, regs: [], us: new Set(), ativs: new Set(), fotos: 0, coments: 0 };
+    x.regs.push(r); if (r.unidade) x.us.add(r.unidade); if (r.ativ) x.ativs.add(r.ativ);
+    x.fotos += (r.dados && r.dados.nfotos) || (/(\d+) fotografia/.exec(r.texto || "") || [0, 0])[1] * 1;
+    if ((r.dados && r.dados.nota) || /comentário:/.test(r.texto || "")) x.coments++;
+    dias.set(k, x);
+  }
+  return [...dias.values()].sort((a, b) => b.dia.localeCompare(a.dia) || a.nome.localeCompare(b.nome));
+}
+function vistoriasView() {
+  const st = (ui.vistLista = ui.vistLista || { por: store.user.papel === "fiscal" ? store.user.email : "", sel: null });
+  const html = `
+    <div class="card-h"><h1>Relatórios de vistoria</h1></div>
+    <p style="max-width:70ch">Cada vez que o fiscal guarda uma vistoria, fica registado o que mudou: a percentagem antes e depois, o comentário e as fotografias. Escolha um ou mais dias e veja o relatório, que pode imprimir ou guardar em PDF.</p>
+    <div id="vlista"><div class="note">A carregar as vistorias...</div></div>`;
+  return {
+    html, bind: async () => {
+      const box = $("#vlista");
+      let regs = [];
+      try { regs = await store.getRegistosTipo("vistoria"); } catch (e) { box.innerHTML = `<div class="err">Não foi possível carregar: ${esc(e.message)}</div>`; return; }
+      const todos = resumoVistorias(regs);
+      const fiscais = [...new Map(todos.map((x) => [x.por, x.nome])).entries()];
+      const desenha = () => {
+        const lista = todos.filter((x) => !st.por || x.por === st.por);
+        if (st.sel == null) st.sel = new Set(lista.length ? [lista[0].dia + "|" + lista[0].por] : []);
+        const n = [...st.sel].filter((k) => lista.some((x) => x.dia + "|" + x.por === k)).length;
+        box.innerHTML = `
+          ${fiscais.length > 1 || (st.por && !fiscais.some(([e]) => e === st.por)) ? `<div class="filters"><label class="f">Fiscal<select class="inp" id="vfPor"><option value="">Todos</option>${fiscais.map(([e, nome]) => `<option value="${esc(e)}" ${st.por === e ? "selected" : ""}>${esc(nome)}</option>`).join("")}</select></label></div>` : ""}
+          ${lista.length ? `<div class="vdias">${lista.map((x) => { const k = x.dia + "|" + x.por; return `<label class="vdia ${st.sel.has(k) ? "on" : ""}">
+              <input type="checkbox" data-vd="${esc(k)}" ${st.sel.has(k) ? "checked" : ""}>
+              <span class="vd-t"><b>${diaNome(x.dia)}</b><small>${esc(x.nome)} · ${hora(x.regs[x.regs.length - 1].em)} a ${hora(x.regs[0].em)}</small></span>
+              <span class="vd-n num"><span><b>${x.us.size}</b> ${x.us.size === 1 ? "fração" : "frações"}</span><span><b>${x.ativs.size}</b> ${x.ativs.size === 1 ? "especialidade" : "especialidades"}</span><span><b>${x.fotos}</b> ${x.fotos === 1 ? "fotografia" : "fotografias"}</span><span><b>${x.coments}</b> ${x.coments === 1 ? "comentário" : "comentários"}</span></span>
+              <button class="btn sm" data-vd1="${esc(k)}">Ver só este dia</button></label>`; }).join("")}</div>
+            <div class="vdbar"><span class="num"><b>${n}</b> ${n === 1 ? "dia escolhido" : "dias escolhidos"}</span><button class="btn pri" id="vdVer" ${n ? "" : "disabled"}>Ver relatório</button></div>`
+          : `<div class="empty">Ainda não há vistorias guardadas${st.por ? " deste fiscal" : ""}.</div>`}`;
+        const fp = $("#vfPor"); if (fp) fp.onchange = () => { st.por = fp.value; st.sel = null; desenha(); };
+        box.querySelectorAll("[data-vd]").forEach((c) => (c.onchange = () => { c.checked ? st.sel.add(c.dataset.vd) : st.sel.delete(c.dataset.vd); desenha(); }));
+        const abrir = (ks) => { ui.relVist = { chaves: ks }; location.hash = "#relvist"; };
+        box.querySelectorAll("[data-vd1]").forEach((b) => (b.onclick = (e) => { e.preventDefault(); e.stopPropagation(); abrir([b.dataset.vd1]); }));
+        const vv = $("#vdVer"); if (vv) vv.onclick = () => abrir([...st.sel].filter((k) => lista.some((x) => x.dia + "|" + x.por === k)));
+      };
+      desenha();
+    },
+  };
+}
+function relVistView() {
+  const rv = ui.relVist;
+  if (!rv) return { html: `<div class="empty">Escolha primeiro os dias. <a href="#vistorias">Relatórios de vistoria</a></div>` };
+  const html = `<div class="no-print row" style="justify-content:space-between"><a class="btn sm" href="#vistorias">‹ Relatórios de vistoria</a><button class="btn pri" id="rvPrint">Imprimir ou guardar em PDF</button></div>
+    <div id="rvBox"><div class="note">A preparar o relatório...</div></div>`;
+  return {
+    html, bind: async () => {
+      $("#rvPrint").onclick = () => window.print();
+      const box = $("#rvBox");
+      let regs;
+      try { regs = await store.getRegistosTipo("vistoria"); } catch (e) { box.innerHTML = `<div class="err">Não foi possível carregar: ${esc(e.message)}</div>`; return; }
+      // chaves "dia|fiscal"; o atalho "Relatório de hoje" usa dias + por
+      const chaves = new Set(rv.chaves || (rv.dias || []).map((d) => d + "|" + rv.por));
+      const sel = regs.filter((r) => chaves.has(diaLocal(r.em) + "|" + r.por)).sort((a, b) => a.em.localeCompare(b.em));
+      if (!sel.length) { box.innerHTML = `<div class="empty">Não há vistorias guardadas ${rv.dias ? "hoje" : "nos dias escolhidos"}.</div>`; return; }
+      const dias = [...new Set(sel.map((r) => diaLocal(r.em)))].sort();
+      const fiscais = [...new Set(sel.map((r) => r.nomePor || r.por))];
+      // por atividade: primeiro "antes", último "depois"
+      const porAt = new Map();
+      for (const r of sel) {
+        const k = r.ativ || r.id;
+        const x = porAt.get(k) || { ativ: r.ativ, unidade: r.unidade, regs: [] };
+        x.regs.push(r); porAt.set(k, x);
+      }
+      const linhas = [...porAt.values()].map((x) => {
+        const a = S.acts[x.ativ];
+        const prim = x.regs[0], ult = x.regs[x.regs.length - 1];
+        const d0 = prim.dados || {}, d1 = ult.dados || {};
+        const depois = [...x.regs].reverse().map((r) => r.dados && r.dados.depois).find((v) => v != null);
+        const notas = [...new Set(x.regs.map((r) => r.dados ? r.dados.nota : (/comentário: (.*)$/.exec(r.texto || "") || [])[1]).filter(Boolean))];
+        return { ...x, a, nome: (a && nomeAtiv(a)) || d1.esp || "Atividade", antes: d0.antes ?? null, depois: depois ?? null, emp: d1.emp ?? (a ? Math.round(Number(a.pctEmp) || 0) : null), notas, semDados: !prim.dados, texto: ult.texto };
+      });
+      const atencao = linhas.filter((l) => l.depois != null && l.emp != null && Math.abs(l.depois - l.emp) >= 15);
+      const porU = new Map();
+      for (const l of linhas) { const k = l.unidade || "?"; (porU.get(k) || porU.set(k, []).get(k)).push(l); }
+      const ordemU = ordenaUnidades([...porU.keys()].map((id) => S.uMap[id] || { id, bloco: "?", piso: 99 })).map((u) => u.id);
+      const nfotos = sel.reduce((t, r) => t + ((r.dados && r.dados.nfotos) || 0), 0);
+      const pctTxt = (v) => (v == null ? "s/v" : v + "%");
+      const nomeU = (id) => { const u = S.uMap[id]; return u ? (u.tipo === "Apartamento" || /-L\d+$/.test(u.id) ? u.id : u.nome) : id; };
+      box.innerHTML = `<article class="relv">
+        <header class="relv-h"><div class="eyebrow">Relatório de vistoria · ${esc(S.cfg.nome || "Obra ALTIS")}</div>
+          <h1>${dias.length === 1 ? diaNome(dias[0]) : `${dias.length} dias: ${dias.map((d) => fd(d)).join(", ")}`}</h1>
+          <p class="note">Fiscal: <b>${esc(fiscais.join(", "))}</b> · ${dias.map((d) => { const rs = sel.filter((r) => diaLocal(r.em) === d); return `${fd(d)} das ${hora(rs[0].em)} às ${hora(rs[rs.length - 1].em)}`; }).join(" · ")}</p>
+          <div class="relv-tot num"><span><b>${porU.size}</b> ${porU.size === 1 ? "fração" : "frações"}</span><span><b>${linhas.length}</b> ${linhas.length === 1 ? "especialidade" : "especialidades"}</span><span><b>${nfotos}</b> ${nfotos === 1 ? "fotografia" : "fotografias"}</span><span><b>${linhas.filter((l) => l.notas.length).length}</b> com comentário</span></div></header>
+        ${atencao.length ? `<section class="relv-at"><h2>Pontos de atenção <span class="note">fiscal e empreiteiro diferem 15 pontos ou mais</span></h2><ul>${atencao.map((l) => `<li><b>${esc(nomeU(l.unidade))}</b> · ${esc(l.nome)}: fiscal <b>${pctTxt(l.depois)}</b>, empreiteiro ${pctTxt(l.emp)}</li>`).join("")}</ul></section>` : ""}
+        ${ordemU.map((uid) => `<section class="relv-u"><h2>${esc(nomeU(uid))}${S.uMap[uid] && S.uMap[uid].tipo !== "Apartamento" ? ` <span class="note">${esc(S.uMap[uid].tipo)}</span>` : ""}</h2>
+          <div class="relv-l">${porU.get(uid).map((l) => `<div class="relv-r ${atencao.includes(l) ? "at" : ""}">
+            <div class="relv-n"><b>${esc(l.nome)}</b>${l.a ? `<button class="lnk-b no-print" data-a="${l.a.id}">ficha</button>` : ""}</div>
+            <div class="relv-p num">${l.semDados ? `<span class="note">${esc(l.texto || "")}</span>` : `${pctTxt(l.antes)} → <b>${pctTxt(l.depois)}</b><span class="note">empreiteiro ${pctTxt(l.emp)}</span>`}</div>
+            ${l.notas.length ? `<div class="relv-c">${l.notas.map((t) => `<p>${esc(t)}</p>`).join("")}</div>` : ""}
+            <div class="relv-f" data-rvf="${esc(l.ativ || "")}"></div>
+          </div>`).join("")}</div></section>`).join("")}
+        <footer class="note relv-p2">Gerado a ${fdt(new Date().toISOString())} por ${esc(store.user.nome)}. Antes → depois é a percentagem do fiscal antes da primeira e depois da última gravação nestes dias.</footer>
+      </article>`;
+      bindCommon();
+      // fotografias dos dias escolhidos, deste(s) fiscal(is)
+      const pors = new Set(sel.map((r) => r.por));
+      let fotos = [];
+      for (const d of dias) {
+        const ini = new Date(d + "T00:00:00").toISOString(), fim = new Date(new Date(d + "T00:00:00").getTime() + 86400000).toISOString();
+        try { fotos = fotos.concat(await store.getFotosEntre(ini, fim)); } catch (e) { /* sem fotografias */ }
+      }
+      fotos = fotos.filter((f) => pors.has(f.por)).sort((a, b) => (a.em || "").localeCompare(b.em || ""));
+      box.querySelectorAll("[data-rvf]").forEach((el) => {
+        const fs = fotos.filter((f) => f.ativ && f.ativ === el.dataset.rvf);
+        el.innerHTML = fs.map((f, i) => `<button class="relv-th" data-rvi="${i}" aria-label="Ver fotografia"><img src="${f.data}" alt="" loading="lazy"></button>`).join("");
+        el.querySelectorAll("[data-rvi]").forEach((b) => (b.onclick = () => abrirGaleria(fs, +b.dataset.rvi)));
+      });
+    },
+  };
+}
+
 /* ============================================================ equipas de trabalho */
 const telLink = (t) => `<a href="tel:${esc(String(t).replace(/[^\d+]/g, ""))}">${esc(t)}</a>`;
 /** Atribui (ou retira, com nome null) uma equipa a vários trabalhos de uma vez. */
@@ -2916,8 +3048,9 @@ function renderSheet() {
     for (const f of fotos) await store.addFoto(id, a.unidade, f, nota);
     const patch = { pctFiscal: v, fiscalEm: agora, fiscalPor: store.user.email };
     if (nota) Object.assign(patch, { fiscalNota: nota, fiscalNotaEm: agora });
+    const dados = { esp: nomeAtiv(a), antes: a.pctFiscal ?? null, depois: v, emp: pct, nota: nota || null, nfotos: fotos.length };
     await store.updateAtividade(id, patch,
-      { tipo: "vistoria", texto: `Vistoria ${N}: ${v}% (empreiteiro dizia ${pct}%)${fotos.length ? `, ${fotos.length} fotografia(s)` : ""}${nota ? ", comentário: " + nota : ""}` });
+      { tipo: "vistoria", texto: `Vistoria ${N}: ${v}% (empreiteiro dizia ${pct}%)${fotos.length ? `, ${fotos.length} fotografia(s)` : ""}${nota ? ", comentário: " + nota : ""}`, dados });
     fotos = []; toast("Vistoria guardada");
   });
   if ($("#depBox", sh)) {

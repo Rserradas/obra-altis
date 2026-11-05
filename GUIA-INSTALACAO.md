@@ -94,6 +94,17 @@ No ecrã de cada apartamento, o separador **Atividades** mostra uma atividade po
 * **Ver as fotografias de uma especialidade:** quando uma especialidade já tem fotografias, aparece na linha (na Vistoria e no separador Atividades) um botão com o ícone de imagem e o número de fotografias. Abre-as em ecrã inteiro: setas (ou deslizar o dedo) para passar à seguinte, e o botão Apagar fotografia, com confirmação.
 * **Apagar fotografias guardadas:** no fundo da Vistoria (e no separador Fotografias e na ficha da atividade), cada fotografia tem um ×. Pede confirmação antes de apagar. O fiscal e o empreiteiro apagam só as suas; o dono de obra pode apagar qualquer uma.
 
+## Relatórios de vistoria
+
+Cada vez que o fiscal guarda uma vistoria, a aplicação regista o que mudou em cada especialidade: a percentagem antes e depois, a percentagem que o empreiteiro indicava, o comentário e as fotografias. Não é preciso carregar em "começar" nem "terminar".
+
+* **Onde:** menu **Relatórios de vistoria** (o fiscal tem-no na barra principal; o dono de obra e o empreiteiro no menu lateral). No ecrã de Vistoria de cada apartamento há também o botão **Relatório de hoje**.
+* **Escolher os dias:** a lista mostra um dia por linha, com o fiscal, as horas, e quantas frações, especialidades, fotografias e comentários. Por omissão está escolhido o dia mais recente; marque os dias que quiser (por exemplo, dois dias seguidos da mesma visita) e clique em **Ver relatório**. **Ver só este dia** abre logo um dia. Se houver mais do que um fiscal, há um filtro por fiscal.
+* **O relatório:** cabeçalho com a data, o fiscal, as horas e os totais; **Pontos de atenção** no topo, com as especialidades em que fiscal e empreiteiro diferem 15 pontos ou mais; depois uma secção por fração, com cada especialidade (antes → depois, a percentagem do empreiteiro, os comentários e as fotografias, que se abrem em grande ao tocar).
+* **Imprimir ou guardar em PDF:** o botão no topo usa a impressão do navegador. Escolha "Guardar como PDF" para enviar por email ou WhatsApp.
+* **Quem vê:** o fiscal, o dono de obra e o empreiteiro.
+* As vistorias feitas antes desta versão aparecem no relatório, mas sem a percentagem anterior (só o texto que ficou no histórico).
+
 ## A minha semana (empreiteiro)
 
 O empreiteiro entra diretamente em **A minha semana**: o que está em curso (com quantas acabam esta semana), o que deve começar nos próximos 7 dias e o que está à espera de outras atividades, com o motivo. Pode filtrar por equipa e por bloco, e mostrar só uma das três listas (Em curso, Para começar ou À espera de outras) tocando no cartão do topo ou nos botões por baixo; voltar a tocar mostra tudo. Os botões **Iniciar**, **+10%** e **Concluir** gravam logo, sem abrir a ficha, e podem ser anulados.
