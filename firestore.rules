@@ -18,8 +18,8 @@ service cloud.firestore {
     match /config/{d} {
       allow read: if membro();
       allow write: if isDono();
-      // o empreiteiro gere as suas equipas
-      allow update: if papel() == "empreiteiro" && soMuda(["equipas"]);
+      // o empreiteiro gere as equipas e as especialidades (sequência, ordem, nomes, dias por fração)
+      allow update: if papel() == "empreiteiro" && soMuda(["equipas", "regras", "especialidades", "duracoes"]);
     }
     match /atividades/{id} {
       allow read: if membro();

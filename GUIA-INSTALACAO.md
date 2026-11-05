@@ -54,6 +54,12 @@ Os dados da obra não estão no repositório: estão no Firebase e não são afe
 
 Em **Sequência** está uma proposta de ordem entre especialidades (por exemplo, louças sanitárias só depois de azulejos WC e teto falso) e uma duração padrão por fração, tirada da coluna "Dias STD" do Excel quando existia. Reveja e ajuste: cada alteração recalcula de imediato todas as datas da obra.
 
+Para mudar o nome de uma especialidade, clique no lápis ao lado do nome, escreva o novo e clique em **Guardar** (ou Enter). O nome muda logo em todos os ecrãs e em todos os trabalhos dessa especialidade; as datas, as ligações e o histórico ficam iguais. O dono de obra e o empreiteiro podem fazê-lo.
+
+Para mudar a ordem das especialidades na lista, use as setas ▲ ▼ à esquerda de cada uma ou, no computador, arraste a linha para cima ou para baixo. O botão **Ordenar pela sequência** põe cada especialidade depois daquelas de que depende. Esta ordem é a das colunas do mapa do Painel e a das atividades em cada apartamento; não muda as datas, que dependem só das condições «Só começa depois de».
+
+Tudo neste ecrã (condições, ordem, nomes, dias por fração e novas especialidades) pode ser mudado pelo dono de obra e pelo empreiteiro. O fiscal não vê este ecrã.
+
 ---
 
 ## O que cada perfil faz
@@ -61,7 +67,7 @@ Em **Sequência** está uma proposta de ordem entre especialidades (por exemplo,
 | Perfil | Pode |
 |---|---|
 | Dono de obra | Ver tudo, definir a sequência e as durações, criar especialidades, eliminar atividades, gerir os acessos, e tudo o que os outros fazem |
-| Empreiteiro | Iniciar e concluir atividades, atualizar a percentagem, indicar nova data e motivo, ligar atividades entre si, acrescentar atividades |
+| Empreiteiro | Iniciar e concluir atividades, atualizar a percentagem, indicar nova data e motivo, ligar atividades entre si, acrescentar atividades, gerir as equipas e as especialidades (sequência, ordem, nomes, dias por fração, criar novas) |
 | Fiscal | Fazer vistorias por apartamento (percentagem por especialidade, nota e fotografias) |
 
 ## Apartamento: lista de atividades
@@ -175,7 +181,7 @@ O ecrã **Gantt** mostra cada atividade como uma barra entre o início e o fim p
 
 No ecrã **Trabalhos**, botão **+ Nova atividade** (dono de obra e empreiteiro). Numa só ficha escolhe:
 
-* **O que é:** uma especialidade que já existe ou uma atividade nova, com o nome que quiser. O dono de obra pode guardá-la como nova especialidade, e então ela passa a aparecer no ecrã Sequência e no mapa dos apartamentos.
+* **O que é:** uma especialidade que já existe ou uma atividade nova, com o nome que quiser. O dono de obra ou o empreiteiro podem guardá-la como nova especialidade, e então ela passa a aparecer no ecrã Sequência e no mapa dos apartamentos.
 * **Onde:** todos os apartamentos (pode limitar a alguns blocos), todas as lojas, as zonas comuns, o geral, ou frações escolhidas uma a uma.
 * **Quando:** dias por fração, início previsto (opcional) e, se for a mesma equipa a fazer tudo, a opção de fazer uma fração de cada vez, encadeadas.
 * **Só começa depois de:** as especialidades de que depende, dentro de cada fração.

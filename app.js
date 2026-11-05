@@ -510,7 +510,7 @@ function heatHTML() {
       <div class="chips">${blocos.map((b) => `<button class="chip ${fil === b ? "on" : ""}" data-bloco="${b}">${b === "todos" ? "Todos" : b === "Geral" ? "Geral" : "Bloco " + b}</button>`).join("")}</div></div>
     ${!us.length ? `<div class="empty">O bloco Geral não tem apartamentos nem lojas, por isso não entra neste mapa. As suas atividades (estrutura, exteriores, garagens, piscina, receção...) estão em <a href="#plano" data-irgeral>Trabalhos</a> e no Gantt.</div>` : ""}
     <div class="legend"><span><i class="cell c-concluida"></i>Concluída</span><span><i class="cell c-em_curso"></i>Em curso (%)</span><span><i class="cell c-bloqueada"></i>Bloqueada</span><span><i class="cell c-por_iniciar"></i>Por iniciar</span><span><i class="cell c-por_iniciar atr"></i>Atrasada</span></div>
-    <div class="heat-wrap"><table class="heat"><thead><tr><th class="corner"></th>${esp.map((e) => `<th><div title="${esc(e.nome)}">${esc(CURTO[e.key] || (e.nome.length > 16 ? e.nome.slice(0, 15) + "." : e.nome))}</div></th>`).join("")}</tr></thead><tbody>${rows}</tbody></table></div>
+    <div class="heat-wrap"><table class="heat"><thead><tr><th class="corner"></th>${esp.map((e) => `<th><div title="${esc(e.nome)}">${esc((!e.editado && CURTO[e.key]) || (e.nome.length > 16 ? e.nome.slice(0, 15) + "." : e.nome))}</div></th>`).join("")}</tr></thead><tbody>${rows}</tbody></table></div>
   </section>`;
 }
 function bindCommon() {
@@ -1798,29 +1798,31 @@ function defTabs(atual) {
 /* ============================================================ regras (sequência) */
 function regrasView() {
   const dono = store.user.papel === "dono";
+  const seq = dono || store.user.papel === "empreiteiro"; // dono e empreiteiro podem mudar tudo neste ecrã
   const esp = [...S.cfg.especialidades].sort((a, b) => a.ordem - b.ordem);
   const regras = S.cfg.regras || {}, dur = S.cfg.duracoes || {};
   const nAp = S.unidades.filter((u) => u.tipo === "Apartamento").length;
   const html = `
     ${defTabs("regras")}
-    <div class="card-h"><h1>Sequência dos trabalhos</h1>${dono ? `<button class="btn pri" data-nova="esp">+ Nova especialidade</button>` : ""}</div>
+    <div class="card-h"><h1>Sequência dos trabalhos</h1>${seq ? `<div class="row"><button class="btn" id="ordSeq" title="Põe cada especialidade depois das de que depende">Ordenar pela sequência</button><button class="btn pri" data-nova="esp">+ Nova especialidade</button></div>` : ""}</div>
     <p style="max-width:70ch">Cada especialidade só pode arrancar num apartamento quando as especialidades da coluna «Só começa depois de» estiverem concluídas <b>nesse mesmo apartamento</b>. Uma regra aqui aplica-se de uma vez aos ${nAp} apartamentos. Se uma atividade se atrasar, todas as que dependem dela andam para a frente sozinhas.</p>
-    ${dono ? "" : `<div class="banner">Só o dono de obra pode alterar esta sequência. Ligações pontuais entre duas atividades podem ser feitas na ficha de cada atividade.</div>`}
+    ${seq ? "" : `<div class="banner">Só o dono de obra e o empreiteiro podem alterar esta sequência.</div>`}
     <div class="rules">
-      <div class="rule rule-h"><span>Especialidade</span><span>Dias por fração</span><span>Só começa depois de</span></div>
+      <div class="rule rule-h ${seq ? "ordenavel" : ""}">${seq ? "<span></span>" : ""}<span>Especialidade</span><span>Dias por fração</span><span>Só começa depois de</span></div>
       ${esp.map((e) => {
         const pre = regras[e.key] || [];
         const disp = esp.filter((x) => x.key !== e.key && !pre.includes(x.key));
-        return `<div class="rule"><b>${esc(e.nome)}</b>
-          <input class="inp num" type="number" min="0" max="365" value="${dur[e.key] ?? ""}" data-dur="${e.key}" ${dono ? "" : "disabled"} aria-label="Dias por fração de ${esc(e.nome)}">
-          <div class="tags">${pre.map((k) => `<span class="tag ${dono ? "" : "ro"}">${esc(S.espIdx[k] ? S.espIdx[k].nome : k)}${dono ? `<button data-rm="${e.key}|${k}" aria-label="Retirar">×</button>` : ""}</span>`).join("") || `<span class="note">Sem condições</span>`}
-          ${dono ? `<select class="inp" data-add="${e.key}"><option value="">+ acrescentar</option>${disp.map((x) => `<option value="${x.key}">${esc(x.nome)}</option>`).join("")}</select>` : ""}</div></div>`;
+        const i = esp.indexOf(e);
+        return `<div class="rule ${seq ? "ordenavel" : ""}" data-rk="${e.key}" ${seq ? 'draggable="true"' : ""}>${seq ? `<div class="ordb"><button class="ord-b" data-ord="${e.key}|-1" ${i === 0 ? "disabled" : ""} title="Subir" aria-label="Subir ${esc(e.nome)}">▲</button><button class="ord-b" data-ord="${e.key}|1" ${i === esp.length - 1 ? "disabled" : ""} title="Descer" aria-label="Descer ${esc(e.nome)}">▼</button></div>` : ""}<div class="rnome" data-rnome="${e.key}"><b>${esc(e.nome)}</b>${seq ? `<button class="ren-b" data-ren="${e.key}" title="Mudar o nome" aria-label="Mudar o nome de ${esc(e.nome)}"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20h4L18.5 9.5a2.1 2.1 0 0 0-3-3L5 17v3z"/><path d="M14 8l3 3"/></svg></button>` : ""}</div>
+          <input class="inp num" type="number" min="0" max="365" value="${dur[e.key] ?? ""}" data-dur="${e.key}" ${seq ? "" : "disabled"} aria-label="Dias por fração de ${esc(e.nome)}">
+          <div class="tags">${pre.map((k) => `<span class="tag ${seq ? "" : "ro"}">${esc(S.espIdx[k] ? S.espIdx[k].nome : k)}${seq ? `<button data-rm="${e.key}|${k}" aria-label="Retirar">×</button>` : ""}</span>`).join("") || `<span class="note">Sem condições</span>`}
+          ${seq ? `<select class="inp" data-add="${e.key}"><option value="">+ acrescentar</option>${disp.map((x) => `<option value="${x.key}">${esc(x.nome)}</option>`).join("")}</select>` : ""}</div></div>`;
       }).join("")}
     </div>
     <p class="note">As ligações que já existiam no Excel (por exemplo a sequência da Equipa 4 de apartamento em apartamento) continuam ativas além destas regras.</p>`;
   return {
     html, bind: () => {
-      if (!dono) return;
+      if (!seq) return;
       document.querySelectorAll("[data-nova]").forEach((b) => (b.onclick = () => openNova(b.dataset.nova)));
       const save = (patch, texto) => store.setConfig(patch, { tipo: "regras", texto }).then(() => toast("Sequência atualizada"));
       document.querySelectorAll("[data-rm]").forEach((b) => (b.onclick = () => {
@@ -1833,6 +1835,65 @@ function regrasView() {
         if (!p) return;
         const r = { ...regras, [k]: [...(regras[k] || []), p] };
         save({ regras: r }, `Sequência: ${S.espIdx[k].nome} passa a esperar por ${S.espIdx[p].nome}`);
+      }));
+      // ordem das especialidades: setas, arrastar (rato) e ordenar pela sequência
+      const gravaOrdem = async (keys, texto) => {
+        const pos = Object.fromEntries(keys.map((k, i) => [k, i + 1]));
+        const lista = S.cfg.especialidades.map((x) => ({ ...x, ordem: pos[x.key] ?? x.ordem }));
+        await store.setConfig({ especialidades: lista }, { tipo: "regras", texto });
+        toast("Ordem guardada");
+      };
+      const keys = esp.map((e) => e.key);
+      document.querySelectorAll("[data-ord]").forEach((bt) => (bt.onclick = () => {
+        const [k, d] = bt.dataset.ord.split("|"), i = keys.indexOf(k), j = i + Number(d);
+        if (j < 0 || j >= keys.length) return;
+        const nk = [...keys]; [nk[i], nk[j]] = [nk[j], nk[i]];
+        ui.focoOrd = k + "|" + d;
+        gravaOrdem(nk, `Sequência: ${S.espIdx[k].nome} ${Number(d) < 0 ? "subiu" : "desceu"} na lista`);
+      }));
+      if (ui.focoOrd) { const f = document.querySelector(`[data-ord="${ui.focoOrd}"]`); if (f && !f.disabled) f.focus(); ui.focoOrd = null; }
+      let arrasta = null;
+      document.querySelectorAll(".rule[data-rk]").forEach((row) => {
+        row.ondragstart = (ev) => { if (/INPUT|SELECT|BUTTON/.test(ev.target.tagName)) return; arrasta = row.dataset.rk; row.classList.add("arr"); ev.dataTransfer.effectAllowed = "move"; };
+        row.ondragend = () => { row.classList.remove("arr"); document.querySelectorAll(".rule.sobre").forEach((x) => x.classList.remove("sobre")); };
+        row.ondragover = (ev) => { if (!arrasta) return; ev.preventDefault(); document.querySelectorAll(".rule.sobre").forEach((x) => x.classList.remove("sobre")); row.classList.add("sobre"); };
+        row.ondrop = (ev) => {
+          ev.preventDefault();
+          const de = arrasta, para = row.dataset.rk; arrasta = null;
+          if (!de || de === para) return;
+          const nk = keys.filter((k) => k !== de); nk.splice(nk.indexOf(para) + (keys.indexOf(de) < keys.indexOf(para) ? 1 : 0), 0, de);
+          gravaOrdem(nk, `Sequência: ${S.espIdx[de].nome} mudou de posição na lista`);
+        };
+      });
+      const os = $("#ordSeq");
+      if (os) os.onclick = () => {
+        // ordenação topológica estável: mantém a ordem atual sempre que as regras o permitem
+        const feito = new Set(), out = [];
+        while (out.length < keys.length) {
+          const k = keys.find((x) => !feito.has(x) && (regras[x] || []).every((p) => feito.has(p) || !keys.includes(p)))
+            || keys.find((x) => !feito.has(x)); // ciclo: segue a ordem atual
+          feito.add(k); out.push(k);
+        }
+        if (out.join() === keys.join()) return toast("A ordem já segue a sequência");
+        gravaOrdem(out, "Sequência: especialidades ordenadas pela sequência dos trabalhos");
+      };
+      document.querySelectorAll("[data-ren]").forEach((bt) => (bt.onclick = () => {
+        const k = bt.dataset.ren, e = S.espIdx[k], box = document.querySelector(`[data-rnome="${k}"]`);
+        box.classList.add("ed");
+        box.innerHTML = `<input class="inp" value="${esc(e.nome)}" maxlength="80" aria-label="Novo nome"><button class="btn sm pri" data-rok>Guardar</button><button class="btn sm ghost" data-rno>Cancelar</button>`;
+        const inp = box.querySelector("input");
+        inp.focus(); inp.select();
+        const grava = async () => {
+          const nome = inp.value.trim().replace(/\s+/g, " ");
+          if (!nome || nome === e.nome) return render();
+          if (S.cfg.especialidades.some((x) => x.key !== k && x.nome.toLowerCase() === nome.toLowerCase())) { toast("Já existe uma especialidade com esse nome."); inp.focus(); return; }
+          const lista = S.cfg.especialidades.map((x) => (x.key === k ? { ...x, nome, editado: true } : x));
+          await store.setConfig({ especialidades: lista }, { tipo: "regras", texto: `Especialidade "${e.nome}" passou a chamar-se "${nome}"` });
+          toast(`Passou a chamar-se ${nome}`);
+        };
+        box.querySelector("[data-rok]").onclick = grava;
+        box.querySelector("[data-rno]").onclick = () => render();
+        inp.onkeydown = (ev) => { if (ev.key === "Enter") { ev.preventDefault(); grava(); } else if (ev.key === "Escape") render(); };
       }));
       document.querySelectorAll("[data-dur]").forEach((i) => (i.onchange = () => {
         const k = i.dataset.dur, v = i.value === "" ? null : Math.max(0, Number(i.value));
@@ -2226,7 +2287,7 @@ function novaAlvos() {
 function renderNova() {
   document.querySelectorAll('[data-dw="nova"]').forEach((e) => e.remove());
   const n = ui.nova;
-  const dono = store.user.papel === "dono";
+  const dono = store.user.papel === "dono" || store.user.papel === "empreiteiro"; // podem criar especialidades
   const esp = [...S.cfg.especialidades].sort((a, b) => a.ordem - b.ordem);
   const ONDE = [["apart", "Todos os apartamentos"], ["lojas", "Todas as lojas"], ["zonas", "Zonas comuns"], ["geral", "Geral"], ["escolher", "Escolher frações"]];
   const grupos = ["A", "B", "C", "D", "Geral"];
