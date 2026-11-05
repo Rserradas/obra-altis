@@ -39,7 +39,9 @@ Enquanto o passo 1 não estiver feito, a aplicação abre em **modo de demonstra
 2. Arraste a pasta `app` inteira para a página.
 3. O Netlify dá-lhe um endereço do tipo `https://nome-aleatorio.netlify.app`. Em *Site configuration* > *Change site name* pode trocar para algo como `obra-altis.netlify.app`.
 
-Sempre que alterar um ficheiro (por exemplo o `config.js`), volte a arrastar a pasta para o mesmo site em *Deploys*.
+**Como está instalado agora:** a aplicação está no repositório GitHub `Rserradas/obra-altis` (público) e o site `obra-altis.netlify.app` está ligado a esse repositório. Cada alteração enviada para o ramo `main` é publicada sozinha pelo Netlify em cerca de um minuto; o estado vê-se em *Project overview* > *Activity*. Se uma versão correr mal, em *Deploys* escolhe-se uma publicação anterior e clica-se em *Publish deploy* para voltar a ela.
+
+Os dados da obra não estão no repositório: estão no Firebase e não são afetados pelas atualizações. O `config.js` só diz à aplicação qual é o projeto Firebase; a proteção dos dados é feita pelas contas e pelas regras (`firestore.rules`). Quando as regras mudam, é preciso colá-las de novo no Firebase (*Firestore* > *Regras* > *Publicar*).
 
 ## Passo 3. Primeiro arranque
 
