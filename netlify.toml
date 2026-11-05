@@ -1,0 +1,14 @@
+# Publicação no Netlify: ficheiros estáticos, sem build.
+[build]
+  publish = "."
+  command = ""
+
+[[headers]]
+  for = "/sw.js"
+  [headers.values]
+    Cache-Control = "no-cache"
+
+[[headers]]
+  for = "/*.js"
+  [headers.values]
+    Cache-Control = "no-cache"
