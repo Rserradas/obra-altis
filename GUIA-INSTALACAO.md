@@ -165,6 +165,12 @@ Em **Definições**, separador **Equipas de trabalho**, estão as equipas que fa
 * **Atribuir a vários de uma vez:** em **Trabalhos**, toque em **Atribuir equipa**. Aparece uma caixa de escolha em cada linha. Use os filtros (por exemplo Atividade "Azulejos WC" e Equipa "Sem equipa"), escolha as linhas ou **Escolher as N da lista**, escolha a equipa e toque em **Atribuir**. Também dá para retirar a equipa.
 * O filtro **Equipa** dos Trabalhos tem a opção **Sem equipa**, e em **A minha semana** o empreiteiro filtra pela sua equipa.
 
+## Confirmações ao retirar ou anular
+
+Tudo o que retira ou anula alguma coisa pede uma confirmação antes de gravar: tirar uma ligação entre atividades (o botão **× Tirar ligação**, na ficha, separador Ligações), retirar uma condição da sequência, anular o início, reabrir uma atividade concluída, apagar uma data real, retirar a equipa de um ou de vários trabalhos, eliminar uma equipa, apagar uma fotografia e eliminar uma atividade ou uma fração. O botão **Anular** que aparece em baixo depois de cada alteração continua a funcionar sem pergunta, porque serve precisamente para desfazer um engano.
+
+Na ficha, separador **Ligações**, há também **+ Criar nova atividade seguinte**, que abre a Nova atividade já ligada a esta, e **+ Ligar uma atividade que já existe**, para escolher uma atividade existente como seguinte.
+
 ## Reutilizar ou mudar uma atividade de fração
 
 * **Copiar para outras frações:** na ficha de uma atividade, o botão **Copiar para outras frações** abre a Nova atividade já preenchida com o nome, os dias e a equipa dessa atividade. Escolhe os apartamentos, lojas, zonas comuns ou o geral e exteriores, e cria-a lá.

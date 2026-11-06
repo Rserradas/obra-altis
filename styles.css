@@ -846,3 +846,61 @@ button.kpi { font: inherit; cursor: pointer; }
 .rv-res { grid-template-columns: repeat(5, minmax(0, 1fr)); }
 @media (max-width: 640px) { .rv-res { grid-template-columns: repeat(2, minmax(0, 1fr)); } .rv-res > div { border-left: 0 !important; border-top: 1px solid #d5d9d4; } .rv-res > div:nth-child(-n+2) { border-top: 0; } .rv-t tr { grid-template-columns: repeat(4, auto) 1fr; } .rv-t td:nth-child(6), .rv-t td:nth-child(7) { grid-column: 1 / -1; } }
 @media (max-width: 640px) { .rv-u .rv-t td:nth-child(5) { grid-column: auto; } }
+.tira-b { color: var(--crit); border-color: color-mix(in srgb, var(--crit) 40%, var(--line)); background: var(--surface); white-space: nowrap; }
+.tira-b:hover, .tira-b:focus-visible { background: var(--crit-soft); }
+.dlg-b .btn.warn { background: var(--crit); border-color: var(--crit); color: #fff; }
+/* ===== revisão mobile ===== */
+/* gavetas: cabeçalho e separadores nunca encolhem; só o corpo faz scroll */
+.sheet > .sheet-h, .sheet > .stabs, .sheet > .snav { flex: none; }
+.sheet > .sheet-b { flex: 1 1 auto; min-height: 0; padding-bottom: calc(40px + env(safe-area-inset-bottom, 0px)); }
+.stabs { flex: none; scrollbar-width: none; }
+.stabs::-webkit-scrollbar { display: none; }
+/* separadores com ação (ex.: Editar datas): quebram em vez de sair do ecrã */
+.tabs { flex-wrap: wrap; row-gap: 0; }
+.tabs button, .tabs a.deftab { white-space: nowrap; }
+@media (max-width: 520px) {
+  .tabs button, .tabs a.deftab { padding: 9px 9px; }
+  .tabs .tab-act { margin-left: 0; flex-basis: 100%; text-align: left; border-bottom: 0; padding-left: 9px; }
+}
+/* campos de data (iPhone): ocupam só a coluna e não empurram o resto */
+input[type="date"].inp, input[type="date"] { -webkit-appearance: none; appearance: none; min-width: 0; max-width: 100%; width: 100%; box-sizing: border-box; min-height: 40px; display: block; }
+input[type="date"]::-webkit-date-and-time-value { text-align: left; margin: 0; }
+input[type="date"]::-webkit-datetime-edit { padding: 0; }
+.dates .v { min-width: 0; }
+.dates.editavel { grid-template-columns: auto minmax(0, 1fr) minmax(0, 1fr); }
+@media (max-width: 420px) {
+  .dates { gap: 6px 8px; }
+  .dates.editavel input[type="date"] { font-size: 15px; padding-left: 8px; padding-right: 4px; }
+}
+/* listas e seletores que não podem passar a largura do ecrã */
+.rule select, .tags select, .filters select, select.inp { max-width: 100%; min-width: 0; }
+.rule > *, .tags > * { min-width: 0; }
+.tags { flex-wrap: wrap; min-width: 0; }
+.arow.linha .nm1, .arow .nm1 b, .lnk-b { min-width: 0; overflow-wrap: anywhere; }
+.arow.linha.editing .nm1 { flex-wrap: wrap; }
+/* botões da ficha: quebram linha */
+.sheet-b .row { flex-wrap: wrap; }
+.arow.linha .nm1 .lnk-b, .arow.linha .nm1 b { white-space: normal; max-width: 100%; text-align: left; }
+/* topo do telemóvel: tudo numa linha */
+@media (max-width: 860px) {
+  .topbar { flex-wrap: nowrap; gap: 6px; }
+  .topbar .brand { min-width: 0; flex: 0 1 auto; }
+  .topbar .brand b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .topbar > .row { flex-wrap: nowrap; min-width: 0; flex: 0 1 auto; justify-content: flex-end; }
+  .topbar .btn.sm { padding-left: 8px; padding-right: 8px; }
+  .tabbar .tb-mais { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 3px; padding: 8px 2px 9px; font: 600 .7rem var(--f-body); color: var(--muted); background: none; border: 0; }
+  .tabbar .tb-mais svg { width: 21px; height: 21px; stroke: currentColor; fill: currentColor; stroke-width: 1; }
+  .tabbar .tb-mais.on { color: var(--accent); }
+  .mais-m { position: fixed; right: 8px; bottom: calc(64px + env(safe-area-inset-bottom, 0px)); z-index: 30; background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); box-shadow: var(--shadow); padding: 6px; display: flex; flex-direction: column; min-width: 220px; }
+  .mais-m[hidden] { display: none; }
+  .mais-m a { display: flex; align-items: center; gap: 10px; padding: 11px 12px; border-radius: 8px; color: var(--ink); text-decoration: none; font-weight: 600; }
+  .mais-m a.on { color: var(--accent); background: var(--accent-soft); }
+  .mais-m a svg { width: 20px; height: 20px; stroke: currentColor; fill: none; stroke-width: 1.8; }
+}
+@media (max-width: 420px) {
+  .topbar .sync-t { display: none; }
+  .topbar .brand b { display: none; }
+  .stabs button { padding: 10px 8px; font-size: .92rem; }
+}
+/* iPhone: campos com letra de 16px para o Safari não fazer zoom ao tocar (que desarruma o ecrã) */
+@media (max-width: 860px) { input.inp, select.inp, textarea.inp, .inp { font-size: 16px; } .rule select { font-size: 15px; } }

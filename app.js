@@ -38,6 +38,7 @@ const CURTO = { cabelagem: "Cabelagem", telecom: "Telecom", ac_tubagem: "AC tuba
   carp_wc: "Carp. WC", loucas: "Louças", loucas_div: "Torneiras", piso_flut: "Piso flut.", aparelhagem: "Aparelhagem", ac_aparelhos: "AC aparelhos",
   pint_final: "Pintura final", acab_teto: "Acab. teto", acab_piso: "Acab. piso", acab_mosaicos: "Acab. mosaicos" };
 const ICON = {
+  mais: '<svg viewBox="0 0 24 24"><circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/></svg>',
   vistorias: '<svg viewBox="0 0 24 24"><rect x="5" y="4" width="14" height="17" rx="2"/><path d="M9 4V3h6v1"/><path d="m8.5 12 2 2 4-4M8.5 17h7"/></svg>',
   semana: '<svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/><path d="m8.5 15 2.2 2.2 4.8-4.8"/></svg>',
   painel: '<svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/></svg>',
@@ -223,6 +224,7 @@ async function boot() {
     if (e.key === "/" && !/INPUT|TEXTAREA|SELECT/.test((document.activeElement || {}).tagName || "")) { const i = document.querySelector("#psqD input"); if (i && i.offsetParent) { e.preventDefault(); i.focus(); } else if (S) { e.preventDefault(); abrirPesquisaMovel(); } }
   });
   document.addEventListener("click", (e) => { if (!e.target.closest || !e.target.closest(".fpick")) document.querySelectorAll(".fmenu").forEach((m) => (m.hidden = true)); });
+  document.addEventListener("click", (e) => { if (!e.target.closest || !e.target.closest("[data-maism],[data-mais]")) document.querySelectorAll("[data-maism]").forEach((m) => (m.hidden = true)); });
   window.addEventListener("hashchange", () => {
     if (ui.sheet) closeSheet();
     if (ui.nova) closeNova();
@@ -277,9 +279,15 @@ function render() {
     ${store.admin ? `<div class="vista-band">A ver como <b>${PAPEL[store.user.papel]}</b>${vistaSelHTML("vistaM")}</div>` : ""}
     <header class="topbar">${brandHTML(true)}<div class="row" style="gap:4px"><div id="syncB"></div>${filtrosAlterados() ? `<button class="btn sm ghost" data-repor title="Repor filtros">Repor</button>` : ""}<button class="btn sm ghost" data-psqm aria-label="Procurar" title="Procurar">${ICON.lupa}</button><button class="btn sm ghost" data-ajuda aria-label="Ajuda" title="Ajuda">?</button><button class="btn sm ghost" data-sair>Sair</button></div></header>
     <main class="main"><div class="main-in" id="view">${view.html}</div></main>
-    <nav class="tabbar">${nav.filter((n) => !n.soLado).map((n) => `<a href="#${n.id}" class="${view.nav === n.id ? "on" : ""}">${ICON[n.id]}<span>${n.short || n.label}</span></a>`).join("")}</nav>
+    <nav class="tabbar">${nav.filter((n) => !n.soLado).map((n) => `<a href="#${n.id}" class="${view.nav === n.id ? "on" : ""}">${ICON[n.id]}<span>${n.short || n.label}</span></a>`).join("")}${nav.some((n) => n.soLado) ? `<button type="button" class="tb-mais ${nav.some((n) => n.soLado && view.nav === n.id) ? "on" : ""}" data-mais aria-haspopup="menu" aria-expanded="false">${ICON.mais}<span>Mais</span></button>` : ""}</nav>
+    ${nav.some((n) => n.soLado) ? `<div class="mais-m" hidden role="menu" data-maism>${nav.filter((n) => n.soLado).map((n) => `<a href="#${n.id}" role="menuitem" class="${view.nav === n.id ? "on" : ""}">${ICON[n.id]}<span>${n.label}</span></a>`).join("")}</div>` : ""}
   </div>`;
   app.querySelectorAll("[data-sair]").forEach((b) => (b.onclick = () => store.logout()));
+  const bm = app.querySelector("[data-mais]"), mm = app.querySelector("[data-maism]");
+  if (bm && mm) {
+    bm.onclick = (e) => { e.stopPropagation(); mm.hidden = !mm.hidden; bm.setAttribute("aria-expanded", String(!mm.hidden)); };
+    mm.querySelectorAll("a").forEach((a) => (a.onclick = () => { mm.hidden = true; }));
+  }
   ["#vistaD", "#vistaM"].forEach((id) => { const sl = $(id); if (sl) sl.onchange = () => mudarVista(sl.value); });
   app.querySelectorAll("[data-repor]").forEach((b) => (b.onclick = reporFiltros));
   app.querySelectorAll("[data-ajuda]").forEach((b) => (b.onclick = () => abrirGuia(true)));
@@ -303,7 +311,7 @@ function renderSync() {
   const curto = store.modo === "demo" ? "Demonstração" : !s.online ? "Sem rede" : s.pendentes ? "A enviar" : "Sincronizado";
   const a = $("#syncA"), b = $("#syncB");
   if (a) a.innerHTML = `<span class="sync ${cls}"><i></i>${esc(txt)}</span>`;
-  if (b) b.innerHTML = `<span class="sync ${cls}" title="${esc(txt)}"><i></i>${esc(curto)}</span>`;
+  if (b) b.innerHTML = `<span class="sync ${cls}" title="${esc(txt)}"><i></i><span class="sync-t">${esc(curto)}</span></span>`;
 }
 function brandHTML(compact) {
   const nome = (S && S.cfg.nome) || "Obra";
@@ -1108,6 +1116,7 @@ function planoView() {
         $("#atrOk").disabled = !p.selec.size || !sel.value;
         $("#atrOk").onclick = async () => {
           const v = sel.value; if (!v || !p.selec.size) return;
+          if (v === "_sem" && !(await confirmar("Retirar a equipa?", `<p>Os ${p.selec.size} trabalhos escolhidos ficam sem equipa.</p>`))) return;
           const ids = [...p.selec].filter((id) => S.acts[id]);
           await atribuirEquipa(ids, v === "_sem" ? null : v);
           p.selec = new Set();
@@ -1208,6 +1217,7 @@ function bindEstadoPct(root) {
     b.closest(".fmenu").hidden = true;
     if (k === "ini") return editarData(id, "realIni", S.hoje);
     if (k === "fim") return concluirHoje(id);
+    if ((k === "reabrir" || k === "anular") && !(await confirmar(k === "reabrir" ? "Reabrir esta atividade?" : "Anular o início?", k === "reabrir" ? `<p>${rotuloAt(a)} deixa de estar concluída e volta a estar em curso. A data real de fim é apagada.</p>` : `<p>${rotuloAt(a)} volta a estar por iniciar. A data real de início é apagada.</p>`, k === "reabrir" ? "Sim, reabrir" : "Sim, anular o início"))) return;
     if (k === "reabrir") { await store.updateAtividade(id, { concluido: false, realFim: null, pctEmp: Math.min(Number(a.pctEmp) || 0, 90), empEm: new Date().toISOString() }, { tipo: "reabrir", texto: `Reabriu ${N}` }); return toast(`Reaberta: ${N}`); }
     if (k === "anular") { await store.updateAtividade(id, { realInicio: null }, { tipo: "correcao", texto: `Anulou o início de ${N}` }); return toast("Início anulado: volta a estar por iniciar"); }
   }));
@@ -1252,6 +1262,12 @@ function perguntar({ titulo, texto, opcoes }) {
     document.querySelector(".dlg-s").onclick = () => fim(null);
     const p = document.querySelector('.dlg [data-dlg]'); if (p) p.focus();
   });
+}
+/** Confirmação para tudo o que anula ou retira alguma coisa. */
+async function confirmar(titulo, texto, sim = "Sim, retirar") {
+  const k = await perguntar({ titulo, texto, opcoes: [{ k: "sim", l: sim, estilo: "warn" }, { k: "nao", l: "Cancelar" }] });
+  if (k !== "sim") { render(); return false; }
+  return true;
 }
 const rotuloAt = (x, ref) => `<b>${esc(nomeAtiv(x))}</b>${!ref || x.unidade !== ref.unidade ? " em " + esc(x.unidade) : ""}`;
 /** A primeira data em que a atividade pode começar e a antecessora que a impõe. */
@@ -1328,6 +1344,7 @@ async function editarData(id, campo, v) {
     if (!v) {
       if (conc) return falha("Para tirar o início real, apague primeiro o fim real.");
       if (!a.realInicio) return;
+      if (!(await confirmar("Apagar o início real?", `<p>${rotuloAt(a)} volta a estar por iniciar.</p>`, "Sim, apagar"))) return;
       await store.updateAtividade(id, { realInicio: null }, { tipo: "correcao", texto: `Anulou o início de ${N}` });
       return toast("Início real apagado: volta a estar por iniciar");
     }
@@ -1354,6 +1371,7 @@ async function editarData(id, campo, v) {
   if (campo === "realFim") {
     if (!v) {
       if (!conc) return;
+      if (!(await confirmar("Apagar o fim real?", `<p>${rotuloAt(a)} deixa de estar concluída e volta a estar em curso.</p>`, "Sim, apagar e reabrir"))) return;
       await store.updateAtividade(id, { realFim: null, concluido: false, pctEmp: Math.min(Number(a.pctEmp) || 0, 90), empEm: new Date().toISOString() }, { tipo: "reabrir", texto: `Reabriu ${N}` });
       return toast("Fim real apagado: a atividade volta a estar em curso");
     }
@@ -1976,8 +1994,9 @@ function regrasView() {
       };
       document.querySelectorAll("[data-nova]").forEach((b) => (b.onclick = () => openNova(b.dataset.nova)));
       const save = (patch, texto) => store.setConfig(patch, { tipo: "regras", texto }).then(() => toast("Sequência atualizada"));
-      document.querySelectorAll("[data-rm]").forEach((b) => (b.onclick = () => {
+      document.querySelectorAll("[data-rm]").forEach((b) => (b.onclick = async () => {
         const [k, p] = b.dataset.rm.split("|");
+        if (!(await confirmar("Retirar esta condição?", `<p><b>${esc(S.espIdx[k].nome)}</b> deixa de esperar por <b>${esc(S.espIdx[p].nome)}</b> em todas as frações.</p>`))) return;
         const r = { ...regras, [k]: (regras[k] || []).filter((x) => x !== p) };
         save({ regras: r }, `Sequência: ${S.espIdx[k].nome} deixou de esperar por ${S.espIdx[p].nome}`);
       }));
@@ -2421,6 +2440,7 @@ function openEquipa(nome, opts = {}) {
   };
   const del = q("#eqDelOk");
   if (del) del.onclick = async () => {
+    if (!(await confirmar(`Eliminar a equipa ${esc(orig.nome)}?`, `<p>A equipa deixa de existir.${nTrab ? ` Os ${nTrab} trabalhos dela ${sh.querySelector('input[name="eqDest"]:checked') && sh.querySelector('input[name="eqDest"]:checked').value === "_outra" ? "passam para a equipa escolhida" : "ficam sem equipa"}.` : ""}</p>`, "Sim, eliminar"))) return;
     const r = sh.querySelector('input[name="eqDest"]:checked');
     const dest = r && r.value === "_outra" ? q("#eqDestSel").value : null;
     const ids = Object.values(S.acts).filter((a) => a.equipa === orig.nome).map((a) => ({ id: a.id, patch: { equipa: dest } }));
@@ -2879,7 +2899,7 @@ function renderSheet() {
     const p = S.acts[pid]; if (!p) return "";
     const pr = S.res.get(pid);
     return `<div class="dep"><div><button class="lnk" data-go="${pid}">${esc(nomeAtiv(p))}</button> <span class="mono muted">${esc(p.unidade)}</span>${p.unidade !== a.unidade ? ` <span class="src outra">outra fração</span>` : ""}${fonte ? ` <span class="src">${fonteTxt[fonte] || ""}</span>` : ""}${tipo === "SS" ? ` <span class="src">em paralelo</span>` : ""}</div>
-      <div class="row" style="gap:6px"><span class="pill st-${pr.estado}">${ESTADO[pr.estado]}</span><span class="mono note">${fd(pr.fim)}</span>${rem ? `<button class="btn sm ghost" data-rmdep="${pid}|${fonte}" title="Retirar ligação">×</button>` : ""}</div></div>`;
+      <div class="row" style="gap:6px"><span class="pill st-${pr.estado}">${ESTADO[pr.estado]}</span><span class="mono note">${fd(pr.fim)}</span>${rem ? `<button class="btn sm tira-b" data-rmdep="${pid}|${fonte}" title="Esta atividade deixa de esperar por aquela">× Tirar ligação</button>` : ""}</div></div>`;
   };
   const exec = can("executar") && r.estado !== "concluida";
   const pct = Math.round(a.pctEmp ?? 0);
@@ -2977,10 +2997,11 @@ function renderSheet() {
         const xr = S.res.get(sid);
         const fonte = (xr.preds.find((p) => p.id === id) || {}).fonte;
         return `<div class="dep"><div><button class="lnk" data-go="${sid}">${esc(nomeAtiv(x))}</button> <span class="mono muted">${esc(x.unidade)}</span>${x.unidade !== a.unidade ? ` <span class="src outra">outra fração</span>` : ""}${fonte ? ` <span class="src">${fonteTxt[fonte] || ""}</span>` : ""}</div>
-          <div class="row" style="gap:6px"><span class="pill st-${xr.estado}">${ESTADO[xr.estado]}</span><span class="mono note">${fd(xr.inicio)}</span>${podeDeps ? `<button class="btn sm" data-troca="${sid}">Trocar</button><button class="btn sm ghost" data-tirasuc="${sid}" title="Deixa de esperar por esta">×</button>` : ""}</div></div>
+          <div class="row" style="gap:6px"><span class="pill st-${xr.estado}">${ESTADO[xr.estado]}</span><span class="mono note">${fd(xr.inicio)}</span>${podeDeps ? `<button class="btn sm" data-troca="${sid}">Trocar</button><button class="btn sm tira-b" data-tirasuc="${sid}" title="Aquela atividade deixa de esperar por esta">× Tirar ligação</button>` : ""}</div></div>
           ${podeDeps && ui.sheet.troca === sid ? `<div class="formbox trocabox"><b>Trocar ${esc(nomeAtiv(x))} (${esc(x.unidade)}) por:</b>${depPickerHTML("tp", x.unidade, "Trocar por esta")}<button class="btn sm ghost" data-trocacancel>Cancelar</button></div>` : ""}`;
       }).join("") : `<div class="note">Nenhuma.</div>`}</div>
-      ${podeDeps ? `<details class="formbox" id="sucBox"><summary><b>+ Acrescentar atividade seguinte</b> <span class="note">desta ou de outra fração</span></summary>
+      ${can("criar") ? `<div class="row" style="gap:6px;margin:8px 0"><button class="btn sm" id="bNovaSeg2" title="Criar um trabalho novo que só começa quando este acabar">+ Criar nova atividade seguinte</button></div>` : ""}
+      ${podeDeps ? `<details class="formbox" id="sucBox"><summary><b>+ Ligar uma atividade que já existe</b> <span class="note">como seguinte, desta ou de outra fração</span></summary>
         <p class="note" style="margin:8px 0">A atividade que escolher passa a esperar por esta.</p>${depPickerHTML("sp", a.unidade, "Acrescentar")}</details>` : ""}
       </div>
       <div class="spane" data-pane="fotos" ${ui.sheetTab === "fotos" ? "" : "hidden"}>
@@ -3028,6 +3049,7 @@ function renderSheet() {
   sh.querySelectorAll("[data-tirasuc]").forEach((b) => (b.onclick = async () => {
     const sid = b.dataset.tirasuc, x = S.acts[sid];
     const pt = patchTirarLigacao(sid, id); if (!pt) return;
+    if (!(await confirmar("Tirar esta ligação?", `<p>${rotuloAt(x, a)} deixa de esperar por ${rotuloAt(a)}.</p><p class="note">As datas dessa atividade passam a ser calculadas sem esta condição.</p>`, "Sim, tirar a ligação"))) return;
     await store.updateAtividade(sid, pt, { tipo: "dependencia", texto: `${nomeAtiv(x)} em ${x.unidade} deixou de esperar por ${N0}` });
     toast("Ligação retirada");
   }));
@@ -3057,6 +3079,7 @@ function renderSheet() {
   const se = $("#sEquipa", sh);
   if (se) se.onchange = async () => {
     if (se.value === "_nova") { se.value = a.equipa || ""; openEquipa(null, { aoGravar: (nome) => atribuirEquipa([id], nome) }); return; }
+    if (!se.value && a.equipa && !(await confirmar("Retirar a equipa?", `<p>${rotuloAt(a)} deixa de ter a equipa <b>${esc(a.equipa)}</b>.</p>`))) return;
     await atribuirEquipa([id], se.value || null);
   };
   on("#bNovaU", () => { const u = a.unidade; closeSheet(); openNova("unit:" + u); });
@@ -3076,6 +3099,7 @@ function renderSheet() {
       toast(`${nomeAtiv(a)} passou para ${dest}`);
     };
   }
+  on("#bNovaSeg2", () => { const u = a.unidade; closeSheet(); openNova("unit:" + u, { especificas: [{ id, tipo: "FS" }] }); });
   on("#bNovaSeg", () => { const u = a.unidade; closeSheet(); openNova("unit:" + u, { especificas: [{ id, tipo: "FS" }] }); });
   on("#bIni", () => editarData(id, "realIni", S.hoje));
   on("#bFim", () => concluirHoje(id));
@@ -3135,9 +3159,10 @@ function renderSheet() {
         `${N} passa a esperar ${tipo === "SS" ? "pelo início" : "pelo fim"} de ${nomeAtiv(p)}${p.unidade !== a.unidade ? " em " + p.unidade : ""}`, "dependencia");
     } });
   }
-  sh.querySelectorAll("[data-rmdep]").forEach((b) => (b.onclick = () => {
+  sh.querySelectorAll("[data-rmdep]").forEach((b) => (b.onclick = async () => {
     const [pid, fonte] = b.dataset.rmdep.split("|");
     const p = S.acts[pid];
+    if (!(await confirmar("Tirar esta ligação?", `<p>${rotuloAt(a)} deixa de esperar por ${rotuloAt(p, a)}.</p><p class="note">As datas desta atividade passam a ser calculadas sem essa condição.${fonte === "regra" ? " A regra da sequência continua a valer para as outras frações." : ""}</p>`, "Sim, tirar a ligação"))) return;
     const patch = fonte === "manual" ? { depsExtra: (a.depsExtra || []).filter((d) => d.id !== pid) } : { depsIgnorar: [...new Set([...(a.depsIgnorar || []), pid])] };
     upd(patch, `${N} deixou de esperar por ${nomeAtiv(p)}`, "dependencia");
   }));
