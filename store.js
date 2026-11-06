@@ -244,7 +244,13 @@ export class CloudStore extends Emitter {
       this.emit("data");
     }, (e) => this._erro(e)));
   }
-  _erro(e) { console.error(e); this.sync.texto = "Erro de acesso: " + (e.code || e.message); this.emit("sync"); }
+  _erro(e, escrita) {
+    console.error(e);
+    this.sync.texto = "Erro de acesso: " + (e.code || e.message);
+    this.emit("sync");
+    // uma gravação recusada pelo servidor desfaz-se sozinha no ecrã: avisa, para não parecer que gravou
+    if (escrita) { this.ultimoErro = { code: e.code || "", msg: e.message || String(e), papel: this.user && (this.user.papelReal || this.user.papel), email: this.user && this.user.email }; this.emit("erroEscrita"); }
+  }
   _meta(k, md) {
     this._pend = this._pend || {};
     this._pend[k] = md.hasPendingWrites;
@@ -275,7 +281,7 @@ export class CloudStore extends Emitter {
     const b = fb.writeBatch(this.db);
     b.update(fb.doc(this.db, "atividades", id), p);
     if (registo) b.set(fb.doc(fb.collection(this.db, "registos")), this._regDoc(id, a && a.unidade, registo));
-    b.commit().catch((e) => this._erro(e));
+    b.commit().catch((e) => this._erro(e, true));
     if (a) Object.assign(a, p);
     this.emit("data");
   }
@@ -289,7 +295,7 @@ export class CloudStore extends Emitter {
         const a = this.state.atividades[id]; if (a) Object.assign(a, p);
       }
       if (i === 0 && registo) b.set(fb.doc(fb.collection(this.db, "registos")), this._regDoc(lista.length === 1 ? lista[0].id : null, null, registo));
-      b.commit().catch((e) => this._erro(e));
+      b.commit().catch((e) => this._erro(e, true));
     }
     this.emit("data");
   }
@@ -298,7 +304,7 @@ export class CloudStore extends Emitter {
     const b = fb.writeBatch(this.db);
     b.set(fb.doc(this.db, "config", "obra"), patch, { merge: true });
     if (registo) b.set(fb.doc(fb.collection(this.db, "registos")), this._regDoc(null, null, registo));
-    b.commit().catch((e) => this._erro(e));
+    b.commit().catch((e) => this._erro(e, true));
     Object.assign(this.state.config, patch);
     this.emit("data");
   }
@@ -315,7 +321,7 @@ export class CloudStore extends Emitter {
         this.state.atividades[id] = { id, ...doc };
       }
       if (i === 0 && registo) b.set(fb.doc(fb.collection(this.db, "registos")), this._regDoc(lista.length === 1 ? lista[0].id : null, lista.length === 1 ? lista[0].unidade : null, registo));
-      b.commit().catch((e) => this._erro(e));
+      b.commit().catch((e) => this._erro(e, true));
     }
     this.emit("data");
   }
@@ -325,7 +331,7 @@ export class CloudStore extends Emitter {
       const b = fb.writeBatch(this.db);
       for (const id of ids.slice(i, i + 400)) { b.delete(fb.doc(this.db, "atividades", id)); delete this.state.atividades[id]; }
       if (i === 0 && registo) b.set(fb.doc(fb.collection(this.db, "registos")), this._regDoc(null, null, registo));
-      b.commit().catch((e) => this._erro(e));
+      b.commit().catch((e) => this._erro(e, true));
     }
     this.emit("data");
   }

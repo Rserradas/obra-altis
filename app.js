@@ -85,6 +85,17 @@ function reporFiltros() {
   toast("Filtros repostos");
 }
 
+/** O servidor recusou uma gravação: o ecrã volta ao valor anterior. Explica porquê. */
+function avisoErroEscrita(er) {
+  const sem = /permission/i.test(er.code + " " + er.msg);
+  perguntar({
+    titulo: "A alteração não foi gravada",
+    texto: sem
+      ? `<p>O servidor recusou a gravação por falta de permissão, por isso o ecrã voltou ao valor anterior.</p><p class="note">Conta: ${esc(er.email || "")} (${esc(er.papel || "sem perfil")}). Se acabou de mudar as regras do Firebase, confirme que publicou a versão mais recente. Se não, diga ao dono de obra.</p>`
+      : `<p>O servidor recusou a gravação, por isso o ecrã voltou ao valor anterior.</p><p class="note">Detalhe técnico: ${esc(er.code || er.msg || "")}</p>`,
+    opcoes: [{ k: "ok", l: "Percebi", estilo: "pri" }],
+  });
+}
 /* ---- Anular: cada alteração guardada fica num "lote" que a mensagem seguinte pode desfazer */
 let loteAnular = [];
 let aAnular = false;
@@ -218,6 +229,7 @@ async function boot() {
   let pend = null;
   store.on((ev) => {
     if (ev === "sync") { renderSync(); return; }
+    if (ev === "erroEscrita") { avisoErroEscrita(store.ultimoErro || {}); return; }
     clearTimeout(pend);
     pend = setTimeout(() => { compute(); render(); }, ev === "data" ? 60 : 0);
   });
@@ -274,12 +286,12 @@ function render() {
         <div class="who"><b>${esc(store.user.nome)}</b><span class="role">${store.admin ? "Administrador" : PAPEL[store.user.papel]}</span></div>
         ${store.admin ? vistaSelHTML("vistaD") : ""}
         <button class="btn sm" data-ajuda>Ajuda</button>
-        <button class="btn sm" data-repor title="Voltar todos os ecrãs aos filtros padrão">Repor filtros</button>
+        <button class="btn sm ${filtrosAlterados() ? "repor-on" : ""}" data-repor title="Voltar todos os ecrãs aos filtros padrão">Repor filtros</button>
         <button class="btn sm" data-sair>Sair</button>
       </div>
     </aside>
     ${store.admin ? `<div class="vista-band">A ver como <b>${PAPEL[store.user.papel]}</b>${vistaSelHTML("vistaM")}</div>` : ""}
-    <header class="topbar">${brandHTML(true)}<div class="row" style="gap:4px"><div id="syncB"></div>${filtrosAlterados() ? `<button class="btn sm ghost" data-repor title="Repor filtros">Repor</button>` : ""}<button class="btn sm ghost" data-psqm aria-label="Procurar" title="Procurar">${ICON.lupa}</button><button class="btn sm ghost" data-ajuda aria-label="Ajuda" title="Ajuda">?</button><button class="btn sm ghost" data-sair>Sair</button></div></header>
+    <header class="topbar">${brandHTML(true)}<div class="row" style="gap:4px"><div id="syncB"></div><button class="btn sm repor-on" data-repor data-repor-top title="Há filtros ativos: repor" ${filtrosAlterados() ? "" : "hidden"}>Repor filtros</button><button class="btn sm ghost" data-psqm aria-label="Procurar" title="Procurar">${ICON.lupa}</button><button class="btn sm ghost" data-ajuda aria-label="Ajuda" title="Ajuda">?</button><button class="btn sm ghost" data-sair>Sair</button></div></header>
     <main class="main"><div class="main-in" id="view">${view.html}</div></main>
     <nav class="tabbar">${nav.filter((n) => !n.soLado).map((n) => `<a href="#${n.id}" class="${view.nav === n.id ? "on" : ""}">${ICON[n.id]}<span>${n.short || n.label}</span></a>`).join("")}${nav.some((n) => n.soLado) ? `<button type="button" class="tb-mais ${nav.some((n) => n.soLado && view.nav === n.id) ? "on" : ""}" data-mais aria-haspopup="menu" aria-expanded="false">${ICON.mais}<span>Mais</span></button>` : ""}</nav>
     ${nav.some((n) => n.soLado) ? `<div class="mais-m" hidden role="menu" data-maism>${nav.filter((n) => n.soLado).map((n) => `<a href="#${n.id}" role="menuitem" class="${view.nav === n.id ? "on" : ""}">${ICON[n.id]}<span>${n.label}</span></a>`).join("")}</div>` : ""}
@@ -1033,7 +1045,7 @@ function planoView() {
   };
   const html = `
     <div class="card-h"><h1>Trabalhos</h1><div class="row">
-      ${can("executar") ? `<button class="btn ${atr ? "warn" : ""}" id="pAtr">${atr ? "Terminar atribuição" : "Atribuir equipa"}</button>` : ""}
+      ${can("executar") ? `<button class="btn ${atr ? "warn" : ""}" id="pAtr" title="Escolher várias atividades para atribuir equipa, iniciar ou concluir de uma vez">${atr ? "Terminar escolha" : "Escolher várias"}</button>` : ""}
       ${can("executar") ? `<button class="btn ${ed ? "warn" : ""}" id="pEdit">${ed ? "Terminar edição" : "Editar datas"}</button>` : ""}
       ${can("criar") ? `<button class="btn pri" data-nova="">+ Nova atividade</button>` : ""}</div></div>
     ${ed ? `<div class="banner">Altere as datas e a percentagem diretamente na tabela, ou toque no estado para iniciar ou concluir hoje. Cada alteração fica guardada logo e as atividades que dependem desta acertam-se sozinhas.
@@ -1052,15 +1064,18 @@ function planoView() {
       <label class="f" style="flex:1;min-width:180px">Procurar<input class="inp" id="pq" value="${esc(p.q)}" placeholder="Ex.: B-F503, louças, 2#10"></label>
       <label class="check" style="align-self:center"><input type="checkbox" id="psa" ${p.soAtr ? "checked" : ""}><span>Só atrasadas</span></label>
       <label class="check" style="align-self:center" title="${p.f === "concluida" ? "Não se aplica ao ver as concluídas" : "Esconde as atividades 100% concluídas"}"><input type="checkbox" id="psc" ${p.semConc ? "checked" : ""} ${p.f === "concluida" ? "disabled" : ""}><span>Esconder concluídas</span></label>
-      ${filtrosAlterados() ? `<button class="btn sm" id="pclr" style="align-self:center">Repor filtros</button>` : ""}
+      ${filtrosAlterados() ? `<button class="btn sm repor-on" id="pclr" style="align-self:center">Repor filtros</button>` : ""}
     </div>
     ${p.f === "porconfirmar" ? `<div class="banner warn"><span>Estas atividades nunca tiveram data no Excel. A aplicação deu-lhes a primeira data possível: hoje, ou logo a seguir às anteriores. Corra a lista e, em cada uma, corrija a data (com Editar datas) ou confirme que está certa. Ao mudar uma data, a atividade sai desta lista.</span>${can("executar") && shown.length ? `<button class="btn sm" id="confTodas">Confirmar as ${shown.length} mostradas</button>` : ""}</div>` : ""}
     ${atr ? `<div class="atrbar" id="atrbar">
       <span class="num"><b>${p.selec.size}</b> escolhida${p.selec.size === 1 ? "" : "s"}</span>
       <button class="btn sm" id="atrTodas">Escolher as ${shown.length} da lista</button>${p.selec.size ? `<button class="btn sm ghost" id="atrLimpa">Limpar escolha</button>` : ""}
-      <label class="f">Equipa<select class="inp" id="atrEq"><option value="">Escolha...</option>${S.equipas.map((e) => `<option ${p.atrEq === e ? "selected" : ""}>${esc(e)}</option>`).join("")}<option value="_sem">Retirar a equipa</option><option value="_nova">+ Nova equipa...</option></select></label>
-      <button class="btn pri" id="atrOk" ${p.selec.size ? "" : "disabled"}>Atribuir</button>
-      <span class="note">Use os filtros (por exemplo Atividade e Equipa "Sem equipa") para chegar aos trabalhos certos, escolha-os e atribua.</span></div>` : ""}
+      <span class="atr-g"><label class="f">Equipa<select class="inp" id="atrEq"><option value="">Escolha...</option>${S.equipas.map((e) => `<option ${p.atrEq === e ? "selected" : ""}>${esc(e)}</option>`).join("")}<option value="_sem">Retirar a equipa</option><option value="_nova">+ Nova equipa...</option></select></label>
+      <button class="btn pri" id="atrOk" ${p.selec.size ? "" : "disabled"}>Atribuir</button></span>
+      <span class="atr-g"><label class="f">Data<input class="inp" type="date" id="atrData" value="${p.atrData || S.hoje}" max="${S.hoje}"></label>
+      <button class="btn" id="atrIni" ${p.selec.size ? "" : "disabled"}>Iniciar</button>
+      <button class="btn ok" id="atrConc" ${p.selec.size ? "" : "disabled"}>Concluir</button></span>
+      <span class="note">Use os filtros (por exemplo Apartamento, Atividade ou Equipa) para chegar aos trabalhos certos e escolha-os. Depois atribua uma equipa, ou inicie ou conclua todos na data indicada.</span></div>` : ""}
     <div class="note num">${list.length} atividade${list.length === 1 ? "" : "s"}${esconde ? ` · concluídas escondidas <button class="btn sm ghost" id="pmostra" style="min-height:24px;padding:0 6px;text-decoration:underline">mostrar</button>` : ""}</div>
     ${shown.length ? `<div class="tbl-wrap"><table class="tbl ${ed ? "editing" : ""}"><thead><tr>${atr ? `<th class="ck"><input type="checkbox" id="atrCkAll" ${shown.length && shown.every(({ a }) => p.selec.has(a.id)) ? "checked" : ""} aria-label="Escolher todas"></th>` : ""}${[["unidade", "Fração"], ["atividade", "Atividade"], ["estado", "Estado"], ["inicio", ed ? "Início" : "Início previsto"], ["fim", ed ? "Fim" : "Fim previsto"], ["desvio", "Atraso"], ["pct", "% · F"]].map(([k, l]) => {
       const on = p.sort && p.sort.col === k;
@@ -1125,6 +1140,10 @@ function planoView() {
           await atribuirEquipa(ids, v === "_sem" ? null : v);
           p.selec = new Set();
         };
+        const dt = $("#atrData");
+        dt.onchange = () => { p.atrData = dt.value; };
+        $("#atrConc").onclick = async () => { if (await concluirVarias([...p.selec], dt.value || S.hoje)) p.selec = new Set(), render(); };
+        $("#atrIni").onclick = async () => { if (await iniciarVarias([...p.selec], dt.value || S.hoje)) p.selec = new Set(), render(); };
       }
       let tm; $("#pq").oninput = (e) => { clearTimeout(tm); tm = setTimeout(() => { p.q = e.target.value; render(); const i = $("#pq"); i.focus(); i.setSelectionRange(i.value.length, i.value.length); }, 300); };
       bindDateInputs(document);
@@ -1193,6 +1212,51 @@ function pctDuasHTML(a) {
 const pctFiscalHTML = (a) => `<span class="p2 sv"> F ${a.pctFiscal == null ? "s/v" : Math.round(Number(a.pctFiscal)) + "%"}</span>`;
 const pctEdHTML = (a) => `<label class="pct-ed" title="Percentagem feita (empreiteiro)"><input class="inp num" type="number" min="0" max="100" step="5" inputmode="numeric" data-pcted="${a.id}" value="${Math.round(Number(a.pctEmp) || 0)}" aria-label="Percentagem feita de ${esc(nomeAtiv(a))} em ${esc(a.unidade)}"><span>%</span></label>`;
 /** Pede confirmação e conclui a atividade hoje (com os avisos das seguintes). */
+/* ---- Várias de uma vez (Trabalhos, Escolher várias). As seguintes acertam-se sozinhas pela sequência. */
+const listaNomes = (xs, max = 6) => `<ul class="dlg-l">${xs.slice(0, max).map((a) => `<li>${esc(nomeAtiv(a))} em ${esc(a.unidade)}</li>`).join("")}${xs.length > max ? `<li class="note">e mais ${xs.length - max}</li>` : ""}</ul>`;
+async function concluirVarias(ids, v) {
+  if (v > S.hoje) { toast("A data de conclusão não pode ser no futuro.", { anular: false }); return false; }
+  const todas = ids.map((id) => S.acts[id]).filter(Boolean);
+  const ja = todas.filter((a) => S.res.get(a.id).estado === "concluida");
+  const depois = todas.filter((a) => S.res.get(a.id).estado !== "concluida" && a.realInicio && a.realInicio > v);
+  const alvo = todas.filter((a) => !ja.includes(a) && !depois.includes(a));
+  if (!alvo.length) { toast(ja.length ? "As atividades escolhidas já estão concluídas." : "Nenhuma pode ser concluída nessa data: começaram depois dela.", { anular: false }); return false; }
+  const baixas = alvo.filter((a) => Math.round(pctEfetiva(a)) < 90);
+  const k = await perguntar({
+    titulo: `Concluir ${alvo.length} atividade${alvo.length === 1 ? "" : "s"}?`,
+    texto: `<p>Ficam concluídas a <b>${fd(v, true)}</b>, com 100%:</p>${listaNomes(alvo)}
+      ${baixas.length ? `<div class="dlg-av">Atenção: ${baixas.length} ${baixas.length === 1 ? "está registada" : "estão registadas"} com menos de 90%.</div>` : ""}
+      ${ja.length ? `<p class="note">${ja.length} já ${ja.length === 1 ? "estava concluída e fica" : "estavam concluídas e ficam"} como ${ja.length === 1 ? "estava" : "estavam"}.</p>` : ""}
+      ${depois.length ? `<p class="note">${depois.length} ${depois.length === 1 ? "começou" : "começaram"} depois de ${fd(v)} e não ${depois.length === 1 ? "é concluída" : "são concluídas"}.</p>` : ""}
+      <p class="note">As atividades seguintes acertam-se sozinhas. Se se enganar, carregue em Anular na mensagem que aparece a seguir.</p>`,
+    opcoes: [{ k: "sim", l: `Sim, concluir ${alvo.length}`, estilo: "ok" }, { k: "nao", l: "Cancelar" }],
+  });
+  if (k !== "sim") return false;
+  const em = new Date().toISOString();
+  const lista = alvo.map((a) => { const r = S.res.get(a.id); return { id: a.id, patch: { realInicio: a.realInicio || (r.prevIni && r.prevIni <= v ? r.prevIni : v), realFim: v, concluido: true, pctEmp: 100, empEm: em } }; });
+  await store.updateMuitas(lista, { tipo: "conclusao", texto: `${alvo.length} atividades concluídas a ${fd(v)}: ${alvo.slice(0, 3).map((a) => nomeAtiv(a) + " em " + a.unidade).join(", ")}${alvo.length > 3 ? "..." : ""}` });
+  toast(`${alvo.length} atividade${alvo.length === 1 ? "" : "s"} concluída${alvo.length === 1 ? "" : "s"} a ${fd(v)}`);
+  return true;
+}
+async function iniciarVarias(ids, v) {
+  if (v > S.hoje) { toast("A data de início real não pode ser no futuro.", { anular: false }); return false; }
+  const todas = ids.map((id) => S.acts[id]).filter(Boolean);
+  const alvo = todas.filter((a) => { const e = S.res.get(a.id).estado; return e === "por_iniciar" || e === "bloqueada"; });
+  if (!alvo.length) { toast("As atividades escolhidas já estão iniciadas ou concluídas.", { anular: false }); return false; }
+  const bloq = alvo.filter((a) => S.res.get(a.id).estado === "bloqueada");
+  const k = await perguntar({
+    titulo: `Iniciar ${alvo.length} atividade${alvo.length === 1 ? "" : "s"}?`,
+    texto: `<p>Ficam iniciadas a <b>${fd(v, true)}</b>:</p>${listaNomes(alvo)}
+      ${bloq.length ? `<div class="dlg-av">Atenção: ${bloq.length} ainda ${bloq.length === 1 ? "está" : "estão"} à espera de outras atividades por concluir.</div>` : ""}
+      ${todas.length > alvo.length ? `<p class="note">${todas.length - alvo.length} já ${todas.length - alvo.length === 1 ? "estava iniciada ou concluída e fica" : "estavam iniciadas ou concluídas e ficam"} como ${todas.length - alvo.length === 1 ? "estava" : "estavam"}.</p>` : ""}`,
+    opcoes: [{ k: "sim", l: `Sim, iniciar ${alvo.length}`, estilo: "pri" }, { k: "nao", l: "Cancelar" }],
+  });
+  if (k !== "sim") return false;
+  const em = new Date().toISOString();
+  await store.updateMuitas(alvo.map((a) => ({ id: a.id, patch: { realInicio: v, pctEmp: Math.max(Number(a.pctEmp) || 0, 5), empEm: em } })), { tipo: "inicio", texto: `${alvo.length} atividades iniciadas a ${fd(v)}` });
+  toast(`${alvo.length} atividade${alvo.length === 1 ? "" : "s"} iniciada${alvo.length === 1 ? "" : "s"} a ${fd(v)}`);
+  return true;
+}
 async function concluirHoje(id) {
   const a = S.acts[id], r = S.res.get(id);
   if (!a || !r || r.estado === "concluida") return;
@@ -1702,7 +1766,7 @@ function ganttView() {
       <label class="check" style="align-self:center"><input type="checkbox" id="gc" ${g.abertas ? "checked" : ""}><span>Esconder concluídas</span></label>
       <label class="check" style="align-self:center"><input type="checkbox" id="gl" ${g.ligacoes ? "checked" : ""}><span>Mostrar ligações</span></label>
       <div class="row" style="align-self:center;gap:6px" role="group" aria-label="Nível de detalhe"><span class="note">Mostrar:</span><button class="btn sm" id="gnB">Blocos</button><button class="btn sm" id="gnU">Frações</button><button class="btn sm" id="gnA">Tudo</button></div>
-      ${filtrosAlterados() ? `<button class="btn sm" id="grep" style="align-self:center">Repor filtros</button>` : ""}
+      ${filtrosAlterados() ? `<button class="btn sm repor-on" id="grep" style="align-self:center">Repor filtros</button>` : ""}
     </div>
     <div class="gsel" id="gsel" hidden></div>
     <div class="legend"><span><i class="gl-bar st-concluida"></i>Concluída</span><span><i class="gl-bar st-em_curso"></i>Em curso</span><span><i class="gl-bar st-bloqueada"></i>Bloqueada</span><span><i class="gl-bar st-por_iniciar"></i>Por iniciar</span><span><i class="gl-bar st-por_iniciar atr"></i>Atrasada</span><span title="Dias desde a previsão de fim até hoje, ou até ao fim provável"><i class="gl-bar gl-tail"></i>Atraso</span><span><i class="gl-today"></i>Hoje</span><span class="note">Toque numa barra para ver a cadeia de dependências.${can("executar") ? " Com o rato, arraste a barra para mudar a data ou puxe a ponta direita para mudar o fim." : ""}</span></div>
@@ -1962,7 +2026,7 @@ const GUIA = {
   empreiteiro: [
     ["A minha semana", "Ao entrar vê o que está em curso, o que deve começar nos próximos 7 dias e o que está à espera de outras atividades. Filtre pela sua equipa ou pelo bloco. Os botões Iniciar, +10% e Concluir gravam logo."],
     ["Mais detalhe", "Toque no nome de uma atividade para abrir a ficha: datas, equipa, motivo de atraso, ligações a outras atividades, fotografias e histórico. Em Trabalhos e no Gantt vê a obra toda."],
-    ["As suas equipas", "Em Definições, Equipas de trabalho, crie e edite as equipas. Em Trabalhos, com Atribuir equipa, escolha vários trabalhos e atribua-os de uma vez."],
+    ["As suas equipas", "Em Definições, Equipas de trabalho, crie e edite as equipas. Em Trabalhos, com Escolher várias, escolha vários trabalhos e atribua-lhes uma equipa, ou inicie-os ou conclua-os de uma vez."],
     ["Enganou-se? Sem rede?", "Depois de guardar aparece Anular em baixo, durante alguns segundos. A aplicação funciona sem rede: guarda tudo no telemóvel e envia quando houver ligação."],
   ],
   fiscal: [
@@ -2140,6 +2204,9 @@ function regrasView() {
         const t = semAcento(rq.value.trim()).split(/\s+/).filter(Boolean);
         let n = 0;
         document.querySelectorAll(".rule[data-rq]").forEach((r) => { const ok = t.every((w) => r.dataset.rq.includes(w)); r.hidden = !ok; if (ok) n++; });
+        const fa = filtrosAlterados();
+        document.querySelectorAll("aside [data-repor]").forEach((x) => x.classList.toggle("repor-on", fa));
+        document.querySelectorAll("[data-repor-top]").forEach((x) => (x.hidden = !fa));
         $("#regQn").textContent = t.length ? (n ? `${n} de ${esp.length}` : "Nenhuma especialidade encontrada") : "";
       };
       rq.oninput = filtra; filtra();
@@ -2492,7 +2559,7 @@ function equipasView() {
   const html = `
     ${defTabs("equipas")}
     <div class="card-h"><h1>Equipas de trabalho</h1><button class="btn pri" id="eqNova">+ Nova equipa</button></div>
-    <p style="max-width:70ch">As equipas que fazem os trabalhos na obra (mosaicos, pintura, carpintaria...). Cada trabalho pode ter uma equipa. Atribua uma a uma na ficha do trabalho, ou várias de uma vez em Trabalhos, com <b>Atribuir equipa</b>.</p>
+    <p style="max-width:70ch">As equipas que fazem os trabalhos na obra (mosaicos, pintura, carpintaria...). Cada trabalho pode ter uma equipa. Atribua uma a uma na ficha do trabalho, ou várias de uma vez em Trabalhos, com <b>Escolher várias</b>.</p>
     ${semEq ? `<div class="banner"><span><b>${semEq} trabalhos por fazer ainda não têm equipa.</b></span><button class="btn sm" data-eqatr="_sem">Atribuir equipas</button></div>` : ""}
     ${lista.length ? `<div class="eqcards">${lista.map((e) => {
       const t = statsEquipa(e.nome);
@@ -3061,7 +3128,9 @@ function renderSheet() {
       <div class="row" style="gap:6px"><span class="pill st-${pr.estado}">${ESTADO[pr.estado]}</span><span class="mono note">${fd(pr.fim)}</span>${rem ? `<button class="btn sm tira-b" data-rmdep="${pid}|${fonte}" title="Esta atividade deixa de esperar por aquela">× Tirar ligação</button>` : ""}</div></div>`;
   };
   const exec = can("executar") && r.estado !== "concluida";
-  const pct = Math.round(a.pctEmp ?? 0);
+  // percentagem mexida e ainda por guardar: mantém-se se o ecrã se redesenhar (alterações de outros utilizadores)
+  const pt = ui.sheet.pctTmp;
+  const pct = pt && pt.id === id ? pt.v : Math.round(a.pctEmp ?? 0);
   const podeDeps = can("dependencias");
   const mesmos = Object.values(S.acts).filter((x) => x.unidade === a.unidade && x.id !== id && !r.preds.some((p) => p.id === x.id));
   const idsLote = a.lote ? Object.values(S.acts).filter((x) => x.lote === a.lote).map((x) => x.id) : [id];
@@ -3264,9 +3333,11 @@ function renderSheet() {
   on("#bFim", () => concluirHoje(id));
   on("#bReabrir", () => upd({ concluido: false, realFim: null, pctEmp: 90 }, `Reabriu ${N}`, "reabrir"));
   on("#bUndo", () => upd({ realInicio: null, realFim: null, concluido: false }, `Anulou início de ${N}`, "correcao"));
-  const rp = $("#rPct", sh); if (rp) rp.oninput = () => ($("#oPct", sh).textContent = rp.value + "%");
+  const rp = $("#rPct", sh); if (rp) rp.oninput = () => { $("#oPct", sh).textContent = rp.value + "%"; ui.sheet.pctTmp = { id, v: Number(rp.value) }; };
   on("#bPct", () => {
-    const v = Number(rp.value);
+    const pt = ui.sheet.pctTmp;
+    const v = pt && pt.id === id ? pt.v : Number(rp.value);
+    ui.sheet.pctTmp = null;
     const patch = { pctEmp: v, empEm: new Date().toISOString() };
     if (v > 0 && !a.realInicio) patch.realInicio = S.hoje;
     upd(patch, `${N}: ${v}% feito (empreiteiro)`, "progresso");

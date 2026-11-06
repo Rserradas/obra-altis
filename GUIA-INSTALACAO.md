@@ -162,7 +162,8 @@ Em **Definições**, separador **Equipas de trabalho**, estão as equipas que fa
 * **Cada cartão** mostra quantos trabalhos a equipa tem por fazer, em curso, atrasados e concluídos, e qual é o próximo. **Ver trabalhos** abre os Trabalhos filtrados nessa equipa.
 * **Eliminar:** no fundo da edição. Os trabalhos da equipa ficam sem equipa ou passam para outra, à escolha.
 * **Atribuir a um trabalho:** na ficha do trabalho, no campo **Equipa**. Também se pode criar uma equipa nova a partir daí.
-* **Atribuir a vários de uma vez:** em **Trabalhos**, toque em **Atribuir equipa**. Aparece uma caixa de escolha em cada linha. Use os filtros (por exemplo Atividade "Azulejos WC" e Equipa "Sem equipa"), escolha as linhas ou **Escolher as N da lista**, escolha a equipa e toque em **Atribuir**. Também dá para retirar a equipa.
+* **Atribuir a vários de uma vez:** em **Trabalhos**, toque em **Escolher várias**. Aparece uma caixa de escolha em cada linha. Use os filtros (por exemplo Atividade "Azulejos WC" e Equipa "Sem equipa"), escolha as linhas ou **Escolher as N da lista**, escolha a equipa e toque em **Atribuir**. Também dá para retirar a equipa.
+* **Iniciar ou concluir várias de uma vez:** em **Trabalhos**, toque em **Escolher várias** e escolha as atividades (por exemplo filtre por apartamento). Escolha a **Data** (hoje, por omissão) e toque em **Iniciar** ou **Concluir**. A aplicação mostra a lista e pede confirmação. As atividades seguintes acertam-se sozinhas e, se se enganar, pode carregar em **Anular**.
 * O filtro **Equipa** dos Trabalhos tem a opção **Sem equipa**, e em **A minha semana** o empreiteiro filtra pela sua equipa.
 
 ## Confirmações ao retirar ou anular
