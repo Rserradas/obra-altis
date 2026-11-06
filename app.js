@@ -451,7 +451,9 @@ function painelView() {
   for (const g of atrG) g.itens.sort((x, y) => y.r.atraso - x.r.atraso);
   const rec = store.recentes(12);
   const falta = !importando && store.user.papel === "dono" && store.faltamImportar ? store.faltamImportar() : 0;
+  const corr = (store.user.papel === "dono" || store.admin) && !S.cfg.correcaoExpiradas ? expiradas().length : 0;
   const html = `
+    ${corr ? `<div class="banner warn no-print"><span><b>Correção única:</b> ${corr} atividades por concluir têm o fim previsto já passado. Pode pôr todas com fim previsto a ${fd(DATA_CORR, true)}.</span><button class="btn sm pri" id="corrExp">Corrigir datas</button></div>` : ""}
     ${falta ? `<div class="banner warn no-print"><span><b>A importação do cronograma ficou a meio: faltam ${falta} de ${store.seed.atividades.length} trabalhos.</b> Os que já estão na aplicação não são alterados.</span><button class="btn sm pri" id="impFalta">Completar importação</button></div>` : ""}
     <div class="card-h no-print"><h1>Painel</h1><a class="btn" href="#relatorio">Relatório para reunião</a></div>
     <div class="headline">
@@ -493,7 +495,7 @@ function painelView() {
         <span class="li-s"><span>${esc(r.nomePor || r.por)}</span><span class="role">${PAPEL[r.papel] || ""}</span>${r.unidade ? `<a class="mono" href="#u-${esc(r.unidade)}">${esc(r.unidade)}</a>` : ""}</span></div>`).join("")
         : `<div class="empty">Ainda não há registos. Quando o empreiteiro ou o fiscal atualizarem atividades, aparecem aqui.</div>`}</div>
     </section>`;
-  return { html, bind: () => { bindCommon(); resumoSemana(); guardarFotoDiaria(); const bf = $("#impFalta"); if (bf) bf.onclick = () => { bf.disabled = true; importarComProgresso(true, () => { bf.disabled = false; }); }; } };
+  return { html, bind: () => { bindCommon(); resumoSemana(); guardarFotoDiaria(); const bc = $("#corrExp"); if (bc) bc.onclick = corrigirExpiradas; const bf = $("#impFalta"); if (bf) bf.onclick = () => { bf.disabled = true; importarComProgresso(true, () => { bf.disabled = false; }); }; } };
 }
 /** Guarda uma vez por dia o fim previsto e os totais, para comparar semana a semana. */
 async function guardarFotoDiaria() {
@@ -1262,6 +1264,40 @@ function perguntar({ titulo, texto, opcoes }) {
     document.querySelector(".dlg-s").onclick = () => fim(null);
     const p = document.querySelector('.dlg [data-dlg]'); if (p) p.focus();
   });
+}
+/* ---- Correção única: atividades por concluir com o fim previsto já passado ficam com fim a DATA_CORR */
+const DATA_CORR = "2026-11-01";
+function expiradas() {
+  return Object.values(S.acts).filter((a) => { const r = S.res.get(a.id); return r && r.estado !== "concluida" && r.prevFim < S.hoje; });
+}
+function patchCorr(a) {
+  const r = S.res.get(a.id);
+  const p = { fimPrevisto: DATA_CORR, dataOk: true };
+  // se o início previsto ficava depois do novo fim, recua mantendo a duração que tinha
+  if (r.prevIni > DATA_CORR) p.inicioPrevisto = addDays(DATA_CORR, -Math.max(0, diffDays(r.prevIni, r.prevFim)));
+  // por iniciar e já empurrada pelas antecessoras: fixa o início onde está, senão o fim andava outra vez
+  else if (r.estado !== "em_curso" && r.prevIni !== (a.inicioPrevisto || a.planInicio)) p.inicioPrevisto = r.prevIni;
+  return p;
+}
+async function corrigirExpiradas() {
+  const lista = expiradas();
+  if (!lista.length) return;
+  const ids = new Set(lista.map((a) => a.id));
+  const seg = new Set();
+  for (const a of lista) for (const x of downstream(a.id, S.res)) if (!ids.has(x) && S.res.get(x).estado !== "concluida") seg.add(x);
+  const k = await perguntar({
+    titulo: "Corrigir datas expiradas",
+    texto: `<p>${lista.length} atividades ainda não concluídas têm o fim previsto antes de hoje. Todas passam a ter fim previsto a <b>${fd(DATA_CORR, true)}</b>.</p><p>As ${seg.size} atividades seguintes a estas são recalculadas a partir das novas datas. É uma correção feita uma só vez; depois disto este aviso desaparece.</p>`,
+    opcoes: [{ k: "sim", l: `Corrigir ${lista.length} atividades`, estilo: "pri" }, { k: "nao", l: "Cancelar" }],
+  });
+  if (k !== "sim") return;
+  const antes = new Map([...seg].map((x) => [x, S.res.get(x).prevIni + "|" + S.res.get(x).prevFim]));
+  await store.updateMuitas(lista.map((a) => ({ id: a.id, patch: patchCorr(a) })), { tipo: "previsao", texto: `Correção única: ${lista.length} atividades com o fim previsto já passado passaram a ter fim a ${fd(DATA_CORR, true)}` });
+  await store.setConfig({ correcaoExpiradas: S.hoje });
+  compute();
+  let mexeram = 0; for (const [x, v] of antes) if (S.res.get(x).prevIni + "|" + S.res.get(x).prevFim !== v) mexeram++;
+  toast(`${lista.length} atividades com fim previsto a ${fd(DATA_CORR, true)}. ${mexeram} atividades seguintes mudaram de data.`);
+  render();
 }
 /** Confirmação para tudo o que anula ou retira alguma coisa. */
 async function confirmar(titulo, texto, sim = "Sim, retirar") {
