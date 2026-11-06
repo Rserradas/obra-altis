@@ -1740,7 +1740,9 @@ function drawGantt() {
     const grupo = [];
     let bIni = null, bFim = null, bDur = 0, bFeito = 0, bN = 0, bAtr = 0;
     for (const u of us.filter((x) => x.bloco === bl)) {
-      const acts = u.acts.filter((a) => (!g.ativ || nomeAtiv(a) === g.ativ) && (!g.abertas || S.res.get(a.id).estado !== "concluida"));
+      // por data de início: a real se já arrancou, senão a prevista; depois pelo fim
+      const acts = u.acts.filter((a) => (!g.ativ || nomeAtiv(a) === g.ativ) && (!g.abertas || S.res.get(a.id).estado !== "concluida"))
+        .sort((x, y) => { const rx = S.res.get(x.id), ry = S.res.get(y.id); return (rx.inicio || "9").localeCompare(ry.inicio || "9") || (rx.fim || "9").localeCompare(ry.fim || "9") || nomeAtiv(x).localeCompare(nomeAtiv(y), "pt"); });
       if (!acts.length) continue;
       let ini = null, fim = null, atr = 0;
       for (const a of acts) { const r = S.res.get(a.id); if (!ini || r.inicio < ini) ini = r.inicio; if (!fim || r.fim > fim) fim = r.fim; if (r.atrasada) atr++; }
@@ -2038,14 +2040,27 @@ function simular(esp, regras, dur, nAp, eq) {
   // caminho crítico: volta atrás pela condição que impôs cada arranque
   const critico = new Set();
   for (let c = ult; c && c.i >= 0; c = porQuem[c.k][c.i]) critico.add(c.k);
-  const linhas = ordem.map((k) => ({ k, ini: Math.min(...ini[k]), fim: Math.max(...fim[k]), dur: d(k), um: [ini[k][0], fim[k][0]] }))
-    .sort((a, b) => a.ini - b.ini || a.fim - b.fim);
+  const linhas = ordem.map((k) => ({ k, ini: Math.min(...ini[k]), fim: Math.max(...fim[k]), dur: d(k), um: [ini[k][0], fim[k][0]] }));
   return { linhas, total, critico, ciclo, n };
 }
 function simGanttHTML(esp, regras, dur, nAp) {
   if (!esp.length) return "";
   const op = ui.simEq || "0", eq = Number(op);
   const r = simular(esp, regras, dur, nAp, eq);
+  const so = ui.simOrd || "ini";
+  const pos = Object.fromEntries(esp.map((e, i) => [e.key, i]));
+  const nm = (k) => (S.espIdx[k] ? S.espIdx[k].nome : k);
+  const crit = (l) => (r.critico.has(l.k) ? 0 : 1);
+  const cmp = {
+    ini: (a, b) => a.ini - b.ini || a.fim - b.fim,
+    fim: (a, b) => a.fim - b.fim || a.ini - b.ini,
+    dur: (a, b) => (b.fim - b.ini) - (a.fim - a.ini) || a.ini - b.ini,
+    crit: (a, b) => crit(a) - crit(b) || a.ini - b.ini || a.fim - b.fim,
+    nome: (a, b) => nm(a.k).localeCompare(nm(b.k), "pt", { sensitivity: "base", numeric: true }),
+    lista: (a, b) => pos[a.k] - pos[b.k],
+  }[so] || ((a, b) => a.ini - b.ini);
+  r.linhas.sort(cmp);
+  const ords = [["ini", "Início"], ["fim", "Fim"], ["dur", "Mais longas"], ["crit", "Críticas primeiro"], ["nome", "Nome"], ["lista", "Ordem da lista"]];
   const T = Math.max(1, r.total);
   const pc = (x) => ((x / T) * 100).toFixed(3) + "%";
   const passo = [7, 14, 28, 56, 91, 182].find((x) => T / x <= 6) || 365;
@@ -2058,6 +2073,7 @@ function simGanttHTML(esp, regras, dur, nAp) {
     <div class="card-h"><h2>Simulação do tempo mínimo da obra</h2></div>
     <p style="max-width:75ch">Calculado só com a sequência e os dias por fração desta página, para ${r.n} apartamentos, como se a obra começasse hoje do zero. Cada especialidade arranca num apartamento logo que as condições acabam nesse apartamento.${eq ? ` Cada especialidade tem ${eq === 1 ? "uma equipa, que faz" : eq + " equipas, que fazem"} os apartamentos um a seguir ao outro.` : " Com equipas sem limite, todos os apartamentos andam ao mesmo tempo."} Não conta com o que já está feito nem com as ligações do Excel.</p>
     <div class="sim-op"><span class="note">Equipas por especialidade</span><div class="sim-seg">${ops.map(([v, l]) => `<button class="${op === v ? "on" : ""}" data-simeq="${v}">${l}</button>`).join("")}</div></div>
+    <div class="sim-op"><span class="note">Ordenar por</span><div class="sim-seg">${ords.map(([v, l]) => `<button class="${so === v ? "on" : ""}" data-simord="${v}">${l}</button>`).join("")}</div></div>
     ${r.ciclo ? `<div class="banner warn">Há condições em círculo (uma especialidade espera por outra que espera por ela). A simulação ignora esse círculo.</div>` : ""}
     <div class="sim-tot"><div><div class="eyebrow">Tempo mínimo</div><big class="num">${r.total} dias</big><span class="note"> cerca de ${Math.round(r.total / 7)} semanas</span></div><div><div class="eyebrow">Começando hoje, acabava a</div><big class="num">${fd(fimData, true)}</big></div></div>
     <div class="sim-g">
@@ -2117,6 +2133,7 @@ function regrasView() {
       }));
       const rv = $("#rsVoltar"); if (rv) rv.onclick = () => { ui.regSort = null; render(); };
       document.querySelectorAll("[data-simeq]").forEach((b) => (b.onclick = () => { ui.simEq = b.dataset.simeq; render(); }));
+      document.querySelectorAll("[data-simord]").forEach((b) => (b.onclick = () => { ui.simOrd = b.dataset.simord; render(); }));
       const rq = $("#regQ");
       const filtra = () => {
         ui.regQ = rq.value;
