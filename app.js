@@ -1286,39 +1286,71 @@ function primeiraPossivel(r) {
  */
 async function decidirSeguintes(id, patch) {
   const a = S.acts[id];
-  const abertas = [...downstream(id, S.res)].filter((sid) => { const x = S.acts[sid], xr = S.res.get(sid); return x && xr && xr.estado !== "concluida" && !x.realInicio; });
+  const naFracao = location.hash.startsWith("#u-"); // a editar no ecrã de um apartamento: só esse apartamento
+  const porIniciar = (sid) => { const x = S.acts[sid], xr = S.res.get(sid); return x && xr && xr.estado !== "concluida" && !x.realInicio; };
+  const abertas = [...downstream(id, S.res)].filter(porIniciar);
   if (!abertas.length) return null;
-  const simul = schedule(Object.values(S.acts).map((x) => (x.id === id ? { ...x, ...patch } : x)), S.cfg.regras || {}, S.hoje, S.cfg.duracoes || {});
+  const todasAct = () => Object.values(S.acts);
+  const simul = schedule(todasAct().map((x) => (x.id === id ? { ...x, ...patch } : x)), S.cfg.regras || {}, S.hoje, S.cfg.duracoes || {});
   // o que conta para as seguintes é o fim provável (uma previsão já ultrapassada conta a partir de hoje)
   const delta = diffDays(S.res.get(id).provFim, simul.get(id).provFim);
   if (!delta) return null;
-  const mexem = abertas.filter((sid) => simul.get(sid).prevIni !== S.res.get(sid).prevIni).length;
-  const n = abertas.length, dias = Math.abs(delta), um = n === 1;
-  const lista = abertas.slice(0, 4).map((sid) => `<li>${rotuloAt(S.acts[sid], a)} <span class="note">começa ${fd(S.res.get(sid).prevIni)}</span></li>`).join("") + (n > 4 ? `<li class="note">e mais ${n - 4}</li>` : "");
-  const frente = delta > 0;
+  const mesmas = abertas.filter((sid) => S.acts[sid].unidade === a.unidade);
+  const outras = abertas.filter((sid) => S.acts[sid].unidade !== a.unidade);
+  const alvo = naFracao ? mesmas : abertas;
+  const desloca = (lista) => lista.map((sid) => { const xr = S.res.get(sid); return { id: sid, patch: { inicioPrevisto: addDays(xr.prevIni, delta), fimPrevisto: addDays(xr.prevFim, delta), duracaoManual: null, dataOk: true } }; });
+  // efeito noutras frações se as deste apartamento andarem
+  const pAlvo = new Map(desloca(alvo).map((x) => [x.id, x.patch]));
+  const simul2 = schedule(todasAct().map((x) => (x.id === id ? { ...x, ...patch } : pAlvo.has(x.id) ? { ...x, ...pAlvo.get(x.id) } : x)), S.cfg.regras || {}, S.hoje, S.cfg.duracoes || {});
+  const outrasMexem = outras.filter((sid) => simul2.get(sid).prevIni !== S.res.get(sid).prevIni);
+  // ligações que saem deste apartamento para outras frações (desta atividade ou das seguintes deste apartamento)
+  const cortes = [];
+  for (const pid of [id, ...mesmas]) for (const sid of S.res.get(pid).succ || []) { if (S.acts[sid] && S.acts[sid].unidade !== a.unidade && porIniciar(sid)) cortes.push({ sid, pid }); }
+  const mexem = (naFracao ? mesmas : abertas).filter((sid) => simul.get(sid).prevIni !== S.res.get(sid).prevIni).length;
+  const lst = naFracao ? mesmas : abertas;
+  const n = lst.length, dias = Math.abs(delta), um = n === 1, frente = delta > 0;
+  const D = `${dias} dia${dias === 1 ? "" : "s"}`;
+  const lista = lst.slice(0, 4).map((sid) => `<li>${rotuloAt(S.acts[sid], a)} <span class="note">começa ${fd(S.res.get(sid).prevIni)}</span></li>`).join("") + (n > 4 ? `<li class="note">e mais ${n - 4}</li>` : "");
+  const exO = outrasMexem.slice(0, 3).map((sid) => rotuloAt(S.acts[sid], a)).join(", ");
+  const opcoes = [];
+  if (n) opcoes.push({ k: "todas", l: naFracao ? (frente ? `Andar as deste apartamento ${D} para a frente` : `Puxar as deste apartamento ${D} para trás`) : (frente ? `Andar todas ${D} para a frente` : `Puxar todas ${D} para trás`), estilo: "pri" });
+  if (naFracao && outrasMexem.length && cortes.length) opcoes.push({ k: "isolar", l: n ? "Só este apartamento: desligar das outras frações" : "Não mexer nas outras frações: desligá-las desta", estilo: n ? "" : "pri" });
+  opcoes.push({ k: "so", l: frente ? "Só as que ficam em conflito" : "Deixar as seguintes onde estão" });
   const k = await perguntar({
-    titulo: frente ? `O fim passa ${dias} dia${dias === 1 ? "" : "s"} para a frente` : `O fim passa ${dias} dia${dias === 1 ? "" : "s"} para trás`,
-    texto: `<p>Há ${um ? "1 atividade seguinte" : n + " atividades seguintes"} por iniciar que ${um ? "depende" : "dependem"} desta:</p><ul class="dlg-l">${lista}</ul>
-      <p class="note">${frente ? (mexem === n ? "Se não escolher andar todas, cada uma anda só o necessário para não começar antes de esta acabar." : mexem ? `Se não escolher andar todas, só ${mexem === 1 ? "1 anda" : mexem + " andam"} para a frente (as que ficariam a começar antes de esta acabar); as outras ficam nas datas que têm.` : "Nenhuma fica em conflito: se não escolher andar todas, ficam nas datas que têm.")
-        : "Se não as puxar, ficam nas datas que têm e passa a haver folga entre esta e as seguintes."}</p>`,
-    opcoes: [
-      { k: "todas", l: frente ? `Andar todas ${dias} dia${dias === 1 ? "" : "s"} para a frente` : `Puxar todas ${dias} dia${dias === 1 ? "" : "s"} para trás`, estilo: "pri" },
-      { k: "so", l: frente ? "Só as que ficam em conflito" : "Deixar as seguintes onde estão" },
-    ],
+    titulo: frente ? `O fim passa ${D} para a frente` : `O fim passa ${D} para trás`,
+    texto: `${n ? `<p>Há ${um ? "1 atividade seguinte" : n + " atividades seguintes"} por iniciar${naFracao ? " neste apartamento" : ""} que ${um ? "depende" : "dependem"} desta:</p><ul class="dlg-l">${lista}</ul>` : `<p>Neste apartamento não há atividades por iniciar a seguir a esta.</p>`}
+      ${n ? `<p class="note">${frente ? (mexem === n ? "Se não escolher andar todas, cada uma anda só o necessário para não começar antes de esta acabar." : mexem ? `Se não escolher andar todas, só ${mexem === 1 ? "1 anda" : mexem + " andam"} para a frente (as que ficariam a começar antes de esta acabar); as outras ficam nas datas que têm.` : "Nenhuma fica em conflito: se não escolher andar todas, ficam nas datas que têm.") : "Se não as puxar, ficam nas datas que têm e passa a haver folga entre esta e as seguintes."}</p>` : ""}
+      ${naFracao && outrasMexem.length ? `<p class="dlg-av"><b>Atenção:</b> ${outrasMexem.length === 1 ? "1 atividade de outra fração também mexe" : outrasMexem.length + " atividades de outras frações também mexem"} (${exO}${outrasMexem.length > 3 ? "..." : ""}), porque ${outrasMexem.length === 1 ? "está ligada" : "estão ligadas"} a este apartamento (por exemplo, a mesma equipa passa daqui para a fração seguinte). Para mexer só neste apartamento, escolha desligar das outras frações: ${cortes.length === 1 ? "essa ligação deixa" : "essas " + cortes.length + " ligações deixam"} de existir.</p>` : ""}`,
+    opcoes,
   });
-  if (k !== "todas") return null;
-  return { delta, lista: abertas.map((sid) => { const xr = S.res.get(sid); return { id: sid, patch: { inicioPrevisto: addDays(xr.prevIni, delta), fimPrevisto: addDays(xr.prevFim, delta), duracaoManual: null, dataOk: true } }; }) };
+  if (k === "todas") return { delta, lista: desloca(alvo), cortes: [] };
+  if (k === "isolar") {
+    // retira as ligações deste apartamento para outras frações (junta várias na mesma atividade)
+    const porSid = new Map();
+    for (const { sid, pid } of cortes) {
+      const x = { ...S.acts[sid], ...(porSid.get(sid) || {}) };
+      const d = (S.res.get(sid).preds || []).find((q) => q.id === pid); if (!d) continue;
+      const pt = d.fonte === "manual" ? { depsExtra: (x.depsExtra || []).filter((e) => e.id !== pid) } : { depsIgnorar: [...new Set([...(x.depsIgnorar || []), pid])] };
+      // fica nas datas que tem agora (sem a ligação voltaria às datas antigas do Excel)
+      const xr = S.res.get(sid);
+      porSid.set(sid, { ...(porSid.get(sid) || {}), ...pt, inicioPrevisto: xr.prevIni, fimPrevisto: xr.prevFim, duracaoManual: null, dataOk: true });
+    }
+    return { delta, lista: desloca(alvo), cortes: [...porSid.entries()].map(([sid, pt]) => ({ id: sid, patch: pt })) };
+  }
+  return null;
 }
-/** Grava a alteração desta atividade e, se for o caso, das seguintes; um único Anular desfaz tudo. */
 async function gravarComSeguintes(id, patch, registo, _delta, msg) {
   const dec = await decidirSeguintes(id, patch);
+  const a = S.acts[id];
+  if (dec && dec.cortes && dec.cortes.length) await store.updateMuitas(dec.cortes, { tipo: "dependencia", texto: `${dec.cortes.length} atividades de outras frações deixaram de esperar por ${a.unidade} (ao mudar ${nomeAtiv(a)})` });
   await store.updateAtividade(id, patch, registo);
   const seg = dec && dec.lista, delta = dec && dec.delta;
+  const extra = dec && dec.cortes && dec.cortes.length ? `, ${dec.cortes.length} ligação${dec.cortes.length > 1 ? "ões" : ""} a outras frações retirada${dec.cortes.length > 1 ? "s" : ""}` : "";
   if (seg && seg.length) {
-    await store.updateMuitas(seg, { tipo: "previsao", texto: `${seg.length} atividades seguintes de ${nomeAtiv(S.acts[id])} em ${S.acts[id].unidade} movidas ${delta > 0 ? "+" : ""}${delta} dias` });
-    return toast(`${msg}. ${seg.length} atividade${seg.length > 1 ? "s seguintes movidas" : " seguinte movida"} ${delta > 0 ? "+" : ""}${delta} dias`);
+    await store.updateMuitas(seg, { tipo: "previsao", texto: `${seg.length} atividades seguintes de ${nomeAtiv(a)} em ${a.unidade} movidas ${delta > 0 ? "+" : ""}${delta} dias` });
+    return toast(`${msg}. ${seg.length} atividade${seg.length > 1 ? "s seguintes movidas" : " seguinte movida"} ${delta > 0 ? "+" : ""}${delta} dias${extra}`);
   }
-  toast(msg);
+  toast(msg + extra);
 }
 
 /** Grava uma data editada em qualquer ecrã, com avisos quando há conflito com as anteriores ou efeito nas seguintes. */

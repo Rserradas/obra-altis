@@ -904,3 +904,4 @@ input[type="date"]::-webkit-datetime-edit { padding: 0; }
 }
 /* iPhone: campos com letra de 16px para o Safari não fazer zoom ao tocar (que desarruma o ecrã) */
 @media (max-width: 860px) { input.inp, select.inp, textarea.inp, .inp { font-size: 16px; } .rule select { font-size: 15px; } }
+.dlg-av { background: var(--warn-soft, #fdf3e1); border-left: 3px solid var(--warn); padding: 8px 10px; border-radius: 6px; margin: 4px 0 8px; font-size: .9rem; }
