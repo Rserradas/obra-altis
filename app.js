@@ -54,13 +54,14 @@ const ICON = {
 };
 
 let store, S = null; // S = estado calculado
+const semAcento = (x) => String(x || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
 const PLANO_PADRAO = () => ({ f: "todas", bloco: "", tipo: "", unidade: "", ativ: "", equipa: "", q: "", soAtr: false, semConc: true, sort: null, editar: false, atribuir: false, atrEq: "", selec: null });
 const ui = { bloco: "todos", plano: PLANO_PADRAO(), unidadeTab: "ativ", vistoria: {}, sheet: null };
 /** Há algum filtro diferente do padrão? */
 function filtrosAlterados() {
   const p = ui.plano, d = PLANO_PADRAO(), g = ui.gantt;
   const planoMudou = ["bloco", "tipo", "unidade", "ativ", "equipa", "q", "soAtr", "editar", "atribuir"].some((k) => !!p[k] !== !!d[k]) || p.semConc === false || !!p.sort || (p.f || "todas") !== "todas";
-  if (ui.regSort) return true;
+  if (ui.regSort || ui.regQ) return true;
   const ganttMudou = g && (g.bloco || g.unidade || g.ativ || g.abertas === false || g.ligacoes === false || g.zoom !== "semana" || (g.abertosB && g.abertosB.size) || (g.abertos && g.abertos.size) || g.sel);
   return !!(planoMudou || ganttMudou || ui.bloco !== "todos" || ui.unitEdit || ui.uSemConc === false || !!ui.porVist);
 }
@@ -73,6 +74,7 @@ function reporFiltros() {
   ui.uSemConc = true;
   ui.porVist = false;
   ui.regSort = null;
+  ui.regQ = "";
   if (ui.semana) ui.semana = { equipa: "", bloco: "", ver: "" };
   ui.semana = null;
   ui.delUnit = null;
@@ -2005,6 +2007,66 @@ function defTabs(atual) {
   if (store.user.papel === "dono") t.push(["equipa", "Acessos"]);
   return `<div class="eyebrow">Definições</div><div class="tabs">${t.map(([h, l]) => `<a href="#${h}" class="deftab ${atual === h ? "on" : ""}">${l}</a>`).join("")}</div>`;
 }
+/* ============================================================ simulação do tempo mínimo
+   Só com a sequência e os dias por fração desta página: cada especialidade arranca num apartamento
+   logo que as suas condições acabam nesse apartamento. Com equipas limitadas, cada equipa faz os
+   apartamentos um a seguir ao outro. Não conta com o que já está feito nem com as ligações do Excel. */
+function simular(esp, regras, dur, nAp, eq) {
+  const keys = esp.map((e) => e.key), ks = new Set(keys);
+  const pre = Object.fromEntries(keys.map((k) => [k, (regras[k] || []).filter((p) => ks.has(p) && p !== k)]));
+  // ordem topológica
+  const ordem = [], feito = new Set(), emCurso = new Set();
+  let ciclo = false;
+  const visita = (k) => { if (feito.has(k)) return; if (emCurso.has(k)) { ciclo = true; return; } emCurso.add(k); for (const p of pre[k]) visita(p); emCurso.delete(k); feito.add(k); ordem.push(k); };
+  for (const k of keys) visita(k);
+  const d = (k) => Math.max(0, Number(dur[k]) || 0);
+  const n = Math.max(1, nAp);
+  const ini = {}, fim = {}, porQuem = {};
+  for (const k of ordem) {
+    ini[k] = []; fim[k] = []; porQuem[k] = [];
+    const livre = []; // fim da última fração de cada equipa
+    for (let i = 0; i < n; i++) {
+      let s = 0, q = null;
+      for (const p of pre[k]) if (fim[p] && fim[p][i] > s) { s = fim[p][i]; q = { k: p, i }; }
+      if (eq) { const t = i % eq; if ((livre[t] || 0) > s) { s = livre[t]; q = { k, i: i - eq }; } }
+      ini[k][i] = s; fim[k][i] = s + d(k); porQuem[k][i] = q;
+      if (eq) livre[i % eq] = fim[k][i];
+    }
+  }
+  let total = 0, ult = null;
+  for (const k of ordem) for (let i = 0; i < n; i++) if (fim[k][i] > total || (fim[k][i] === total && !ult)) { total = fim[k][i]; ult = { k, i }; }
+  // caminho crítico: volta atrás pela condição que impôs cada arranque
+  const critico = new Set();
+  for (let c = ult; c && c.i >= 0; c = porQuem[c.k][c.i]) critico.add(c.k);
+  const linhas = ordem.map((k) => ({ k, ini: Math.min(...ini[k]), fim: Math.max(...fim[k]), dur: d(k), um: [ini[k][0], fim[k][0]] }))
+    .sort((a, b) => a.ini - b.ini || a.fim - b.fim);
+  return { linhas, total, critico, ciclo, n };
+}
+function simGanttHTML(esp, regras, dur, nAp) {
+  if (!esp.length) return "";
+  const op = ui.simEq || "0", eq = Number(op);
+  const r = simular(esp, regras, dur, nAp, eq);
+  const T = Math.max(1, r.total);
+  const pc = (x) => ((x / T) * 100).toFixed(3) + "%";
+  const passo = [7, 14, 28, 56, 91, 182].find((x) => T / x <= 6) || 365;
+  const marcas = []; for (let x = passo; x < T; x += passo) marcas.push(x);
+  const fimData = addDays(S.hoje, r.total);
+  const semDias = esp.filter((e) => dur[e.key] == null || dur[e.key] === "").length;
+  const nomeDe = (k) => (S.espIdx[k] ? S.espIdx[k].nome : k);
+  const ops = [["0", "Sem limite"], ["1", "1"], ["2", "2"], ["3", "3"], ["4", "4"]];
+  return `<section class="sim">
+    <div class="card-h"><h2>Simulação do tempo mínimo da obra</h2></div>
+    <p style="max-width:75ch">Calculado só com a sequência e os dias por fração desta página, para ${r.n} apartamentos, como se a obra começasse hoje do zero. Cada especialidade arranca num apartamento logo que as condições acabam nesse apartamento.${eq ? ` Cada especialidade tem ${eq === 1 ? "uma equipa, que faz" : eq + " equipas, que fazem"} os apartamentos um a seguir ao outro.` : " Com equipas sem limite, todos os apartamentos andam ao mesmo tempo."} Não conta com o que já está feito nem com as ligações do Excel.</p>
+    <div class="sim-op"><span class="note">Equipas por especialidade</span><div class="sim-seg">${ops.map(([v, l]) => `<button class="${op === v ? "on" : ""}" data-simeq="${v}">${l}</button>`).join("")}</div></div>
+    ${r.ciclo ? `<div class="banner warn">Há condições em círculo (uma especialidade espera por outra que espera por ela). A simulação ignora esse círculo.</div>` : ""}
+    <div class="sim-tot"><div><div class="eyebrow">Tempo mínimo</div><big class="num">${r.total} dias</big><span class="note"> cerca de ${Math.round(r.total / 7)} semanas</span></div><div><div class="eyebrow">Começando hoje, acabava a</div><big class="num">${fd(fimData, true)}</big></div></div>
+    <div class="sim-g">
+      <div class="sim-row sim-ax"><span></span><div class="sim-tr">${marcas.map((x, j) => `<i style="left:${pc(x)}"><em class="${j % 2 ? "imp" : ""}">${x} d</em></i>`).join("")}</div><span></span></div>
+      ${r.linhas.map((l) => `<div class="sim-row ${r.critico.has(l.k) ? "crit" : ""}"><span class="sim-n" title="${esc(nomeDe(l.k))}">${esc(nomeDe(l.k))}</span><div class="sim-tr">${marcas.map((x) => `<i style="left:${pc(x)}"></i>`).join("")}<b style="left:${pc(l.ini)};width:${pc(Math.max(l.fim - l.ini, 0))}" title="${esc(nomeDe(l.k))}: dia ${l.ini} a ${l.fim}"></b>${eq ? `<s style="left:${pc(l.um[0])};width:${pc(l.um[1] - l.um[0])}"></s>` : ""}</div><span class="sim-d num">${l.ini} a ${l.fim}</span></div>`).join("")}
+    </div>
+    <p class="note"><span class="sim-lg crit"></span> Caminho crítico: se uma destas especialidades demorar mais, a obra acaba mais tarde.${eq ? ` <span class="sim-lg um"></span> Primeiro apartamento; a barra clara vai até ao último.` : ""}${semDias ? ` ${semDias} especialidades sem dias por fração contam como 0 dias.` : ""}</p>
+  </section>`;
+}
 /* ============================================================ regras (sequência) */
 function regrasView() {
   const dono = store.user.papel === "dono";
@@ -2029,19 +2091,21 @@ function regrasView() {
     <p style="max-width:70ch">Cada especialidade só pode arrancar num apartamento quando as especialidades da coluna «Só começa depois de» estiverem concluídas <b>nesse mesmo apartamento</b>. Uma regra aqui aplica-se de uma vez aos ${nAp} apartamentos. Se uma atividade se atrasar, todas as que dependem dela andam para a frente sozinhas.</p>
     ${seq ? "" : `<div class="banner">Só o dono de obra e o empreiteiro podem alterar esta sequência.</div>`}
     ${vs ? `<div class="banner"><span>A ver por <b>${NOMES_COL[vs.col]}</b>${vs.dir === "desc" ? " (decrescente)" : ""}. A ordem guardada da lista não mudou.</span><span class="row" style="gap:6px">${seq ? `<button class="btn sm" id="rsGuardar">Guardar como ordem da lista</button>` : ""}<button class="btn sm" id="rsVoltar">Voltar à ordem da lista</button></span></div>` : ""}
+    <div class="reg-q"><input class="inp" type="search" id="regQ" placeholder="Procurar especialidade" aria-label="Procurar especialidade" autocomplete="off" value="${esc(ui.regQ || "")}"><span class="note" id="regQn"></span></div>
     <div class="rules">
       <div class="rule rule-h ${mexe ? "ordenavel" : ""}">${mexe ? "<span></span>" : ""}<span>${th("nome", "Especialidade")}</span><span>${th("dias", "Dias por fração")}</span><span>${th("cond", "Só começa depois de")}</span></div>
       ${vista.map((e) => {
         const pre = regras[e.key] || [];
-        const disp = esp.filter((x) => x.key !== e.key && !pre.includes(x.key));
+        const disp = esp.filter((x) => x.key !== e.key && !pre.includes(x.key)).sort((x, y) => x.nome.localeCompare(y.nome, "pt", { sensitivity: "base", numeric: true }));
         const i = esp.indexOf(e);
-        return `<div class="rule ${mexe ? "ordenavel" : ""}" data-rk="${e.key}" ${mexe ? 'draggable="true"' : ""}>${mexe ? `<div class="ordb"><button class="ord-b" data-ord="${e.key}|-1" ${i === 0 ? "disabled" : ""} title="Subir" aria-label="Subir ${esc(e.nome)}">▲</button><button class="ord-b" data-ord="${e.key}|1" ${i === esp.length - 1 ? "disabled" : ""} title="Descer" aria-label="Descer ${esc(e.nome)}">▼</button></div>` : ""}<div class="rnome" data-rnome="${e.key}"><b>${esc(e.nome)}</b>${seq ? `<button class="ren-b" data-ren="${e.key}" title="Mudar o nome" aria-label="Mudar o nome de ${esc(e.nome)}"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20h4L18.5 9.5a2.1 2.1 0 0 0-3-3L5 17v3z"/><path d="M14 8l3 3"/></svg></button>` : ""}</div>
+        return `<div class="rule ${mexe ? "ordenavel" : ""}" data-rk="${e.key}" data-rq="${esc(semAcento([e.nome, ...pre.map((k) => (S.espIdx[k] ? S.espIdx[k].nome : k))].join(" ")))}" ${mexe ? 'draggable="true"' : ""}>${mexe ? `<div class="ordb"><button class="ord-b" data-ord="${e.key}|-1" ${i === 0 ? "disabled" : ""} title="Subir" aria-label="Subir ${esc(e.nome)}">▲</button><button class="ord-b" data-ord="${e.key}|1" ${i === esp.length - 1 ? "disabled" : ""} title="Descer" aria-label="Descer ${esc(e.nome)}">▼</button></div>` : ""}<div class="rnome" data-rnome="${e.key}"><b>${esc(e.nome)}</b>${seq ? `<button class="ren-b" data-ren="${e.key}" title="Mudar o nome" aria-label="Mudar o nome de ${esc(e.nome)}"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20h4L18.5 9.5a2.1 2.1 0 0 0-3-3L5 17v3z"/><path d="M14 8l3 3"/></svg></button>` : ""}</div>
           <input class="inp num" type="number" min="0" max="365" value="${dur[e.key] ?? ""}" data-dur="${e.key}" ${seq ? "" : "disabled"} aria-label="Dias por fração de ${esc(e.nome)}">
           <div class="tags">${pre.map((k) => `<span class="tag ${seq ? "" : "ro"}">${esc(S.espIdx[k] ? S.espIdx[k].nome : k)}${seq ? `<button data-rm="${e.key}|${k}" aria-label="Retirar">×</button>` : ""}</span>`).join("") || `<span class="note">Sem condições</span>`}
           ${seq ? `<select class="inp" data-add="${e.key}"><option value="">+ acrescentar</option>${disp.map((x) => `<option value="${x.key}">${esc(x.nome)}</option>`).join("")}</select>` : ""}</div></div>`;
       }).join("")}
     </div>
-    <p class="note">As ligações que já existiam no Excel (por exemplo a sequência da Equipa 4 de apartamento em apartamento) continuam ativas além destas regras.</p>`;
+    <p class="note">As ligações que já existiam no Excel (por exemplo a sequência da Equipa 4 de apartamento em apartamento) continuam ativas além destas regras.</p>
+    ${simGanttHTML(esp, regras, dur, nAp)}`;
   return {
     html, bind: () => {
       document.querySelectorAll("[data-rsort]").forEach((b) => (b.onclick = () => {
@@ -2052,6 +2116,16 @@ function regrasView() {
         render();
       }));
       const rv = $("#rsVoltar"); if (rv) rv.onclick = () => { ui.regSort = null; render(); };
+      document.querySelectorAll("[data-simeq]").forEach((b) => (b.onclick = () => { ui.simEq = b.dataset.simeq; render(); }));
+      const rq = $("#regQ");
+      const filtra = () => {
+        ui.regQ = rq.value;
+        const t = semAcento(rq.value.trim()).split(/\s+/).filter(Boolean);
+        let n = 0;
+        document.querySelectorAll(".rule[data-rq]").forEach((r) => { const ok = t.every((w) => r.dataset.rq.includes(w)); r.hidden = !ok; if (ok) n++; });
+        $("#regQn").textContent = t.length ? (n ? `${n} de ${esp.length}` : "Nenhuma especialidade encontrada") : "";
+      };
+      rq.oninput = filtra; filtra();
       if (!seq) return;
       const rg = $("#rsGuardar");
       if (rg) rg.onclick = async () => {
