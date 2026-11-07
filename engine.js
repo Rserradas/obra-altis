@@ -36,7 +36,7 @@ export function buildDeps(acts, regras) {
   const antNaFila = new Map();
   const filas = new Map();
   for (const a of acts) {
-    if (!a.equipa || a.eqOrdem == null || a.eqOrdem === "") continue;
+    if (!a.equipa || a.eqOrdem == null || a.eqOrdem === "" || a.eqOrdem === false) continue; // false: tirado da fila de propósito
     if (!filas.has(a.equipa)) filas.set(a.equipa, []);
     filas.get(a.equipa).push(a);
   }
