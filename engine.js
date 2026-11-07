@@ -37,8 +37,9 @@ export function buildDeps(acts, regras) {
   const filas = new Map();
   for (const a of acts) {
     if (!a.equipa || a.eqOrdem == null || a.eqOrdem === "" || a.eqOrdem === false) continue; // false: tirado da fila de propósito
-    if (!filas.has(a.equipa)) filas.set(a.equipa, []);
-    filas.get(a.equipa).push(a);
+    const k = a.equipa + (a.teste ? "|teste" : ""); // as frações de teste têm filas à parte
+    if (!filas.has(k)) filas.set(k, []);
+    filas.get(k).push(a);
   }
   for (const f of filas.values()) {
     f.sort((x, y) => Number(x.eqOrdem) - Number(y.eqOrdem) || String(x.id).localeCompare(String(y.id)));

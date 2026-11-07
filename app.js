@@ -181,10 +181,13 @@ function compute() {
   const hoje = todayISO();
   const res = schedule(acts, cfg.regras || {}, hoje, cfg.duracoes || {});
   const espIdx = Object.fromEntries((cfg.especialidades || []).map((e) => [e.key, e]));
-  const unidades = (cfg.unidades || []).map((u) => ({ ...u }));
-  const uMap = Object.fromEntries(unidades.map((u) => [u.id, u]));
-  for (const u of unidades) Object.assign(u, { acts: [], dur: 0, feito: 0, fim: null, atraso: null, n: { concluida: 0, em_curso: 0, bloqueada: 0, por_iniciar: 0, atrasada: 0 } });
-  const tot = { n: acts.length, concluida: 0, em_curso: 0, bloqueada: 0, por_iniciar: 0, atrasada: 0, semPlano: 0, fim: null, atraso: null };
+  const todasU = (cfg.unidades || []).map((u) => ({ ...u }));
+  const uMap = Object.fromEntries(todasU.map((u) => [u.id, u]));
+  // frações de teste: aparecem à parte e não contam para a obra
+  const unidades = todasU.filter((u) => !u.teste);
+  const unidadesTeste = todasU.filter((u) => u.teste);
+  for (const u of todasU) Object.assign(u, { acts: [], dur: 0, feito: 0, fim: null, atraso: null, n: { concluida: 0, em_curso: 0, bloqueada: 0, por_iniciar: 0, atrasada: 0 } });
+  const tot = { n: 0, concluida: 0, em_curso: 0, bloqueada: 0, por_iniciar: 0, atrasada: 0, semPlano: 0, fim: null, atraso: null };
   for (const a of acts) {
     const r = res.get(a.id);
     const u = uMap[a.unidade];
@@ -192,20 +195,25 @@ function compute() {
     u.acts.push(a);
     const w = Math.max(1, r.dur);
     u.dur += w; u.feito += w * pctEfetiva(a) / 100;
-    u.n[r.estado]++; tot[r.estado]++;
-    if (r.atrasada) { u.n.atrasada++; tot.atrasada++; }
-    if (r.semPlano && r.estado !== "concluida") tot.semPlano++;
-    // fim previsto da fração e da obra: o fim provável (uma previsão já ultrapassada conta a partir de hoje)
+    u.n[r.estado]++;
+    if (r.atrasada) u.n.atrasada++;
+    if (r.estado !== "concluida") u.atraso = Math.max(u.atraso ?? 0, r.atraso || 0);
     if (!u.fim || r.provFim > u.fim) u.fim = r.provFim;
-    if (r.estado !== "concluida") { u.atraso = Math.max(u.atraso ?? 0, r.atraso || 0); tot.atraso = Math.max(tot.atraso ?? 0, r.atraso || 0); }
+    if (u.teste) continue;
+    tot.n++; tot[r.estado]++;
+    if (r.atrasada) tot.atrasada++;
+    if (r.semPlano && r.estado !== "concluida") tot.semPlano++;
+    // fim previsto da obra: o fim provável (uma previsão já ultrapassada conta a partir de hoje)
+    if (r.estado !== "concluida") tot.atraso = Math.max(tot.atraso ?? 0, r.atraso || 0);
     if (!tot.fim || r.provFim > tot.fim) tot.fim = r.provFim;
   }
-  for (const u of unidades) {
+  for (const u of todasU) {
     u.pct = u.dur ? Math.round((100 * u.feito) / u.dur) : 0;
     const ord = (a) => (a.esp && espIdx[a.esp] ? espIdx[a.esp].ordem : 99);
     u.acts.sort((a, b) => ord(a) - ord(b) || (res.get(a.id).inicio || "").localeCompare(res.get(b.id).inicio || ""));
   }
-  S = { cfg, res, hoje, unidades, uMap, tot, espIdx, acts: d.atividades, equipas: [] };
+  const idsTeste = new Set(unidadesTeste.map((u) => u.id));
+  S = { cfg, res, hoje, unidades, unidadesTeste, idsTeste, uMap, tot, espIdx, acts: d.atividades, equipas: [] };
   // equipas: as registadas em Definições e as que aparecem nos trabalhos (vindas do Excel)
   const registadas = (cfg.equipas || []).filter((e) => e && e.nome);
   const nomesReg = new Set(registadas.map((e) => e.nome));
@@ -215,6 +223,8 @@ function compute() {
   // as equipas que saíram da obra deixam de aparecer para atribuir, mas ficam no histórico e nos filtros
   S.equipas = S.eqLista.filter((e) => e.ativa !== false).map((e) => e.nome);
 }
+/** Atividades da obra (sem as das frações de teste). */
+const actsObra = () => Object.values(S.acts).filter((a) => !S.idsTeste.has(a.unidade));
 const nomeAtiv = (a) => (a.esp && S.espIdx[a.esp] ? S.espIdx[a.esp].nome : a.seccao);
 const blocoLabel = (b) => (b === "Geral" ? "Geral" : "Bloco " + b);
 
@@ -459,7 +469,7 @@ function painelView() {
   }
   const ordB = ["A", "B", "C", "D", "Lojas", "Geral"];
   const grupos = {};
-  for (const a of Object.values(S.acts)) {
+  for (const a of actsObra()) {
     const r = S.res.get(a.id);
     if (r.estado === "concluida" || !(r.atraso > 0)) continue;
     const k = nomeAtiv(a);
@@ -572,7 +582,7 @@ function previsaoView() {
   const tend = [[7, "semana passada"], [30, "há um mês"]].map(([d, l]) => { const r = ref(d); return r && r.fim ? { l, d: diffDays(r.fim, t.fim), era: r.fim } : null; }).filter(Boolean);
   const blocoFim = blocos.filter((b) => b.k !== "Geral").reduce((m, b) => (!m || (b.fim && b.fim > m.fim) ? b : m), null);
   // o que acaba por último na obra
-  const ultimasObra = Object.values(S.acts).filter((a) => S.res.get(a.id).estado !== "concluida").sort((x, y) => S.res.get(y.id).provFim.localeCompare(S.res.get(x.id).provFim)).slice(0, 5);
+  const ultimasObra = actsObra().filter((a) => S.res.get(a.id).estado !== "concluida").sort((x, y) => S.res.get(y.id).provFim.localeCompare(S.res.get(x.id).provFim)).slice(0, 5);
   // linha do tempo dos blocos
   let t0 = blocos.reduce((m, b) => (b.ini && (!m || b.ini < m) ? b.ini : m), null) || S.hoje;
   let t1 = blocos.reduce((m, b) => (b.fim && (!m || b.fim > m) ? b.fim : m), null) || S.hoje;
@@ -786,7 +796,12 @@ function unidadesView() {
           <div class="meta">${u.n.atrasada ? `<span class="pill late">${u.n.atrasada} atrasadas</span>` : ""}${u.n.bloqueada ? `<span class="pill st-bloqueada">${u.n.bloqueada} bloqueadas</span>` : ""}${u.n.em_curso ? `<span class="pill st-em_curso">${u.n.em_curso} em curso</span>` : ""}${!u.n.atrasada && !u.n.bloqueada && !u.n.em_curso ? `<span class="pill st-${u.n.concluida === u.acts.length ? "concluida" : "por_iniciar"}">${u.n.concluida === u.acts.length ? "Tudo concluído" : "Por iniciar"}</span>` : ""}</div>
         </a>`;
       }).join("")}</div></section>`;
-    }).join("")}`;
+    }).join("")}
+    ${S.unidadesTeste.length && fil === "todos" ? `<section class="col" style="display:flex;flex-direction:column;gap:10px"><div class="grp">Frações de teste <span class="note">não contam para a obra</span></div><div class="ucards">${S.unidadesTeste.map((u) => `<a class="ucard teste" href="#u-${esc(u.id)}">
+        <div class="ucard-h"><b>${esc(u.id)}</b><span class="pill teste-p">TESTE</span></div>
+        ${segHTML(u)}
+        <div class="ln"><span>Atividades</span><span><b>${u.acts.length}</b></span></div>
+        <div class="ln"><span>Fim previsto</span><span><b>${fd(u.fim)}</b></span></div></a>`).join("")}</div></section>` : ""}`;
   return { html, bind: () => { bindCommon(); const nf = $("#novaFr"); if (nf) nf.onclick = openNovaFracao; const pv = $("#porVist"); if (pv) pv.onchange = () => { ui.porVist = pv.checked; render(); }; } };
 }
 
@@ -864,6 +879,7 @@ function unidadeView(id) {
     <div class="row" style="justify-content:space-between"><div class="row" style="gap:6px"><a class="back" href="#unidades">Apartamentos</a>
       ${(() => { const vz = vizinhas(u.id); return `<span class="unav">${vz.ant ? `<a class="btn sm" href="#u-${esc(vz.ant)}" title="Fração anterior">‹ ${esc(vz.ant)}</a>` : ""}${vz.seg ? `<a class="btn sm" href="#u-${esc(vz.seg)}" title="Fração seguinte">${esc(vz.seg)} ›</a>` : ""}</span>`; })()}</div><div class="row" style="gap:6px"><a class="btn sm" href="#plano" data-verplano="${esc(u.id)}|${esc(u.bloco)}">Ver nos trabalhos</a><a class="btn sm" href="#gantt" data-vergantt="${esc(u.id)}|${esc(u.bloco)}">Ver no Gantt</a>${can("criar") ? `<button class="btn sm" data-nova="unit:${esc(u.id)}">+ Nova atividade nesta fração</button>` : ""}${store.user.papel === "dono" && !(ui.delUnit && ui.delUnit.id === u.id) ? `<button class="btn sm warn" id="delU">Eliminar fração</button>` : ""}</div></div>
     ${delUnidadeHTML(u)}
+    ${u.teste ? `<div class="banner teste-b"><span><b>Fração de teste.</b> Pode mexer à vontade: não conta para o painel, para o fim da obra nem para as estatísticas, e não mexe nas datas das outras frações. Quando acabar os testes, elimine-a.</span></div>` : ""}
     <div class="uhead">
       <div><div class="eyebrow">${esc(u.tipo)}${u.bloco !== "Geral" ? " · " + blocoLabel(u.bloco) : ""}${u.tipo === "Apartamento" ? " · piso " + u.piso : ""}</div><h1>${esc(u.tipo === "Apartamento" || u.tipo === "Loja" ? u.id : u.nome)}</h1></div>
       <div class="stats">
@@ -1152,6 +1168,7 @@ function planoView() {
   const base = Object.values(S.acts).map((a) => ({ a, r: S.res.get(a.id) })).filter(({ a, r }) => {
     const u = S.uMap[a.unidade];
     if (!u) return false;
+    if (u.teste && p.unidade !== u.id) return false; // as de teste só aparecem quando se escolhe essa fração
     if (p.bloco && u.bloco !== p.bloco) return false;
     if (p.tipo && u.tipo !== p.tipo) return false;
     if (p.unidade && a.unidade !== p.unidade) return false;
@@ -1218,7 +1235,7 @@ function planoView() {
       <label class="f">Apartamento ou fração<select class="inp" id="pu"><option value="">Todas${p.bloco === "Geral" ? " do geral" : p.bloco ? " do bloco " + p.bloco : ""}</option>${["A", "B", "C", "D", "Geral"].map((g) => {
         const us = unidadesFil.filter((u) => u.bloco === g);
         return us.length ? `<optgroup label="${g === "Geral" ? "Geral" : "Bloco " + g}">${us.map((u) => `<option value="${esc(u.id)}" ${p.unidade === u.id ? "selected" : ""}>${esc(u.tipo === "Apartamento" || /-L\d+$/.test(u.id) ? u.id : u.nome)}</option>`).join("")}</optgroup>` : "";
-      }).join("")}</select></label>
+      }).join("")}${S.unidadesTeste.length ? `<optgroup label="Teste">${S.unidadesTeste.map((u) => `<option value="${esc(u.id)}" ${p.unidade === u.id ? "selected" : ""}>${esc(u.id)}</option>`).join("")}</optgroup>` : ""}</select></label>
       <label class="f">Atividade<select class="inp" id="pa"><option value="">Todas</option>${nomes.map((n) => `<option ${p.ativ === n ? "selected" : ""}>${esc(n)}</option>`).join("")}</select></label>
       <label class="f">Equipa<select class="inp" id="pe"><option value="">Todas</option><option value="_sem" ${p.equipa === "_sem" ? "selected" : ""}>Sem equipa</option>${S.equipasTodas.map((e) => `<option ${p.equipa === e ? "selected" : ""}>${esc(e)}</option>`).join("")}</select></label>
       <label class="f" style="flex:1;min-width:180px">Procurar<input class="inp" id="pq" value="${esc(p.q)}" placeholder="Ex.: B-F503, louças, 2#10"></label>
@@ -1494,7 +1511,7 @@ function perguntar({ titulo, texto, opcoes }) {
 /* ---- Correção única: atividades por concluir com o fim previsto já passado ficam com fim a DATA_CORR */
 const DATA_CORR = "2026-11-01";
 function expiradas() {
-  return Object.values(S.acts).filter((a) => { const r = S.res.get(a.id); return r && r.estado !== "concluida" && r.prevFim < S.hoje; });
+  return actsObra().filter((a) => { const r = S.res.get(a.id); return r && r.estado !== "concluida" && r.prevFim < S.hoje; });
 }
 function patchCorr(a) {
   const r = S.res.get(a.id);
@@ -1728,7 +1745,7 @@ function semanaView() {
   const hoje = S.hoje, lim = addDays(hoje, 7);
   const base = Object.values(S.acts).map((a) => ({ a, r: S.res.get(a.id) })).filter(({ a }) => {
     const u = S.uMap[a.unidade];
-    if (!u) return false;
+    if (!u || u.teste) return false;
     if (w.bloco && u.bloco !== w.bloco) return false;
     if (w.equipa === "_sem" ? a.equipa : w.equipa && a.equipa !== w.equipa) return false;
     return true;
@@ -1802,14 +1819,14 @@ function relatorioView() {
     if (!b.fim || (u.fim && u.fim > b.fim)) b.fim = u.fim;
   }
   const grupos = {};
-  for (const a of Object.values(S.acts)) {
+  for (const a of actsObra()) {
     const r = S.res.get(a.id);
     if (r.estado === "concluida" || !(r.atraso > 0)) continue;
     const g = (grupos[nomeAtiv(a)] = grupos[nomeAtiv(a)] || { nome: nomeAtiv(a), max: 0, n: 0, us: [] });
     g.max = Math.max(g.max, r.atraso); g.n++; g.us.push(a.unidade);
   }
   const atrG = Object.values(grupos).sort((x, y) => y.max - x.max).slice(0, 12);
-  const comentarios = Object.values(S.acts).filter((a) => a.fiscalNota && a.fiscalNotaEm).sort((x, y) => y.fiscalNotaEm.localeCompare(x.fiscalNotaEm)).slice(0, 15);
+  const comentarios = actsObra().filter((a) => a.fiscalNota && a.fiscalNotaEm).sort((x, y) => y.fiscalNotaEm.localeCompare(x.fiscalNotaEm)).slice(0, 15);
   const fr = S.unidades.filter((u) => u.acts.length);
   const html = `
     <div class="rel-acoes no-print"><a class="back" href="#painel">Painel</a>
@@ -3315,6 +3332,7 @@ function openNovaFracao() {
           <label class="f">Código<input class="inp mono" id="fCod" required pattern="[A-Za-z0-9-]+" title="Letras, números e hífen"></label>
         </div>
         <label class="f">Nome (opcional)<input class="inp" id="fNome" placeholder="Ex.: Apartamento modelo, Loja 3"></label>
+        <label class="check"><input type="checkbox" id="fTeste"><span><b>Fração de teste</b>, só para experimentar: não conta para o painel, para o fim da obra nem para as estatísticas, e não mexe nas outras frações</span></label>
       </div>
       <div class="formbox">
         <h3>Atividades</h3>
@@ -3340,14 +3358,15 @@ function openNovaFracao() {
   const atualiza = () => {
     st.tipo = q("#fTipo").value; st.bloco = q("#fBloco").value; st.piso = q("#fPiso").value;
     q("#fPisoW").hidden = st.tipo === "Zona comum";
-    if (!st.codigoManual) q("#fCod").value = sugerirCodigo(st.tipo, st.bloco, st.piso);
+    st.teste = q("#fTeste").checked;
+    if (!st.codigoManual) { if (st.teste) { let i = 1; while (S.uMap["TESTE-" + i]) i++; q("#fCod").value = "TESTE-" + i; } else q("#fCod").value = sugerirCodigo(st.tipo, st.bloco, st.piso); }
     q("#fEspW").hidden = st.ativ !== "padrao";
     q("#fCopW").hidden = st.ativ !== "copiar";
     q("#fIniW").hidden = st.ativ === "nenhuma";
     const n = nAtiv();
-    q("#fRes").innerHTML = `Vai criar <b class="mono">${esc(q("#fCod").value.trim().toUpperCase() || "?")}</b> (${esc(st.tipo.toLowerCase())}${st.bloco !== "Geral" ? ", bloco " + st.bloco : ""}${st.tipo !== "Zona comum" ? ", piso " + (Number(st.piso) || 0) : ""})${n ? ` com <b>${n} atividades</b>` : " sem atividades"}.`;
+    q("#fRes").innerHTML = `${st.teste ? "<b>Teste:</b> " : ""}Vai criar <b class="mono">${esc(q("#fCod").value.trim().toUpperCase() || "?")}</b> (${esc(st.tipo.toLowerCase())}${st.bloco !== "Geral" ? ", bloco " + st.bloco : ""}${st.tipo !== "Zona comum" ? ", piso " + (Number(st.piso) || 0) : ""})${n ? ` com <b>${n} atividades</b>` : " sem atividades"}.`;
   };
-  ["#fTipo", "#fBloco", "#fPiso", "#fCop"].forEach((x) => (q(x).oninput = q(x).onchange = atualiza));
+  ["#fTipo", "#fBloco", "#fPiso", "#fCop", "#fTeste"].forEach((x) => (q(x).oninput = q(x).onchange = atualiza));
   q("#fCod").oninput = () => {
     st.codigoManual = true;
     const m = /^([A-D])-F(\d)\d\d$/i.exec(q("#fCod").value.trim());
@@ -3367,7 +3386,7 @@ function openNovaFracao() {
     if (S.uMap[id]) { err.textContent = `Já existe a fração ${id}.`; return; }
     const piso = st.tipo === "Zona comum" ? 99 : Math.max(0, Number(st.piso) || 0);
     const nome = q("#fNome").value.trim() || (st.tipo === "Zona comum" ? `Zonas comuns ${st.bloco === "Geral" ? "gerais" : "Bloco " + st.bloco}` : id);
-    const nova = { id, bloco: st.bloco, tipo: st.tipo, nome, piso };
+    const nova = { id, bloco: st.bloco, tipo: st.tipo, nome, piso, ...(st.teste ? { teste: true } : {}) };
     const ini = q("#fIni").value || null;
     const lote = proximoLote(), base = Date.now().toString(36);
     let lista = [];
@@ -3387,14 +3406,15 @@ function openNovaFracao() {
         const a = { id: `n${base}-${i}`, ref: `${lote}#${i + 1}`, lote, unidade: id, seccao: x.seccao, duracao: x.duracao, pctEmp: 0 };
         if (x.esp) a.esp = x.esp;
         if (x.duracaoManual != null) a.duracaoManual = x.duracaoManual;
-        if (x.equipa) a.equipa = x.equipa;
+        if (x.equipa && !st.teste) a.equipa = x.equipa;
         if (ini && x.planInicio) { a.planInicio = addDays(x.planInicio, desloc); a.planFim = x.planFim ? addDays(x.planFim, desloc) : null; }
         else if (ini) { a.planInicio = ini; a.planFim = addDays(ini, x.duracao || 0); }
         return a;
       });
     }
+    if (st.teste) lista.forEach((a) => (a.teste = true));
     const unidades = ordenaUnidades([...(S.cfg.unidades || []), nova]);
-    const texto = `Nova fração ${id} (${st.tipo.toLowerCase()}${st.bloco !== "Geral" ? ", bloco " + st.bloco : ""})${lista.length ? ` com ${lista.length} atividades` : ""}`;
+    const texto = `${st.teste ? "Fração de teste" : "Nova fração"} ${id} (${st.tipo.toLowerCase()}${st.bloco !== "Geral" ? ", bloco " + st.bloco : ""})${lista.length ? ` com ${lista.length} atividades` : ""}`;
     if (lista.length) await store.addAtividades(lista, { unidades }, { tipo: "fracao", texto });
     else await store.setConfig({ unidades }, { tipo: "fracao", texto });
     fechar();
@@ -3421,7 +3441,7 @@ function delUnidadeHTML(u) {
     <div class="row"><input class="inp mono" id="delCod" autocomplete="off" style="max-width:180px" aria-label="Código da fração"><button class="btn sm delfinal" id="delSim" disabled>Eliminar definitivamente</button>${cancelar}</div></div>`;
 }
 function bindDelUnidade(u) {
-  const b0 = $("#delU"); if (b0) b0.onclick = () => { ui.delUnit = { id: u.id, passo: 1 }; render(); };
+  const b0 = $("#delU"); if (b0) b0.onclick = () => { ui.delUnit = { id: u.id, passo: u.teste ? 3 : 1 }; render(); };
   document.querySelectorAll("[data-delu]").forEach((b) => (b.onclick = () => {
     const v = b.dataset.delu;
     if (v === "cancelar") ui.delUnit = null; else ui.delUnit = { id: u.id, passo: Number(v) };
@@ -3671,6 +3691,7 @@ function renderNova() {
     let cur = ini, prev = null;
     const lista = alvos.map((u, i) => {
       const a = { id: `n${base}-${i}`, ref: `${lote}#${i + 1}`, lote, unidade: u.id, seccao: nome, duracao: dias, pctEmp: 0 };
+      if (u.teste) a.teste = true;
       if (espKey) a.esp = espKey;
       if (espKey && !cfgPatch.duracoes && padrao != null && padrao !== dias) a.duracaoManual = dias;
       if (equipa) a.equipa = equipa;

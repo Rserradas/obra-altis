@@ -1116,3 +1116,8 @@ a.pv-fr:hover { background: var(--surface-2); }
 .ge-rot .ge-l.cont { border-bottom-color: transparent; }
 .fq-ac { display: inline-flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
 @media (max-width: 600px) { .toast { width: calc(100% - 32px); justify-content: space-between; } }
+
+/* frações de teste */
+.pill.teste-p { background: var(--warn-soft); color: var(--warn); font-weight: 700; letter-spacing: .06em; }
+.ucard.teste { border-style: dashed; border-color: var(--warn); }
+.banner.teste-b { background: var(--warn-soft); border-color: var(--warn); }
