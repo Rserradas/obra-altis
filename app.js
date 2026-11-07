@@ -46,6 +46,7 @@ const ICON = {
   plano: '<svg viewBox="0 0 24 24"><path d="M3 6h8M3 12h12M3 18h6"/><rect x="13" y="4" width="8" height="4" rx="1"/><rect x="17" y="10" width="4" height="4" rx="1"/><rect x="11" y="16" width="8" height="4" rx="1"/></svg>',
   regras: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3M5.3 5.3l2.1 2.1M16.6 16.6l2.1 2.1M5.3 18.7l2.1-2.1M16.6 7.4l2.1-2.1"/></svg>',
   gantt: '<svg viewBox="0 0 24 24"><path d="M3 4v16h18"/><rect x="6" y="6" width="7" height="3" rx="1"/><rect x="10" y="11" width="8" height="3" rx="1"/><rect x="8" y="16" width="5" height="2.5" rx="1"/></svg>',
+  previsao: '<svg viewBox="0 0 24 24"><path d="M5 21V4"/><path d="M5 4h12l-2.5 3.5L17 11H5"/><path d="M3 21h8"/></svg>',
   equipa: '<svg viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c.8-3.6 3.4-5.5 6.5-5.5s5.7 1.9 6.5 5.5"/><path d="M16 4.5a3.5 3.5 0 0 1 0 7M18 14.8c1.8.7 3 2.4 3.5 5.2"/></svg>',
   galeria: '<svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="2"/><path d="m21 17-5-5-9 8"/></svg>',
   coment: '<svg viewBox="0 0 24 24"><path d="M4 5h16v11H9l-5 4z"/></svg>',
@@ -210,7 +211,9 @@ function compute() {
   const nomesReg = new Set(registadas.map((e) => e.nome));
   const soNosTrab = [...new Set(acts.map((a) => a.equipa).filter((n) => n && !nomesReg.has(n)))].map((nome) => ({ nome, daObra: true }));
   S.eqLista = [...registadas, ...soNosTrab].sort((a, b) => a.nome.localeCompare(b.nome, "pt", { numeric: true }));
-  S.equipas = S.eqLista.map((e) => e.nome);
+  S.equipasTodas = S.eqLista.map((e) => e.nome);
+  // as equipas que saíram da obra deixam de aparecer para atribuir, mas ficam no histórico e nos filtros
+  S.equipas = S.eqLista.filter((e) => e.ativa !== false).map((e) => e.nome);
 }
 const nomeAtiv = (a) => (a.esp && S.espIdx[a.esp] ? S.espIdx[a.esp].nome : a.seccao);
 const blocoLabel = (b) => (b === "Geral" ? "Geral" : "Bloco " + b);
@@ -341,9 +344,10 @@ function navItems() {
     { id: "gantt", label: "Gantt", short: "Gantt" },
   ];
   const vist = { id: "vistorias", label: "Relatórios de vistoria", short: "Relatórios" };
-  if (p === "empreiteiro") return [{ id: "semana", label: "A minha semana", short: "Semana" }, items[2], items[4], items[1], items[0], { ...vist, soLado: true }, { ...items[3], soLado: true }];
-  if (p === "fiscal") return [items[1], vist, items[0], items[2], items[4]];
-  return [items[0], items[1], items[2], items[4], { ...vist, soLado: true }, items[3]];
+  const prev = { id: "previsao", label: "Fim da obra", short: "Fim" };
+  if (p === "empreiteiro") return [{ id: "semana", label: "A minha semana", short: "Semana" }, items[2], items[4], items[1], items[0], { ...prev, soLado: true }, { ...vist, soLado: true }, { ...items[3], soLado: true }];
+  if (p === "fiscal") return [items[1], vist, items[0], items[2], { ...prev, soLado: true }, { ...items[4], soLado: true }];
+  return [items[0], prev, items[1], items[2], { ...items[4], soLado: true }, { ...vist, soLado: true }, items[3]];
 }
 function routeView() {
   let h = location.hash.replace("#", "");
@@ -356,9 +360,10 @@ function routeView() {
   }
   if (h === "equipa" && store.user.papel !== "dono") h = "painel";
   if (h === "equipas" && !can("executar")) h = "painel";
-  const v = { painel: painelView, unidades: unidadesView, plano: planoView, regras: regrasView, equipa: equipaView, equipas: equipasView, gantt: ganttView, semana: semanaView, relatorio: relatorioView, vistorias: vistoriasView, relvist: relVistView }[h] || painelView;
-  const navDe = { equipa: "regras", equipas: "regras", relatorio: "painel", relvist: "vistorias" };
-  return { nav: navDe[h] || (h in { painel: 1, unidades: 1, plano: 1, regras: 1, gantt: 1, semana: 1, vistorias: 1 } ? h : "painel"), ...v() };
+  const v = { painel: painelView, unidades: unidadesView, plano: planoView, regras: regrasView, equipa: equipaView, equipas: equipasView, gantt: ganttView, semana: semanaView, relatorio: relatorioView, vistorias: vistoriasView, relvist: relVistView, previsao: previsaoView, planequipa: planEquipaView }[h] || painelView;
+  if (h === "planequipa" && !can("executar")) h = "painel";
+  const navDe = { equipa: "regras", equipas: "regras", planequipa: "regras", relatorio: "painel", relvist: "vistorias" };
+  return { nav: navDe[h] || (h in { painel: 1, unidades: 1, plano: 1, regras: 1, gantt: 1, semana: 1, vistorias: 1, previsao: 1 } ? h : "painel"), ...v() };
 }
 
 /* ============================================================ login */
@@ -406,7 +411,7 @@ function semConfigHTML() {
   const dono = store.user.papel === "dono";
   return `<div class="card" style="max-width:640px">
     <h1>A obra ainda não tem dados</h1>
-    ${dono ? `<p>Importe o cronograma extraído do Excel (${store.seed ? store.seed.atividades.length : 0} atividades, ${store.seed ? store.seed.unidades.length : 0} frações e zonas). Só é preciso fazer isto uma vez.</p>
+    ${dono ? `<p>Importe o cronograma (${store.seed ? store.seed.atividades.length : 0} atividades, ${store.seed ? store.seed.unidades.length : 0} frações e zonas). Só é preciso fazer isto uma vez.</p>
       <div class="row"><button class="btn pri" id="imp">Importar cronograma</button><span class="note" id="impst"></span></div>`
       : `<p>O dono de obra ainda não importou o cronograma. Volte a abrir a aplicação mais tarde.</p>`}
   </div>`;
@@ -500,7 +505,7 @@ function painelView() {
           : `<div class="empty">Sem atividades atrasadas.</div>`}</div>
       </section>
     </div>
-    ${t.semPlano && can("executar") ? `<div class="banner warn"><span><b>${t.semPlano} atividades com datas por confirmar.</b> Não tinham data no Excel e a aplicação deu-lhes a primeira data possível, o que torna o fim previsto otimista.</span><a class="btn sm" href="#plano" data-f="porconfirmar">Rever datas</a></div>` : ""}
+    ${t.semPlano && can("executar") ? `<div class="banner warn"><span><b>${t.semPlano} atividades com datas por confirmar.</b> Não tinham data e a aplicação deu-lhes a primeira data possível, o que torna o fim previsto otimista.</span><a class="btn sm" href="#plano" data-f="porconfirmar">Rever datas</a></div>` : ""}
     <section class="card" id="semanaRes"><div class="card-h"><h2>Esta semana</h2><span class="note">últimos 7 dias</span></div><div class="note">A carregar...</div></section>
     ${heatHTML()}
     <section class="card">
@@ -510,6 +515,161 @@ function painelView() {
         : `<div class="empty">Ainda não há registos. Quando o empreiteiro ou o fiscal atualizarem atividades, aparecem aqui.</div>`}</div>
     </section>`;
   return { html, bind: () => { bindCommon(); resumoSemana(); guardarFotoDiaria(); const bc = $("#corrExp"); if (bc) bc.onclick = corrigirExpiradas; const bf = $("#impFalta"); if (bf) bf.onclick = () => { bf.disabled = true; importarComProgresso(true, () => { bf.disabled = false; }); }; } };
+}
+/* ============================================================ fim da obra (previsão por bloco e por fração) */
+const NOME_BLOCO = (k) => (k.length === 1 ? "Bloco " + k : k);
+function estadoFr(u) {
+  const t = u.acts.length;
+  if (!t) return { k: "vazio", l: "Sem trabalhos" };
+  if (u.n.concluida === t) return { k: "pronto", l: "Pronto" };
+  if (u.n.concluida || u.n.em_curso) return { k: "curso", l: "Em curso" };
+  return { k: "porcomecar", l: "Por começar" };
+}
+function infoFracao(u) {
+  let plano = null, ini = null, ultima = null, falta = 0, fimReal = null;
+  for (const a of u.acts) {
+    const r = S.res.get(a.id);
+    const pf = a.planFim || r.prevFim;
+    if (pf && (!plano || pf > plano)) plano = pf;
+    if (r.inicio && (!ini || r.inicio < ini)) ini = r.inicio;
+    if (r.estado !== "concluida") { falta++; if (!ultima || r.provFim > S.res.get(ultima.id).provFim) ultima = a; }
+    else if (r.fim && (!fimReal || r.fim > fimReal)) fimReal = r.fim;
+  }
+  const est = estadoFr(u);
+  const fim = est.k === "pronto" ? fimReal || u.fim : u.fim;
+  return { u, est, fim, plano, ini, ultima, falta, atraso: est.k === "pronto" ? null : u.atraso ?? 0 };
+}
+function previsaoView() {
+  const ordB = ["A", "B", "C", "D", "Lojas", "Geral"];
+  const pv = (ui.prev = ui.prev || { ord: "fim", tipo: "todos", abertos: new Set(["A"]) });
+  const infos = S.unidades.map(infoFracao);
+  const grupo = (i) => (i.u.tipo === "Loja" ? "Lojas" : i.u.bloco);
+  const blocos = ordB.map((k) => {
+    const lst = infos.filter((i) => grupo(i) === k);
+    if (!lst.length) return null;
+    let dur = 0, feito = 0, fim = null, plano = null, ini = null, ultima = null, atraso = null, nAtr = 0;
+    for (const i of lst) {
+      dur += i.u.dur; feito += i.u.feito;
+      if (i.fim && (!fim || i.fim > fim)) fim = i.fim;
+      if (i.plano && (!plano || i.plano > plano)) plano = i.plano;
+      if (i.ini && (!ini || i.ini < ini)) ini = i.ini;
+      if (i.atraso != null) atraso = Math.max(atraso ?? 0, i.atraso);
+      nAtr += i.u.n.atrasada;
+      if (i.ultima && (!ultima || S.res.get(i.ultima.id).provFim > S.res.get(ultima.id).provFim)) ultima = i.ultima;
+    }
+    const aps = lst.filter((i) => i.u.tipo === "Apartamento" || i.u.tipo === "Loja");
+    return { k, lst, pct: dur ? Math.round((100 * feito) / dur) : 0, fim, plano, ini, ultima, atraso, nAtr,
+      nAp: aps.length, prontos: aps.filter((i) => i.est.k === "pronto").length, emCurso: aps.filter((i) => i.est.k === "curso").length };
+  }).filter(Boolean);
+  const t = S.tot;
+  let dur = 0, feito = 0, plano = null;
+  for (const b of blocos) { if (b.plano && (!plano || b.plano > plano)) plano = b.plano; }
+  for (const u of S.unidades) { dur += u.dur; feito += u.feito; }
+  const pctObra = dur ? Math.round((100 * feito) / dur) : 0;
+  const faltam = t.fim ? Math.max(0, diffDays(S.hoje, t.fim)) : null;
+  const h = S.cfg.historico || [];
+  const ref = (dias) => [...h].reverse().find((x) => x.d <= addDays(S.hoje, -dias)) || null;
+  const tend = [[7, "semana passada"], [30, "há um mês"]].map(([d, l]) => { const r = ref(d); return r && r.fim ? { l, d: diffDays(r.fim, t.fim), era: r.fim } : null; }).filter(Boolean);
+  const blocoFim = blocos.filter((b) => b.k !== "Geral").reduce((m, b) => (!m || (b.fim && b.fim > m.fim) ? b : m), null);
+  // o que acaba por último na obra
+  const ultimasObra = Object.values(S.acts).filter((a) => S.res.get(a.id).estado !== "concluida").sort((x, y) => S.res.get(y.id).provFim.localeCompare(S.res.get(x.id).provFim)).slice(0, 5);
+  // linha do tempo dos blocos
+  let t0 = blocos.reduce((m, b) => (b.ini && (!m || b.ini < m) ? b.ini : m), null) || S.hoje;
+  let t1 = blocos.reduce((m, b) => (b.fim && (!m || b.fim > m) ? b.fim : m), null) || S.hoje;
+  if (S.hoje > t1) t1 = S.hoje;
+  const span = Math.max(1, diffDays(t0, t1));
+  const pos = (d) => Math.max(0, Math.min(100, (100 * diffDays(t0, d)) / span));
+  const meses = []; { let d = t0.slice(0, 7) + "-01"; while (d <= t1) { if (d >= t0) meses.push(d); const [y, m] = d.split("-").map(Number); d = m === 12 ? `${y + 1}-01-01` : `${y}-${String(m + 1).padStart(2, "0")}-01`; } }
+  const passoM = Math.max(1, Math.ceil(meses.length / 10));
+  const atrHTML = (n) => (n == null ? "" : deltaHTML(n, n > 0 ? `Tem atividades com até ${n} dias de atraso` : "Sem atividades atrasadas"));
+  // entregas por mês (apartamentos e lojas)
+  const aps = infos.filter((i) => (i.u.tipo === "Apartamento" || i.u.tipo === "Loja") && i.fim);
+  const porMes = {};
+  for (const i of aps) { const m = i.fim.slice(0, 7); porMes[m] = (porMes[m] || 0) + 1; }
+  const mesesE = Object.keys(porMes).sort();
+  const maxM = Math.max(1, ...Object.values(porMes));
+  let acum = 0;
+  const hojeM = S.hoje.slice(0, 7);
+  const nomeMes = (m) => { const [y, mm] = m.split("-"); return `${MESES[Number(mm) - 1]} ${y.slice(2)}`; };
+  // tabela por bloco
+  const ordena = (lst) => [...lst].sort(pv.ord === "fim" ? (a, b) => (a.fim || "9").localeCompare(b.fim || "9") || a.u.id.localeCompare(b.u.id, "pt", { numeric: true })
+    : pv.ord === "desvio" ? (a, b) => (b.atraso ?? -999) - (a.atraso ?? -999) : pv.ord === "pct" ? (a, b) => a.u.pct - b.u.pct : () => 0);
+  const filtraTipo = (i) => pv.tipo === "todos" || (pv.tipo === "ap" ? i.u.tipo === "Apartamento" || i.u.tipo === "Loja" : !(i.u.tipo === "Apartamento" || i.u.tipo === "Loja"));
+  const linhaFr = (i) => `<a class="pv-fr" href="#u-${esc(i.u.id)}">
+      <span class="pv-id"><b class="mono">${esc(i.u.tipo === "Apartamento" || i.u.tipo === "Loja" ? i.u.id : i.u.nome || i.u.id)}</b>${i.u.tipo && i.u.tipo !== "Apartamento" ? `<small>${esc(i.u.tipo)}</small>` : ""}</span>
+      <span class="pv-est e-${i.est.k}">${i.est.l}</span>
+      <span class="pv-pc"><span class="track"><i style="width:${i.u.pct}%"></i></span><span class="num mono">${i.u.pct}%</span></span>
+      <span class="pv-f"><b class="num">${i.est.k === "pronto" ? "pronto a " : ""}${fd(i.fim, true)}</b>${atrHTML(i.atraso)}</span>
+      <span class="pv-u">${i.est.k === "pronto" ? `<span class="note">tudo concluído</span>` : `<span class="note">falta${i.falta === 1 ? "" : "m"} <b>${i.falta}</b>${i.ultima ? ` · acaba com ${esc(nomeAtiv(i.ultima))}` : ""}</span>`}</span>
+    </a>`;
+  const html = `
+    <div class="card-h"><h1>Fim da obra</h1><div class="row no-print"><button class="btn" id="pvPrint">Imprimir</button></div></div>
+    <div class="pv-top">
+      <div class="pv-big">
+        <div class="eyebrow">A obra acaba, se tudo seguir como agora, a</div>
+        <big class="num">${fd(t.fim, true)}</big>
+        <div class="sub">${faltam != null ? `Faltam <b>${faltam} dias</b>, cerca de ${Math.round(faltam / 30.4)} meses. ` : ""}</div>
+        ${tend.length ? `<div class="sub">${tend.map((x) => x.d > 0 ? `Desde ${x.l}, o fim atrasou <b class="mau-t">${x.d} dias</b>.` : x.d < 0 ? `Desde ${x.l}, o fim adiantou <b class="bom-t">${-x.d} dias</b>.` : `Desde ${x.l}, o fim não mudou.`).join(" ")}</div>` : ""}
+      </div>
+      <div class="pv-kp">
+        <div class="pv-k"><b class="num">${pctObra}%</b><span>da obra feita</span><span class="track"><i style="width:${pctObra}%"></i></span></div>
+        <div class="pv-k"><b class="num">${aps.filter((i) => i.est.k === "pronto").length}<small> de ${infos.filter((i) => i.u.tipo === "Apartamento" || i.u.tipo === "Loja").length}</small></b><span>apartamentos e lojas prontos</span></div>
+        <div class="pv-k"><b class="num">${t.atrasada}</b><span>atividades atrasadas</span></div>
+        ${blocoFim ? `<div class="pv-k"><b>${NOME_BLOCO(blocoFim.k)}</b><span>é o último a ficar pronto, a ${fd(blocoFim.fim, true)}</span></div>` : ""}
+      </div>
+    </div>
+
+    <section class="card">
+      <div class="card-h"><h2>Quando fica pronto cada bloco</h2><span class="note">barra: do primeiro trabalho ao fim provável · parte escura: o que já está feito</span></div>
+      <div class="pv-tl">
+        <div class="pv-row pv-ax"><span></span><div class="pv-tr">${meses.filter((_, j) => j % passoM === 0).map((m, j) => `<i style="left:${pos(m)}%"><em class="${j % 2 ? "imp" : ""}" ${Math.abs(pos(m) - pos(S.hoje)) < 9 ? "hidden" : ""}>${nomeMes(m.slice(0, 7))}</em></i>`).join("")}<u class="pv-hoje" style="left:${pos(S.hoje)}%"><em>hoje</em></u></div><span></span></div>
+        ${blocos.map((b) => `<div class="pv-row"><b>${NOME_BLOCO(b.k)}</b><div class="pv-tr">
+            ${meses.filter((_, j) => j % passoM === 0).map((m) => `<i style="left:${pos(m)}%"></i>`).join("")}
+            <span class="pv-bar ${b.atraso > 0 ? "late" : ""}" style="left:${pos(b.ini || t0)}%;width:${Math.max(1, pos(b.fim || S.hoje) - pos(b.ini || t0))}%"><span class="pv-done" style="width:${b.pct}%"></span></span>
+            <u class="pv-hoje" style="left:${pos(S.hoje)}%"></u>
+          </div><span class="pv-fimb num"><b>${fd(b.fim, true)}</b>${atrHTML(b.atraso)}</span></div>`).join("")}
+      </div>
+      <div class="pv-bl">${blocos.map((b) => `<div class="pv-bc">
+          <div class="pv-bch"><b>${NOME_BLOCO(b.k)}</b><span class="num mono">${b.pct}%</span></div>
+          <div class="track"><i style="width:${b.pct}%"></i></div>
+          <div class="ln"><span>Fica pronto a</span><span><b class="num">${fd(b.fim, true)}</b></span></div>
+          <div class="ln"><span>Atrasos</span><span class="num">${b.nAtr ? `<b>${b.nAtr}</b> ${b.nAtr === 1 ? "atividade atrasada" : "atividades atrasadas"} ${atrHTML(b.atraso)}` : "nenhum"}</span></div>
+          ${b.nAp ? `<div class="ln"><span>${b.k === "Lojas" ? "Lojas" : "Apartamentos"}</span><span class="num"><b>${b.prontos}</b> prontos · ${b.emCurso} em curso · ${b.nAp - b.prontos - b.emCurso} por começar</span></div>` : ""}
+          ${b.ultima ? `<div class="ln"><span>Acaba com</span><span>${esc(nomeAtiv(b.ultima))} <span class="mono">${esc(b.ultima.unidade)}</span></span></div>` : ""}
+        </div>`).join("")}</div>
+    </section>
+
+    ${mesesE.length ? `<section class="card">
+      <div class="card-h"><h2>Apartamentos e lojas prontos por mês</h2><span class="note">pelo fim provável de cada um · acumulado em baixo</span></div>
+      <div class="pv-mes">${mesesE.map((m) => { acum += porMes[m]; return `<div class="pv-m ${m < hojeM ? "pass" : m === hojeM ? "agora" : ""}" title="${porMes[m]} ${m < hojeM ? "ficaram prontos" : "ficam prontos"} em ${nomeMes(m)}"><span class="num pv-mn">${porMes[m]}</span><span class="pv-mb" style="height:${Math.round((100 * porMes[m]) / maxM)}%"></span><span class="pv-ml">${nomeMes(m)}</span><span class="pv-ma num">${acum}</span></div>`; }).join("")}</div>
+    </section>` : ""}
+
+    <section class="card">
+      <div class="card-h"><h2>O que vai acabar por último</h2><span class="note">as atividades que marcam o fim da obra</span></div>
+      <div class="list">${ultimasObra.map((a) => { const r = S.res.get(a.id); return `<button class="li li-btn" data-a="${a.id}"><span class="li-t">${esc(nomeAtiv(a))} <span class="mono">${esc(a.unidade)}</span></span><span class="num"><b>${fd(r.provFim, true)}</b></span><span class="li-s"><span class="pill st-${r.estado}">${ESTADO[r.estado]}</span>${r.bloqueadaPor.length ? `<span>à espera de ${esc(nomeAtiv(S.acts[r.bloqueadaPor[0]] || a))}${r.bloqueadaPor.length > 1 ? " +" + (r.bloqueadaPor.length - 1) : ""}</span>` : ""}${a.equipa ? `<span>${esc(a.equipa)}</span>` : ""}</span></button>`; }).join("") || `<div class="empty">Está tudo concluído.</div>`}</div>
+    </section>
+
+    <section class="card">
+      <div class="card-h"><h2>Por apartamento</h2>
+        <div class="row no-print">
+          <label class="f">Mostrar<select class="inp" id="pvTipo"><option value="todos" ${pv.tipo === "todos" ? "selected" : ""}>Tudo</option><option value="ap" ${pv.tipo === "ap" ? "selected" : ""}>Só apartamentos e lojas</option><option value="zonas" ${pv.tipo === "zonas" ? "selected" : ""}>Só zonas comuns e gerais</option></select></label>
+          <label class="f">Ordenar<select class="inp" id="pvOrd"><option value="fim" ${pv.ord === "fim" ? "selected" : ""}>Pela data de fim</option><option value="desvio" ${pv.ord === "desvio" ? "selected" : ""}>Mais atrasados primeiro</option><option value="pct" ${pv.ord === "pct" ? "selected" : ""}>Menos avançados primeiro</option><option value="fracao" ${pv.ord === "fracao" ? "selected" : ""}>Pela fração</option></select></label>
+          <button class="btn sm" id="pvAbrir">${pv.abertos.size >= blocos.length ? "Fechar todos" : "Abrir todos"}</button>
+        </div></div>
+      ${blocos.map((b) => { const l = ordena(b.lst.filter(filtraTipo)); if (!l.length) return ""; return `<details class="pv-det" data-pvb="${b.k}" ${pv.abertos.has(b.k) ? "open" : ""}>
+        <summary><b>${NOME_BLOCO(b.k)}</b><span class="note num">${b.nAp ? `${b.prontos} de ${b.nAp} prontos · ` : ""}fica pronto a ${fd(b.fim, true)}</span>${atrHTML(b.atraso)}</summary>
+        <div class="pv-frs"><div class="pv-fr pv-frh" aria-hidden="true"><span>Fração</span><span>Estado</span><span>Feito</span><span>Fim provável · atraso</span><span>O que falta</span></div>${l.map(linhaFr).join("")}</div>
+      </details>`; }).join("")}
+      <p class="note">O fim provável conta com o estado real de hoje e com a sequência dos trabalhos. O atraso é o da atividade mais atrasada de cada fração. Toque numa fração para ver as atividades.</p>
+    </section>`;
+  return { html, bind: () => {
+    bindCommon();
+    $("#pvPrint").onclick = () => { document.querySelectorAll(".pv-det").forEach((d) => (d.open = true)); window.print(); };
+    $("#pvOrd").onchange = (e) => { pv.ord = e.target.value; render(); };
+    $("#pvTipo").onchange = (e) => { pv.tipo = e.target.value; render(); };
+    $("#pvAbrir").onclick = () => { pv.abertos = pv.abertos.size >= blocos.length ? new Set() : new Set(blocos.map((b) => b.k)); render(); };
+    document.querySelectorAll(".pv-det").forEach((d) => d.addEventListener("toggle", () => { if (d.open) pv.abertos.add(d.dataset.pvb); else pv.abertos.delete(d.dataset.pvb); }));
+  } };
 }
 /** Guarda uma vez por dia o fim previsto e os totais, para comparar semana a semana. */
 async function guardarFotoDiaria() {
@@ -1060,13 +1220,13 @@ function planoView() {
         return us.length ? `<optgroup label="${g === "Geral" ? "Geral" : "Bloco " + g}">${us.map((u) => `<option value="${esc(u.id)}" ${p.unidade === u.id ? "selected" : ""}>${esc(u.tipo === "Apartamento" || /-L\d+$/.test(u.id) ? u.id : u.nome)}</option>`).join("")}</optgroup>` : "";
       }).join("")}</select></label>
       <label class="f">Atividade<select class="inp" id="pa"><option value="">Todas</option>${nomes.map((n) => `<option ${p.ativ === n ? "selected" : ""}>${esc(n)}</option>`).join("")}</select></label>
-      <label class="f">Equipa<select class="inp" id="pe"><option value="">Todas</option><option value="_sem" ${p.equipa === "_sem" ? "selected" : ""}>Sem equipa</option>${S.equipas.map((e) => `<option ${p.equipa === e ? "selected" : ""}>${esc(e)}</option>`).join("")}</select></label>
+      <label class="f">Equipa<select class="inp" id="pe"><option value="">Todas</option><option value="_sem" ${p.equipa === "_sem" ? "selected" : ""}>Sem equipa</option>${S.equipasTodas.map((e) => `<option ${p.equipa === e ? "selected" : ""}>${esc(e)}</option>`).join("")}</select></label>
       <label class="f" style="flex:1;min-width:180px">Procurar<input class="inp" id="pq" value="${esc(p.q)}" placeholder="Ex.: B-F503, louças, 2#10"></label>
       <label class="check" style="align-self:center"><input type="checkbox" id="psa" ${p.soAtr ? "checked" : ""}><span>Só atrasadas</span></label>
       <label class="check" style="align-self:center" title="${p.f === "concluida" ? "Não se aplica ao ver as concluídas" : "Esconde as atividades 100% concluídas"}"><input type="checkbox" id="psc" ${p.semConc ? "checked" : ""} ${p.f === "concluida" ? "disabled" : ""}><span>Esconder concluídas</span></label>
       ${filtrosAlterados() ? `<button class="btn sm repor-on" id="pclr" style="align-self:center">Repor filtros</button>` : ""}
     </div>
-    ${p.f === "porconfirmar" ? `<div class="banner warn"><span>Estas atividades nunca tiveram data no Excel. A aplicação deu-lhes a primeira data possível: hoje, ou logo a seguir às anteriores. Corra a lista e, em cada uma, corrija a data (com Editar datas) ou confirme que está certa. Ao mudar uma data, a atividade sai desta lista.</span>${can("executar") && shown.length ? `<button class="btn sm" id="confTodas">Confirmar as ${shown.length} mostradas</button>` : ""}</div>` : ""}
+    ${p.f === "porconfirmar" ? `<div class="banner warn"><span>Estas atividades nunca tiveram data. A aplicação deu-lhes a primeira data possível: hoje, ou logo a seguir às anteriores. Corra a lista e, em cada uma, corrija a data (com Editar datas) ou confirme que está certa. Ao mudar uma data, a atividade sai desta lista.</span>${can("executar") && shown.length ? `<button class="btn sm" id="confTodas">Confirmar as ${shown.length} mostradas</button>` : ""}</div>` : ""}
     ${atr ? `<div class="atrbar" id="atrbar">
       <span class="num"><b>${p.selec.size}</b> escolhida${p.selec.size === 1 ? "" : "s"}</span>
       <button class="btn sm" id="atrTodas">Escolher as ${shown.length} da lista</button>${p.selec.size ? `<button class="btn sm ghost" id="atrLimpa">Limpar escolha</button>` : ""}
@@ -1407,7 +1567,7 @@ async function decidirSeguintes(id, patch) {
   const outrasMexem = outras.filter((sid) => simul2.get(sid).prevIni !== S.res.get(sid).prevIni);
   // ligações que saem deste apartamento para outras frações (desta atividade ou das seguintes deste apartamento)
   const cortes = [];
-  for (const pid of [id, ...mesmas]) for (const sid of S.res.get(pid).succ || []) { if (S.acts[sid] && S.acts[sid].unidade !== a.unidade && porIniciar(sid)) cortes.push({ sid, pid }); }
+  for (const pid of [id, ...mesmas]) for (const sid of S.res.get(pid).succ || []) { if (S.acts[sid] && S.acts[sid].unidade !== a.unidade && porIniciar(sid) && !(S.res.get(sid).preds || []).some((d) => d.id === pid && d.fonte === "equipa")) cortes.push({ sid, pid }); }
   const mexem = (naFracao ? mesmas : abertas).filter((sid) => simul.get(sid).prevIni !== S.res.get(sid).prevIni).length;
   const lst = naFracao ? mesmas : abertas;
   const n = lst.length, dias = Math.abs(delta), um = n === 1, frente = delta > 0;
@@ -1605,7 +1765,7 @@ function semanaView() {
     </div>
     <div class="chips" role="group" aria-label="Mostrar">${VER.map(([k, l]) => `<button class="chip ${w.ver === k ? "on" : ""}" data-sver2="${k}">${l}${k ? ` <span class="num" style="opacity:.65">${{ curso: emCurso, comecar, espera }[k].length}</span>` : ""}</button>`).join("")}</div>
     <div class="chips" role="group" aria-label="Bloco">${["", "A", "B", "C", "D", "Geral"].map((b) => `<button class="chip ${w.bloco === b ? "on" : ""}" data-sb="${b}">${b === "Geral" ? "Geral" : b ? "Bloco " + b : "Todos os blocos"}</button>`).join("")}</div>
-    <div class="filters"><label class="f">Equipa<select class="inp" id="sEq"><option value="">Todas as equipas</option>${S.equipas.map((e) => `<option ${w.equipa === e ? "selected" : ""}>${esc(e)}</option>`).join("")}<option value="_sem" ${w.equipa === "_sem" ? "selected" : ""}>Sem equipa atribuída</option></select></label></div>
+    <div class="filters"><label class="f">Equipa<select class="inp" id="sEq"><option value="">Todas as equipas</option>${S.equipasTodas.map((e) => `<option ${w.equipa === e ? "selected" : ""}>${esc(e)}</option>`).join("")}<option value="_sem" ${w.equipa === "_sem" ? "selected" : ""}>Sem equipa atribuída</option></select></label></div>
     ${!w.ver || w.ver === "curso" ? secao("Em curso", "Atualize a percentagem ou conclua", emCurso, "curso", "em_curso") : ""}
     ${!w.ver || w.ver === "comecar" ? secao("Para começar", `Até ${fd(lim)}, já com as anteriores concluídas`, comecar, "comecar", "proximas") : ""}
     ${!w.ver || w.ver === "espera" ? secao("À espera de outras", "Ainda não podem começar: falta acabar o que está indicado", espera, "espera", "bloqueada") : ""}`;
@@ -1653,7 +1813,7 @@ function relatorioView() {
   const fr = S.unidades.filter((u) => u.acts.length);
   const html = `
     <div class="rel-acoes no-print"><a class="back" href="#painel">Painel</a>
-      <div class="row"><button class="btn pri" id="rPrint">Imprimir ou guardar em PDF</button><button class="btn" id="rCsv">Descarregar para Excel</button></div></div>
+      <div class="row"><button class="btn pri" id="rPrint">Imprimir ou guardar em PDF</button><button class="btn" id="rCsv">Descarregar tabela</button></div></div>
     <article class="rel">
       <header class="rel-h"><div><div class="eyebrow">Ponto de situação</div><h1>Obra ${esc(S.cfg.nome || "")}</h1></div><div class="rel-d">${fd(S.hoje, true)}</div></header>
       <section class="rel-kpis">
@@ -1699,7 +1859,7 @@ function descarregarCSV() {
   a.href = url; a.download = `obra-${(S.cfg.nome || "obra").toLowerCase()}-${S.hoje}.csv`;
   document.body.appendChild(a); a.click(); a.remove();
   setTimeout(() => URL.revokeObjectURL(url), 2000);
-  toast("Ficheiro para Excel descarregado", { anular: false });
+  toast("Tabela descarregada", { anular: false });
 }
 
 /* ============================================================ pesquisa rápida */
@@ -2069,14 +2229,14 @@ function abrirGuia(forcar) {
 /* ============================================================ definições: sequência + equipa */
 function defTabs(atual) {
   const t = [["regras", "Sequência e durações"]];
-  if (can("executar")) t.push(["equipas", "Equipas de trabalho"]);
+  if (can("executar")) t.push(["equipas", "Equipas de trabalho"], ["planequipa", "Plano das equipas"]);
   if (store.user.papel === "dono") t.push(["equipa", "Acessos"]);
   return `<div class="eyebrow">Definições</div><div class="tabs">${t.map(([h, l]) => `<a href="#${h}" class="deftab ${atual === h ? "on" : ""}">${l}</a>`).join("")}</div>`;
 }
 /* ============================================================ simulação do tempo mínimo
    Só com a sequência e os dias por fração desta página: cada especialidade arranca num apartamento
    logo que as suas condições acabam nesse apartamento. Com equipas limitadas, cada equipa faz os
-   apartamentos um a seguir ao outro. Não conta com o que já está feito nem com as ligações do Excel. */
+   apartamentos um a seguir ao outro. Não conta com o que já está feito nem com as outras ligações entre trabalhos. */
 function simular(esp, regras, dur, nAp, eq) {
   const keys = esp.map((e) => e.key), ks = new Set(keys);
   const pre = Object.fromEntries(keys.map((k) => [k, (regras[k] || []).filter((p) => ks.has(p) && p !== k)]));
@@ -2135,7 +2295,7 @@ function simGanttHTML(esp, regras, dur, nAp) {
   const ops = [["0", "Sem limite"], ["1", "1"], ["2", "2"], ["3", "3"], ["4", "4"]];
   return `<section class="sim">
     <div class="card-h"><h2>Simulação do tempo mínimo da obra</h2></div>
-    <p style="max-width:75ch">Calculado só com a sequência e os dias por fração desta página, para ${r.n} apartamentos, como se a obra começasse hoje do zero. Cada especialidade arranca num apartamento logo que as condições acabam nesse apartamento.${eq ? ` Cada especialidade tem ${eq === 1 ? "uma equipa, que faz" : eq + " equipas, que fazem"} os apartamentos um a seguir ao outro.` : " Com equipas sem limite, todos os apartamentos andam ao mesmo tempo."} Não conta com o que já está feito nem com as ligações do Excel.</p>
+    <p style="max-width:75ch">Calculado só com a sequência e os dias por fração desta página, para ${r.n} apartamentos, como se a obra começasse hoje do zero. Cada especialidade arranca num apartamento logo que as condições acabam nesse apartamento.${eq ? ` Cada especialidade tem ${eq === 1 ? "uma equipa, que faz" : eq + " equipas, que fazem"} os apartamentos um a seguir ao outro.` : " Com equipas sem limite, todos os apartamentos andam ao mesmo tempo."} Não conta com o que já está feito nem com as outras ligações entre trabalhos.</p>
     <div class="sim-op"><span class="note">Equipas por especialidade</span><div class="sim-seg">${ops.map(([v, l]) => `<button class="${op === v ? "on" : ""}" data-simeq="${v}">${l}</button>`).join("")}</div></div>
     <div class="sim-op"><span class="note">Ordenar por</span><div class="sim-seg">${ords.map(([v, l]) => `<button class="${so === v ? "on" : ""}" data-simord="${v}">${l}</button>`).join("")}</div></div>
     ${r.ciclo ? `<div class="banner warn">Há condições em círculo (uma especialidade espera por outra que espera por ela). A simulação ignora esse círculo.</div>` : ""}
@@ -2184,7 +2344,7 @@ function regrasView() {
           ${seq ? `<select class="inp" data-add="${e.key}"><option value="">+ acrescentar</option>${disp.map((x) => `<option value="${x.key}">${esc(x.nome)}</option>`).join("")}</select>` : ""}</div></div>`;
       }).join("")}
     </div>
-    <p class="note">As ligações que já existiam no Excel (por exemplo a sequência da Equipa 4 de apartamento em apartamento) continuam ativas além destas regras.</p>
+    <p class="note">As outras ligações entre trabalhos (por exemplo a sequência da Equipa 4 de apartamento em apartamento) continuam ativas além destas regras.</p>
     ${simGanttHTML(esp, regras, dur, nAp)}`;
   return {
     html, bind: () => {
@@ -2532,7 +2692,7 @@ function relVistView() {
 const telLink = (t) => `<a href="tel:${esc(String(t).replace(/[^\d+]/g, ""))}">${esc(t)}</a>`;
 /** Atribui (ou retira, com nome null) uma equipa a vários trabalhos de uma vez. */
 async function atribuirEquipa(ids, nome) {
-  const lista = ids.filter((id) => S.acts[id] && (S.acts[id].equipa || null) !== (nome || null)).map((id) => ({ id, patch: { equipa: nome || null } }));
+  const lista = ids.filter((id) => S.acts[id] && (S.acts[id].equipa || null) !== (nome || null)).map((id) => ({ id, patch: { equipa: nome || null, eqOrdem: null } }));
   if (!lista.length) { toast(nome ? `Já estava${ids.length > 1 ? "m" : ""} com ${nome}` : "Já estava sem equipa"); return; }
   const um = lista.length === 1 ? S.acts[lista[0].id] : null;
   const alvo = um ? `${nomeAtiv(um)} em ${um.unidade}` : `${lista.length} trabalhos`;
@@ -2559,25 +2719,31 @@ function equipasView() {
   const html = `
     ${defTabs("equipas")}
     <div class="card-h"><h1>Equipas de trabalho</h1><button class="btn pri" id="eqNova">+ Nova equipa</button></div>
-    <p style="max-width:70ch">As equipas que fazem os trabalhos na obra (mosaicos, pintura, carpintaria...). Cada trabalho pode ter uma equipa. Atribua uma a uma na ficha do trabalho, ou várias de uma vez em Trabalhos, com <b>Escolher várias</b>.</p>
+    <p style="max-width:70ch">As equipas que fazem os trabalhos na obra (mosaicos, pintura, carpintaria...). Na ficha de cada equipa diga o que ela pode fazer e onde trabalha: a aplicação mostra-lhe os trabalhos possíveis para planear. Se uma equipa sair da obra, abra a ficha dela e use <b>A equipa sai da obra</b>: os trabalhos que faltam passam para outras equipas.</p>
     ${semEq ? `<div class="banner"><span><b>${semEq} trabalhos por fazer ainda não têm equipa.</b></span><button class="btn sm" data-eqatr="_sem">Atribuir equipas</button></div>` : ""}
-    ${lista.length ? `<div class="eqcards">${lista.map((e) => {
+    ${lista.length ? `<div class="eqcards">${lista.filter((e) => e.ativa !== false).map((e) => {
       const t = statsEquipa(e.nome);
       const esps = (e.esp || []).map((k) => S.espIdx[k]).filter(Boolean);
       return `<section class="eqcard">
-        <div class="eqcard-h"><b>${esc(e.nome)}</b>${e.daObra ? `<span class="pill" title="Veio do Excel. Ao editar fica registada aqui.">do Excel</span>` : ""}</div>
+        <div class="eqcard-h"><b>${esc(e.nome)}</b>${e.daObra ? `<span class="pill" title="Já aparecia nos trabalhos. Ao editar fica registada aqui.">dos trabalhos</span>` : ""}</div>
         ${e.responsavel || e.telefone ? `<div class="note">${e.responsavel ? esc(e.responsavel) : ""}${e.responsavel && e.telefone ? " · " : ""}${e.telefone ? telLink(e.telefone) : ""}</div>` : ""}
         ${esps.length ? `<div class="tags">${esps.map((x) => `<span class="tag ro">${esc(x.nome)}</span>`).join("")}</div>` : ""}
+        ${e.blocos && e.blocos.length ? `<div class="note">Trabalha em: ${e.blocos.map((k) => (k.length === 1 ? "Bloco " + k : k)).join(", ")}</div>` : ""}
         <div class="eqstats num"><span><b>${t.fazer}</b> por fazer</span><span><b>${t.curso}</b> em curso</span>${t.atr ? `<span class="mau-t"><b>${t.atr}</b> atrasados</span>` : ""}<span><b>${t.conc}</b> concluídos</span></div>
         ${t.prox ? `<div class="note">Próximo: ${esc(nomeAtiv(t.prox.a))} em ${esc(t.prox.a.unidade)}, ${t.prox.r.inicio <= S.hoje ? "já pode começar" : fd(t.prox.r.inicio)}</div>` : ""}
         ${e.notas ? `<div class="note">${esc(e.notas)}</div>` : ""}
-        <div class="row" style="gap:6px;margin-top:auto"><button class="btn sm" data-eqver="${esc(e.nome)}">Ver trabalhos</button><button class="btn sm" data-eqatr="${esc(e.nome)}">Atribuir trabalhos</button><button class="btn sm" data-eqed="${esc(e.nome)}">Editar</button></div>
+        <div class="row" style="gap:6px;margin-top:auto"><button class="btn sm pri" data-eqplan="${esc(e.nome)}" title="Pôr os trabalhos desta equipa pela ordem em que os vai fazer">Planear</button><button class="btn sm" data-eqver="${esc(e.nome)}">Ver trabalhos</button><button class="btn sm" data-eqatr="${esc(e.nome)}">Atribuir trabalhos</button><button class="btn sm" data-eqed="${esc(e.nome)}">Editar</button></div>
       </section>`;
-    }).join("")}</div>` : `<div class="empty">Ainda não há equipas. Crie a primeira com <b>+ Nova equipa</b>.</div>`}`;
+    }).join("")}</div>` : `<div class="empty">Ainda não há equipas. Crie a primeira com <b>+ Nova equipa</b>.</div>`}
+    ${lista.some((e) => e.ativa === false) ? `<h2 style="margin-top:18px">Equipas que saíram da obra</h2><div class="eqcards">${lista.filter((e) => e.ativa === false).map((e) => { const t = statsEquipa(e.nome); return `<section class="eqcard inativa">
+        <div class="eqcard-h"><b>${esc(e.nome)}</b><span class="pill">saiu${e.saiuEm ? " a " + fd(e.saiuEm) : ""}</span></div>
+        <div class="eqstats num"><span><b>${t.conc}</b> concluídos</span>${t.fazer ? `<span class="mau-t"><b>${t.fazer}</b> ainda por fazer</span>` : ""}</div>
+        <div class="row" style="gap:6px;margin-top:auto"><button class="btn sm" data-eqver="${esc(e.nome)}">Ver trabalhos</button><button class="btn sm" data-eqed="${esc(e.nome)}">Abrir</button></div></section>`; }).join("")}</div>` : ""}`;
   return {
     html, bind: () => {
       $("#eqNova").onclick = () => openEquipa(null);
       document.querySelectorAll("[data-eqed]").forEach((b) => (b.onclick = () => openEquipa(b.dataset.eqed)));
+      document.querySelectorAll("[data-eqplan]").forEach((b) => (b.onclick = () => { ui.eqPlan = b.dataset.eqplan; location.hash = "#planequipa"; }));
       document.querySelectorAll("[data-eqver]").forEach((b) => (b.onclick = () => { Object.assign(ui.plano, PLANO_PADRAO(), { equipa: b.dataset.eqver }); location.hash = "#plano"; }));
       document.querySelectorAll("[data-eqatr]").forEach((b) => (b.onclick = () => {
         const nome = b.dataset.eqatr, e = S.eqLista.find((x) => x.nome === nome);
@@ -2588,11 +2754,260 @@ function equipasView() {
     },
   };
 }
+/** A equipa pode fazer este trabalho? (especialidade e zona escolhidas na ficha da equipa) */
+function podeFazer(e, a) {
+  if (!e || !e.esp || !e.esp.length || !e.esp.includes(a.esp)) return false;
+  if (!e.blocos || !e.blocos.length) return true;
+  const u = S.uMap[a.unidade];
+  return !!u && e.blocos.includes(u.tipo === "Loja" ? "Lojas" : u.bloco);
+}
+/* ============================================================ plano das equipas
+   Cada equipa tem uma fila: a ordem em que vai fazer os trabalhos. O motor liga cada trabalho ao
+   anterior da fila (só começa quando a equipa acaba o anterior), e tudo o que vem depois acerta-se. */
+function filaEquipa(nome) {
+  return Object.values(S.acts).filter((a) => a.equipa === nome && a.eqOrdem != null && a.eqOrdem !== "")
+    .sort((x, y) => Number(x.eqOrdem) - Number(y.eqOrdem) || String(x.id).localeCompare(String(y.id)));
+}
+/** Grava uma nova ordem da fila (ids pela ordem) e diz o que mudou. */
+async function gravarFila(nome, ids, texto, extra = {}) {
+  const antes = filaEquipa(nome);
+  const fimAntes = antes.filter((a) => S.res.get(a.id).estado !== "concluida").reduce((m, a) => (S.res.get(a.id).provFim > m ? S.res.get(a.id).provFim : m), "");
+  const lista = [];
+  ids.forEach((id, i) => { const v = (i + 1) * 10; const a = S.acts[id]; const p = { ...(extra[id] || {}) }; if (a.eqOrdem !== v) p.eqOrdem = v; if (a.equipa !== nome) p.equipa = nome; if (Object.keys(p).length) lista.push({ id, patch: p }); });
+  for (const a of antes) if (!ids.includes(a.id)) lista.push({ id: a.id, patch: { eqOrdem: null } });
+  if (!lista.length) return;
+  // simula antes de gravar para dizer quantas datas mudam
+  const pm = new Map(lista.map((l) => [l.id, l.patch]));
+  const novo = Object.values(S.acts).map((a) => (pm.has(a.id) ? { ...a, ...pm.get(a.id) } : a));
+  const r2 = schedule(novo, S.cfg.regras || {}, S.hoje, S.cfg.duracoes || {});
+  let mudam = 0; for (const a of novo) { const x = S.res.get(a.id), y = r2.get(a.id); if (x && y && (x.provIni !== y.provIni || x.provFim !== y.provFim)) mudam++; }
+  const fimDepois = ids.filter((id) => r2.get(id).estado !== "concluida").reduce((m, id) => (r2.get(id).provFim > m ? r2.get(id).provFim : m), "");
+  const ciclo = ids.filter((id) => r2.get(id).ciclo).length;
+  const novos = ids.filter((id) => r2.get(id).ciclo && !S.res.get(id).ciclo);
+  if (novos.length) {
+    const k = await perguntar({
+      titulo: "Esta ordem contradiz a sequência",
+      texto: `<p>Com esta ordem, a equipa faria um trabalho antes de outro de que ele depende. Por exemplo: ${esc(nomeAtiv(S.acts[novos[0]]))} em ${esc(S.acts[novos[0]].unidade)}.</p><p class="note">Assim a aplicação não consegue calcular as datas destes trabalhos. O melhor é escolher outra ordem.</p>`,
+      opcoes: [{ k: "nao", l: "Não gravar", estilo: "pri" }, { k: "sim", l: "Gravar mesmo assim" }],
+    });
+    if (k !== "sim") return;
+  }
+  await store.updateMuitas(lista, { tipo: "equipa", texto: `${nome}: ${texto}` });
+  toast(`${texto}. ${mudam ? `${mudam} ${mudam === 1 ? "atividade mudou" : "atividades mudaram"} de datas` : "Nenhuma data mudou"}${fimDepois && fimDepois !== fimAntes ? `; a equipa acaba a ${fd(fimDepois)}${fimAntes ? ` (era ${fd(fimAntes)})` : ""}` : ""}.${ciclo ? " Atenção: há trabalhos em conflito com a sequência." : ""}`);
+}
+function planEquipaView() {
+  const eqs = S.eqLista.filter((e) => e.ativa !== false);
+  if (!eqs.length) return { html: `${defTabs("planequipa")}<div class="card-h"><h1>Plano das equipas</h1></div><div class="empty">Ainda não há equipas. Crie-as em <a href="#equipas">Equipas de trabalho</a>.</div>`, bind: () => {} };
+  if (!ui.eqPlan || !eqs.some((e) => e.nome === ui.eqPlan)) ui.eqPlan = eqs[0].nome;
+  const nome = ui.eqPlan;
+  const ep = (ui.eqP = ui.eqP || { conc: false, fr: "", at: "" });
+  const fila = filaEquipa(nome);
+  const naFila = new Set(fila.map((a) => a.id));
+  const vis = ep.conc ? fila : fila.filter((a) => S.res.get(a.id).estado !== "concluida");
+  const nConc = fila.length - fila.filter((a) => S.res.get(a.id).estado !== "concluida").length;
+  const porOrdenar = Object.values(S.acts).filter((a) => a.equipa === nome && !naFila.has(a.id) && S.res.get(a.id).estado !== "concluida")
+    .sort((x, y) => (S.res.get(x.id).inicio || "").localeCompare(S.res.get(y.id).inicio || ""));
+  // janela das barras
+  let t0 = null, t1 = null;
+  for (const a of vis) { const r = S.res.get(a.id); for (const d of [r.provIni, r.provFim]) if (d) { if (!t0 || d < t0) t0 = d; if (!t1 || d > t1) t1 = d; } }
+  const span = Math.max(1, t0 ? diffDays(t0, t1) : 1);
+  const pos = (d) => Math.max(0, Math.min(100, (100 * diffDays(t0, d)) / span));
+  let parada = 0, fimEq = null, iniEq = null;
+  let ant = null;
+  const linhas = vis.map((a, i) => {
+    const r = S.res.get(a.id);
+    const ini = r.provIni, fim = r.provFim;
+    if (r.estado !== "concluida") { if (!iniEq || ini < iniEq) iniEq = ini; if (!fimEq || fim > fimEq) fimEq = fim; }
+    let gap = 0, motivo = "";
+    if (ant && r.estado !== "concluida") {
+      gap = Math.max(0, diffDays(S.res.get(ant.id).provFim, ini) - 1);
+      if (gap > 0) {
+        parada += gap;
+        const outra = (r.preds || []).filter((d) => d.fonte !== "equipa").map((d) => ({ d, p: S.res.get(d.id) })).filter((x) => x.p).sort((x, y) => y.p.provFim.localeCompare(x.p.provFim))[0];
+        motivo = outra && addDays(outra.p.provFim, 1) >= ini ? `à espera de ${nomeAtiv(S.acts[outra.d.id])}${S.acts[outra.d.id].unidade !== a.unidade ? " em " + S.acts[outra.d.id].unidade : ""}` : "data prevista mais tarde";
+      }
+    }
+    ant = a;
+    const pi = fila.indexOf(a);
+    return `<div class="fq-row ${r.estado === "concluida" ? "conc" : ""} ${r.ciclo ? "ciclo" : ""}" data-fq="${a.id}" draggable="true">
+      <div class="ordb"><button class="ord-b" data-fqm="${a.id}|-1" ${pi === 0 ? "disabled" : ""} title="Fazer antes" aria-label="Fazer antes">▲</button><button class="ord-b" data-fqm="${a.id}|1" ${pi === fila.length - 1 ? "disabled" : ""} title="Fazer depois" aria-label="Fazer depois">▼</button></div>
+      <span class="fq-n num">${pi + 1}</span>
+      <div class="fq-t"><button class="lnk-b" data-a="${a.id}"><b>${esc(nomeAtiv(a))}</b></button><span class="mono">${esc(a.unidade)}</span>
+        ${gap > 0 ? `<span class="fq-gap">equipa parada ${gap} ${gap === 1 ? "dia" : "dias"} antes: ${esc(motivo)}</span>` : ""}${r.ciclo ? `<span class="fq-gap mau-t">esta ordem contradiz a sequência dos trabalhos</span>` : ""}</div>
+      <span class="pill st-${r.estado}">${ESTADO[r.estado]}</span>
+      <div class="tl fq-tl" aria-hidden="true"><div class="fc st-${r.estado}" style="left:${pos(ini)}%;width:${Math.max(1, pos(fim) - pos(ini))}%"></div>${S.hoje >= t0 && S.hoje <= t1 ? `<div class="today" style="left:${pos(S.hoje)}%"></div>` : ""}</div>
+      <span class="fq-d mono num">${fd(ini)} a ${fd(fim)}</span>
+      <span class="fq-dv">${deltaHTML(r.atraso)}</span>
+      <button class="btn sm tira-b" data-fqx="${a.id}" title="Tirar da fila: fica na equipa, mas sem ordem">× Tirar</button>
+    </div>`;
+  }).join("");
+  const eq = eqs.find((e) => e.nome === nome);
+  const pot = Object.values(S.acts).filter((a) => !naFila.has(a.id) && a.equipa !== nome && podeFazer(eq, a) && S.res.get(a.id).estado !== "concluida" && (!ep.potFr || a.unidade === ep.potFr))
+    .sort((x, y) => (!x.equipa || !S.equipas.includes(x.equipa) ? 0 : 1) - (!y.equipa || !S.equipas.includes(y.equipa) ? 0 : 1) || (S.res.get(x.id).inicio || "").localeCompare(S.res.get(y.id).inicio || ""));
+  const potFrs = [...new Set(Object.values(S.acts).filter((a) => !naFila.has(a.id) && a.equipa !== nome && podeFazer(eq, a) && S.res.get(a.id).estado !== "concluida").map((a) => a.unidade))].sort((a, b) => a.localeCompare(b, "pt", { numeric: true }));
+  const frs = S.unidades.filter((u) => u.acts.some((a) => !naFila.has(a.id) && S.res.get(a.id).estado !== "concluida"));
+  const ativsFr = ep.fr ? (S.uMap[ep.fr] ? S.uMap[ep.fr].acts : []).filter((a) => !naFila.has(a.id) && S.res.get(a.id).estado !== "concluida") : [];
+  const html = `
+    ${defTabs("planequipa")}
+    <div class="card-h"><h1>Plano das equipas</h1>
+      <label class="f" ${ep.vista === "todas" ? "hidden" : ""}>Equipa<select class="inp" id="fqEq">${eqs.map((e) => `<option ${e.nome === nome ? "selected" : ""}>${esc(e.nome)}</option>`).join("")}</select></label></div>
+    <p style="max-width:75ch">Ponha os trabalhos da equipa pela ordem em que os vai fazer: por exemplo, primeiro os azulejos do A-F101, depois os do A-F102. Cada trabalho só começa quando a equipa acaba o anterior, e as datas de tudo o que vem a seguir acertam-se sozinhas.</p>
+    <div class="seg-v no-print">${[["lista", "Fila"], ["gantt", "Gantt da equipa"], ["todas", "Gantt de todas as equipas"]].map(([k, l]) => `<button class="${(ep.vista || "lista") === k ? "on" : ""}" data-fqv="${k}">${l}</button>`).join("")}</div>
+    ${ep.vista === "todas" ? ganttEquipasHTML(null) : `
+    <div class="fq-res">
+      <div><span class="eyebrow">Na fila</span><b class="num">${fila.length - nConc}</b><span class="note">por fazer${nConc ? ` · ${nConc} feitos` : ""}</span></div>
+      <div><span class="eyebrow">Começa</span><b class="num">${iniEq ? fd(iniEq, true) : "sem trabalhos"}</b></div>
+      <div><span class="eyebrow">Acaba a fila</span><b class="num">${fimEq ? fd(fimEq, true) : "sem trabalhos"}</b></div>
+      <div><span class="eyebrow">Dias parada</span><b class="num ${parada ? "mau-t" : ""}">${parada}</b><span class="note">à espera de outros trabalhos</span></div>
+    </div>
+    ${ep.vista === "gantt" ? ganttEquipasHTML(nome) : `<section class="card">
+      <div class="card-h"><h2>Fila da ${esc(nome)}</h2><div class="row">${nConc ? `<label class="check"><input type="checkbox" id="fqConc" ${ep.conc ? "checked" : ""}><span>Mostrar os já feitos</span></label>` : ""}</div></div>
+      ${vis.length ? `<p class="note" style="margin:0">Arraste as linhas ou use as setas para mudar a ordem.</p><div class="fq">${linhas}</div>` : `<div class="empty">A fila está vazia. Junte trabalhos em baixo.</div>`}
+    </section>`}
+    <section class="card">
+      <div class="card-h"><h2>Trabalhos da equipa ainda sem lugar na fila</h2>${porOrdenar.length > 1 ? `<button class="btn sm" id="fqTodas">Pôr todos na fila pela data de início</button>` : ""}</div>
+      ${porOrdenar.length ? `<div class="fq">${porOrdenar.map((a) => { const r = S.res.get(a.id); return `<div class="fq-row fq-po"><span></span><span></span><div class="fq-t"><button class="lnk-b" data-a="${a.id}"><b>${esc(nomeAtiv(a))}</b></button><span class="mono">${esc(a.unidade)}</span></div><span class="pill st-${r.estado}">${ESTADO[r.estado]}</span><span></span><span class="fq-d mono num">${fd(r.inicio)} a ${fd(r.fim)}</span><span></span><button class="btn sm" data-fqadd="${a.id}">+ Pôr no fim da fila</button></div>`; }).join("")}</div>`
+        : `<div class="note">Todos os trabalhos atribuídos a esta equipa já estão na fila.</div>`}
+    </section>
+    <section class="card">
+      <div class="card-h"><h2>Trabalhos que a equipa pode fazer</h2>${eq && eq.esp && eq.esp.length && potFrs.length ? `<label class="f">Apartamento<select class="inp" id="fqPotFr"><option value="">Todos</option>${potFrs.map((u) => `<option ${ep.potFr === u ? "selected" : ""}>${esc(u)}</option>`).join("")}</select></label>` : ""}</div>
+      ${!eq || !eq.esp || !eq.esp.length ? `<div class="note">Diga na ficha da equipa que especialidades ela faz e a aplicação mostra aqui os trabalhos possíveis. <button class="btn sm" data-eqed2="${esc(nome)}">Abrir a ficha da equipa</button></div>`
+        : pot.length ? `<p class="note" style="margin:0">Pelas especialidades${eq.blocos && eq.blocos.length ? " e zonas" : ""} da equipa. Primeiro os que não têm equipa.</p><div class="fq">${pot.slice(0, 40).map((a) => { const r = S.res.get(a.id); const outra = a.equipa && S.equipas.includes(a.equipa); return `<div class="fq-row fq-po"><span></span><span></span><div class="fq-t"><button class="lnk-b" data-a="${a.id}"><b>${esc(nomeAtiv(a))}</b></button><span class="mono">${esc(a.unidade)}${outra ? ` · com ${esc(a.equipa)}` : a.equipa ? ` · era de ${esc(a.equipa)}, que saiu` : " · sem equipa"}</span></div><span class="pill st-${r.estado}">${ESTADO[r.estado]}</span><span></span><span class="fq-d mono num">${fd(r.inicio)} a ${fd(r.fim)}</span><span></span><button class="btn sm" data-fqpot="${a.id}">+ Pôr no fim da fila</button></div>`; }).join("")}</div>${pot.length > 40 ? `<p class="note">E mais ${pot.length - 40}. Escolha um apartamento para ver menos.</p>` : ""}`
+        : `<div class="note">Não há mais trabalhos por fazer que esta equipa possa fazer.</div>`}
+    </section>
+    <section class="card">
+      <div class="card-h"><h2>Juntar outro trabalho à fila</h2></div>
+      <p class="note" style="margin:0">Escolha o apartamento e o trabalho. Se for de outra equipa, passa para a ${esc(nome)}.</p>
+      <div class="row" style="align-items:flex-end;flex-wrap:wrap">
+        <label class="f">Apartamento ou zona<select class="inp" id="fqFr"><option value="">Escolha...</option>${frs.map((u) => `<option value="${esc(u.id)}" ${ep.fr === u.id ? "selected" : ""}>${esc(u.tipo === "Apartamento" || u.tipo === "Loja" ? u.id : u.nome || u.id)}</option>`).join("")}</select></label>
+        <label class="f">Trabalho<select class="inp" id="fqAt" ${ep.fr ? "" : "disabled"}><option value="">Escolha...</option>${ativsFr.map((a) => `<option value="${a.id}">${esc(nomeAtiv(a))}${a.equipa ? " (" + esc(a.equipa) + ")" : ""}</option>`).join("")}</select></label>
+        <button class="btn pri" id="fqJunta" disabled>Juntar ao fim da fila</button>
+      </div>
+    </section>`}`;
+  return { html, bind: () => {
+    bindCommon();
+    $("#fqEq").onchange = (e) => { ui.eqPlan = e.target.value; ep.fr = ""; render(); };
+    document.querySelectorAll("[data-fqv]").forEach((b) => (b.onclick = () => { ep.vista = b.dataset.fqv; render(); }));
+    document.querySelectorAll("[data-gez]").forEach((b) => (b.onclick = () => { ep.zoom = b.dataset.gez; render(); }));
+    document.querySelectorAll("[data-geq]").forEach((b) => (b.onclick = () => { ui.eqPlan = b.dataset.geq; ep.vista = "gantt"; render(); }));
+    const gs = $(".ge-scroll"); if (gs && !gs.dataset.posto) { const h = gs.querySelector(".ge-hoje"); if (h) gs.scrollLeft = Math.max(0, h.offsetLeft - 160); gs.dataset.posto = 1; }
+    if (ep.vista === "todas") return;
+    const fc = $("#fqConc"); if (fc) fc.onchange = () => { ep.conc = fc.checked; render(); };
+    const ids = fila.map((a) => a.id);
+    const mover = (id, para) => { const l = ids.filter((x) => x !== id); l.splice(Math.max(0, Math.min(l.length, para)), 0, id); return l; };
+    document.querySelectorAll("[data-fqm]").forEach((b) => (b.onclick = () => {
+      const [id, d] = b.dataset.fqm.split("|"); const i = ids.indexOf(id);
+      gravarFila(nome, mover(id, i + Number(d)), `${nomeAtiv(S.acts[id])} em ${S.acts[id].unidade} passou para ${i + Number(d) + 1}.º`);
+    }));
+    // arrastar
+    let arr = null;
+    document.querySelectorAll(".fq-row[data-fq]").forEach((row) => {
+      row.ondragstart = (e) => { arr = row.dataset.fq; row.classList.add("arr"); e.dataTransfer.effectAllowed = "move"; };
+      row.ondragend = () => { row.classList.remove("arr"); document.querySelectorAll(".fq-row.alvo").forEach((x) => x.classList.remove("alvo")); };
+      row.ondragover = (e) => { if (!arr) return; e.preventDefault(); document.querySelectorAll(".fq-row.alvo").forEach((x) => x.classList.remove("alvo")); row.classList.add("alvo"); };
+      row.ondrop = (e) => { e.preventDefault(); const alvo = row.dataset.fq; if (!arr || arr === alvo) return; const id = arr; arr = null;
+        const l = ids.filter((x) => x !== id); l.splice(l.indexOf(alvo) + (ids.indexOf(id) < ids.indexOf(alvo) ? 1 : 0), 0, id);
+        gravarFila(nome, l, `${nomeAtiv(S.acts[id])} em ${S.acts[id].unidade} passou para ${l.indexOf(id) + 1}.º`); };
+    });
+    document.querySelectorAll("[data-fqx]").forEach((b) => (b.onclick = async () => {
+      const a = S.acts[b.dataset.fqx];
+      if (!(await confirmar("Tirar da fila?", `<p>${esc(nomeAtiv(a))} em ${esc(a.unidade)} sai da fila da ${esc(nome)}. Continua atribuído à equipa, mas deixa de esperar pelo trabalho anterior da fila, e o seguinte deixa de esperar por ele.</p>`, "Sim, tirar da fila"))) return;
+      gravarFila(nome, ids.filter((x) => x !== a.id), `${nomeAtiv(a)} em ${a.unidade} saiu da fila`);
+    }));
+    document.querySelectorAll("[data-fqadd]").forEach((b) => (b.onclick = () => { const a = S.acts[b.dataset.fqadd]; gravarFila(nome, [...ids, a.id], `${nomeAtiv(a)} em ${a.unidade} entrou na fila`); }));
+    const ft = $("#fqTodas"); if (ft) ft.onclick = async () => {
+      if (!(await confirmar(`Pôr ${porOrdenar.length} trabalhos na fila?`, `<p>Entram no fim da fila da ${esc(nome)}, pela data de início que têm agora. Depois pode mudar a ordem.</p>`, "Sim, pôr na fila"))) return;
+      gravarFila(nome, [...ids, ...porOrdenar.map((a) => a.id)], `${porOrdenar.length} trabalhos entraram na fila`);
+    };
+    const pf = $("#fqPotFr"); if (pf) pf.onchange = () => { ep.potFr = pf.value; render(); };
+    document.querySelectorAll("[data-eqed2]").forEach((b) => (b.onclick = () => openEquipa(b.dataset.eqed2)));
+    document.querySelectorAll("[data-fqpot]").forEach((b) => (b.onclick = async () => {
+      const a = S.acts[b.dataset.fqpot];
+      if (a.equipa && S.equipas.includes(a.equipa) && !(await confirmar("Mudar de equipa?", `<p>${esc(nomeAtiv(a))} em ${esc(a.unidade)} está com a ${esc(a.equipa)}. Passa para a ${esc(nome)} e entra no fim da fila dela.</p>`, "Sim, passar"))) return;
+      gravarFila(nome, [...ids, a.id], `${nomeAtiv(a)} em ${a.unidade} entrou na fila`);
+    }));
+    const sf = $("#fqFr"), sa = $("#fqAt"), bj = $("#fqJunta");
+    sf.onchange = () => { ep.fr = sf.value; render(); };
+    sa.onchange = () => { bj.disabled = !sa.value; };
+    bj.onclick = async () => {
+      const a = S.acts[sa.value]; if (!a) return;
+      if (a.equipa && a.equipa !== nome && !(await confirmar("Mudar de equipa?", `<p>${esc(nomeAtiv(a))} em ${esc(a.unidade)} está com a ${esc(a.equipa)}. Passa para a ${esc(nome)} e entra no fim da fila dela.</p>`, "Sim, passar"))) return;
+      ep.fr = "";
+      gravarFila(nome, [...ids, a.id], `${nomeAtiv(a)} em ${a.unidade} entrou na fila`);
+    };
+  } };
+}
+/** Gantt das equipas. nome = uma equipa (uma linha por trabalho, pela ordem da fila); null = todas (uma linha por equipa). */
+function ganttEquipasHTML(nome) {
+  const ep = ui.eqP;
+  const pxd = { semana: 14, mes: 5, trimestre: 2 }[ep.zoom || "mes"];
+  const eqs = S.eqLista.filter((e) => e.ativa !== false);
+  const deEq = (n) => {
+    const f = filaEquipa(n);
+    const naFila = new Set(f.map((a) => a.id));
+    const resto = Object.values(S.acts).filter((a) => a.equipa === n && !naFila.has(a.id)).sort((x, y) => (S.res.get(x.id).provIni || "").localeCompare(S.res.get(y.id).provIni || ""));
+    return [...f.map((a) => ({ a, fila: true })), ...resto.map((a) => ({ a, fila: false }))].filter((x) => S.res.get(x.a.id).estado !== "concluida" || (S.res.get(x.a.id).provFim || "") >= addDays(S.hoje, -30));
+  };
+  const grupos = nome ? [{ n: nome, itens: deEq(nome) }] : eqs.map((e) => ({ n: e.nome, itens: deEq(e.nome) })).filter((g) => g.itens.length);
+  const todos = grupos.flatMap((g) => g.itens);
+  if (!todos.length) return `<section class="card"><div class="empty">${nome ? "Esta equipa não tem trabalhos por fazer." : "As equipas não têm trabalhos por fazer."}</div></section>`;
+  let t0 = addDays(S.hoje, -21), t1 = addDays(S.hoje, 30);
+  for (const { a } of todos) { const r = S.res.get(a.id); if (r.provIni && r.provIni < t0 && r.estado !== "concluida") t0 = r.provIni; if (r.provFim > t1) t1 = r.provFim; }
+  if (diffDays(addDays(S.hoje, -120), t0) < 0) t0 = addDays(S.hoje, -120); // não recuar demasiado
+  t0 = addDays(t0, -3); t1 = addDays(t1, 7);
+  const dias = diffDays(t0, t1) + 1, W = dias * pxd;
+  const x = (d) => diffDays(t0, d) * pxd;
+  // eixo: meses (e semanas se houver espaço)
+  const marcas = [];
+  for (let d = t0.slice(0, 8) + "01"; d <= t1; ) { if (d >= t0) marcas.push({ d, l: `${MESES[Number(d.slice(5, 7)) - 1]} ${d.slice(2, 4)}`, m: true }); const [y, m] = d.split("-").map(Number); d = m === 12 ? `${y + 1}-01-01` : `${y}-${String(m + 1).padStart(2, "0")}-01`; }
+  if (pxd >= 10) for (let d = t0; d <= t1; d = addDays(d, 1)) if (new Date(d + "T12:00:00Z").getUTCDay() === 1) marcas.push({ d, l: String(Number(d.slice(8))), m: false });
+  const barra = ({ a, fila }, comNome) => {
+    const r = S.res.get(a.id);
+    const l = x(r.provIni), w = Math.max(pxd, x(addDays(r.provFim, 1)) - l);
+    const txt = comNome ? `${a.unidade} ${nomeAtiv(a)}` : a.unidade;
+    return `<button class="ge-b st-${r.estado}${r.atrasada ? " atr" : ""}${fila ? "" : " solto"}${r.ciclo ? " ciclo" : ""}" style="left:${l}px;width:${w}px" data-a="${a.id}" title="${esc(`${nomeAtiv(a)} em ${a.unidade} · ${fd(r.provIni)} a ${fd(r.provFim)} · ${ESTADO[r.estado]}${r.atrasada ? " · atrasada " + r.atraso + " d" : ""}${fila ? "" : " · ainda sem lugar na fila"}`)}"><span>${esc(w > 46 ? txt : "")}</span></button>`;
+  };
+  // todas: cada equipa numa faixa; trabalhos sobrepostos vão para sub-linhas
+  const linhas = [];
+  if (nome) {
+    for (const it of grupos[0].itens) linhas.push({ rot: `<b>${esc(nomeAtiv(it.a))}</b><span class="mono">${esc(it.a.unidade)}${it.fila ? "" : " · sem lugar na fila"}</span>`, bars: [barra(it, false)], fila: it.fila });
+  } else {
+    for (const g of grupos) {
+      const subs = [];
+      for (const it of g.itens) {
+        const r = S.res.get(it.a.id);
+        let k = subs.findIndex((fim) => fim < r.provIni);
+        if (k < 0) { subs.push(""); k = subs.length - 1; }
+        subs[k] = r.provFim;
+        (g.sub = g.sub || [])[k] = (g.sub[k] || []).concat(barra(it, false));
+      }
+      const parada = (() => { let p = 0, ant = null; for (const it of g.itens.filter((z) => z.fila && S.res.get(z.a.id).estado !== "concluida")) { const r = S.res.get(it.a.id); if (ant) p += Math.max(0, diffDays(ant, r.provIni) - 1); ant = r.provFim; } return p; })();
+      const fimG = g.itens.reduce((m, it) => (S.res.get(it.a.id).provFim > m ? S.res.get(it.a.id).provFim : m), "");
+      g.sub.forEach((bs, k) => linhas.push({ rot: k === 0 ? `<button class="lnk-b" data-geq="${esc(g.n)}"><b>${esc(g.n)}</b></button><span class="note">${g.itens.length} trabalhos · acaba ${fd(fimG)}${parada ? ` · <span class="mau-t">${parada} d parada</span>` : ""}</span>` : "", bars: bs, cont: k > 0 }));
+    }
+  }
+  return `<section class="card ge">
+    <div class="card-h"><h2>${nome ? `Gantt da ${esc(nome)}` : "Todas as equipas"}</h2>
+      <div class="seg-v sm">${[["semana", "Semanas"], ["mes", "Meses"], ["trimestre", "Trimestres"]].map(([k, l]) => `<button class="${(ep.zoom || "mes") === k ? "on" : ""}" data-gez="${k}">${l}</button>`).join("")}</div></div>
+    <p class="note" style="margin:0">${nome ? "Um trabalho por linha, pela ordem da fila. Os que ainda não têm lugar na fila aparecem no fim, tracejados." : "Uma faixa por equipa. Os espaços entre barras são dias em que a equipa está parada; barras umas por cima das outras são trabalhos ao mesmo tempo. Toque no nome da equipa para ver só essa."} Toque numa barra para abrir o trabalho.</p>
+    <div class="ge-wrap">
+      <div class="ge-rot">${`<div class="ge-ax"></div>`}${linhas.map((l) => `<div class="ge-l ${l.cont ? "cont" : ""} ${l.fila === false ? "solto" : ""}">${l.rot}</div>`).join("")}</div>
+      <div class="ge-scroll"><div class="ge-in" style="width:${W}px">
+        <div class="ge-ax">${marcas.map((m) => `<i class="${m.m ? "m" : "s"}" style="left:${x(m.d)}px"><em>${m.l}</em></i>`).join("")}</div>
+        ${marcas.filter((m) => m.m).map((m) => `<i class="ge-grid" style="left:${x(m.d)}px"></i>`).join("")}
+        <i class="ge-hoje" style="left:${x(S.hoje)}px"></i>
+        ${linhas.map((l) => `<div class="ge-l ${l.cont ? "cont" : ""}">${l.bars.join("")}</div>`).join("")}
+      </div></div>
+    </div>
+    <div class="legend"><span><i class="dot st-em_curso"></i>Em curso</span><span><i class="dot st-por_iniciar"></i>Por iniciar</span><span><i class="dot st-bloqueada"></i>À espera de outras</span><span><i class="dot st-concluida"></i>Concluída</span><span><i class="dot st-por_iniciar atr"></i>Atrasada</span><span><i class="ge-lg-hoje"></i>Hoje</span></div>
+  </section>`;
+}
 /** Criar ou editar uma equipa. nome = null para nova. opts.aoGravar(nome) corre depois de gravar. */
 function openEquipa(nome, opts = {}) {
   document.querySelectorAll('[data-dw="equipa"]').forEach((e) => e.remove());
   const orig = nome ? S.eqLista.find((e) => e.nome === nome) : null;
-  const e0 = orig ? { ...orig, esp: [...(orig.esp || [])] } : { nome: "", responsavel: "", telefone: "", esp: [], notas: "" };
+  const e0 = orig ? { ...orig, esp: [...(orig.esp || [])], blocos: [...(orig.blocos || [])] } : { nome: "", responsavel: "", telefone: "", esp: [], blocos: [], notas: "" };
+  const zonas = ["A", "B", "C", "D", "Lojas", "Geral"].filter((k) => S.unidades.some((u) => (u.tipo === "Loja" ? "Lojas" : u.bloco) === k));
   const nTrab = orig ? statsEquipa(orig.nome).total : 0;
   const esp = [...S.cfg.especialidades].sort((a, b) => a.ordem - b.ordem);
   const html = `
@@ -2609,14 +3024,31 @@ function openEquipa(nome, opts = {}) {
         </div>
       </div>
       <div class="formbox">
-        <h3>Especialidades habituais <span class="note">(opcional)</span></h3>
+        <h3>O que esta equipa pode fazer <span class="note">(ajuda a planear)</span></h3>
+        <p class="note" style="margin:0">Especialidades</p>
         <div class="chips" id="eqEsp">${esp.map((x) => `<button type="button" class="chip ${e0.esp.includes(x.key) ? "on" : ""}" data-eqe="${x.key}">${esc(x.nome)}</button>`).join("")}</div>
+        <p class="note" style="margin:0">Onde trabalha <span class="muted">(nenhum escolhido: em toda a obra)</span></p>
+        <div class="chips" id="eqZon">${zonas.map((k) => `<button type="button" class="chip ${e0.blocos.includes(k) ? "on" : ""}" data-eqz="${k}">${k.length === 1 ? "Bloco " + k : k}</button>`).join("")}</div>
+        <div class="note" id="eqPot"></div>
         <label class="check" id="eqAutoW" hidden><input type="checkbox" id="eqAuto"><span id="eqAutoT"></span></label>
       </div>
       <label class="f">Notas<textarea class="inp" id="eqNo" rows="2" placeholder="Ex.: trabalha só no bloco C, de manhã">${esc(e0.notas || "")}</textarea></label>
       <div class="err" id="eqErr"></div>
       <div class="row"><button class="btn pri" type="submit">${orig ? "Guardar" : "Criar equipa"}</button><button class="btn" type="button" id="eqCancel">Cancelar</button></div>
-      ${orig ? `<details class="formbox delbox" id="eqDel"><summary><b>Eliminar equipa</b></summary>
+      ${orig && orig.ativa !== false ? `<details class="formbox saibox" id="eqSai"><summary><b>A equipa sai da obra</b></summary>
+        <p class="note">Desistência, fim de contrato ou troca de empreiteiro. A equipa deixa de aparecer para atribuir trabalho, mas fica no histórico com os trabalhos que já fez.</p>
+        ${statsEquipa(orig.nome).fazer ? `<p style="margin:6px 0">Tem <b>${statsEquipa(orig.nome).fazer}</b> trabalhos por fazer${statsEquipa(orig.nome).curso ? `, ${statsEquipa(orig.nome).curso} já em curso` : ""}. O que lhes acontece?</p>
+        <label class="check"><input type="radio" name="saiDest" value="dist" checked><span><b>Distribuir pelas equipas que fazem o mesmo</b><br><small class="note">Cada trabalho vai para a equipa com as mesmas especialidades que fica livre mais cedo. Os que nenhuma equipa faz ficam sem equipa.</small></span></label>
+        ${S.equipas.filter((n) => n !== orig.nome).length ? `<label class="check"><input type="radio" name="saiDest" value="outra"><span><b>Passar todos para uma equipa</b></span></label>
+        <select class="inp" id="saiSel" style="margin-left:24px;width:calc(100% - 24px)">${S.equipas.filter((n) => n !== orig.nome).map((n) => `<option>${esc(n)}</option>`).join("")}</select>` : ""}
+        <label class="check"><input type="radio" name="saiDest" value="sem"><span><b>Ficam sem equipa</b>, para atribuir depois</span></label>
+        ${statsEquipa(orig.nome).curso ? `<label class="check"><input type="checkbox" id="saiCurso"><span>Os que já estão em curso ficam com esta equipa até acabarem</span></label>` : ""}
+        <p class="note">Os trabalhos que passam para outra equipa entram no fim da fila dela, pela data de início. As datas dos trabalhos seguintes acertam-se sozinhas.</p>
+        <button class="btn" type="button" id="saiVer">Ver o efeito nas datas</button>
+        <div id="saiRes"></div>` : `<p class="note">Não tem trabalhos por fazer.</p><button class="btn warn" type="button" id="saiOk">Confirmar a saída de ${esc(orig.nome)}</button>`}
+        </details>` : ""}
+      ${orig && orig.ativa === false ? `<div class="formbox"><p style="margin:0">Esta equipa saiu da obra${orig.saiuEm ? " a " + fd(orig.saiuEm, true) : ""}.</p><button class="btn" type="button" id="eqReat">Voltar a pôr a equipa na obra</button></div>` : ""}
+      ${orig ? `<details class="formbox delbox" id="eqDel"><summary><b>Eliminar equipa de vez</b></summary>
         ${nTrab ? `<p class="note">Esta equipa tem ${nTrab} trabalhos. O que lhes acontece?</p>
         <label class="check"><input type="radio" name="eqDest" value="" checked><span>Ficam sem equipa</span></label>
         ${S.equipas.filter((n) => n !== orig.nome).length ? `<label class="check"><input type="radio" name="eqDest" value="_outra"><span>Passam para</span></label>
@@ -2630,15 +3062,23 @@ function openEquipa(nome, opts = {}) {
   const fechar = () => document.querySelectorAll('[data-dw="equipa"]').forEach((e) => e.remove());
   q(".x").onclick = fechar; q("#eqCancel").onclick = fechar;
   document.querySelector('.scrim[data-dw="equipa"]').onclick = fechar;
-  const semEqDe = () => Object.values(S.acts).filter((a) => !a.equipa && e0.esp.includes(a.esp) && S.res.get(a.id).estado !== "concluida");
+  const potenciais = () => Object.values(S.acts).filter((a) => podeFazer(e0, a) && S.res.get(a.id).estado !== "concluida");
+  const semEqDe = () => potenciais().filter((a) => !a.equipa || !S.equipas.includes(a.equipa));
   const auto = () => {
+    const pot = e0.esp.length ? potenciais() : [];
     const n = e0.esp.length ? semEqDe().length : 0;
+    q("#eqPot").innerHTML = e0.esp.length ? `Pode fazer <b>${pot.length}</b> trabalhos por fazer${pot.length ? `: <b>${n}</b> sem equipa e ${pot.length - n} com outras equipas` : ""}.` : "";
     q("#eqAutoW").hidden = !n;
-    q("#eqAutoT").textContent = `Atribuir já esta equipa aos ${n} trabalhos por fazer destas especialidades que ainda não têm equipa`;
+    q("#eqAutoT").textContent = `Atribuir já esta equipa aos ${n} trabalhos sem equipa e pô-los na fila dela, pela data de início`;
   };
   sh.querySelectorAll("[data-eqe]").forEach((b) => (b.onclick = () => {
     const k = b.dataset.eqe;
     e0.esp = e0.esp.includes(k) ? e0.esp.filter((x) => x !== k) : [...e0.esp, k];
+    b.classList.toggle("on"); auto();
+  }));
+  sh.querySelectorAll("[data-eqz]").forEach((b) => (b.onclick = () => {
+    const k = b.dataset.eqz;
+    e0.blocos = e0.blocos.includes(k) ? e0.blocos.filter((x) => x !== k) : [...e0.blocos, k];
     b.classList.toggle("on"); auto();
   }));
   auto();
@@ -2648,8 +3088,8 @@ function openEquipa(nome, opts = {}) {
     ev.preventDefault();
     const novo = q("#eqN").value.trim().replace(/\s+/g, " ");
     if (!novo) return;
-    if (S.equipas.some((n) => n.toLowerCase() === novo.toLowerCase() && (!orig || n !== orig.nome))) { q("#eqErr").textContent = "Já existe uma equipa com esse nome."; return; }
-    const dados = { id: (orig && orig.id) || "eq" + Date.now().toString(36), nome: novo, responsavel: q("#eqR").value.trim() || null, telefone: q("#eqT").value.trim() || null, esp: e0.esp, notas: q("#eqNo").value.trim() || null };
+    if (S.equipasTodas.some((n) => n.toLowerCase() === novo.toLowerCase() && (!orig || n !== orig.nome))) { q("#eqErr").textContent = "Já existe uma equipa com esse nome."; return; }
+    const dados = { id: (orig && orig.id) || "eq" + Date.now().toString(36), nome: novo, responsavel: q("#eqR").value.trim() || null, telefone: q("#eqT").value.trim() || null, esp: e0.esp, blocos: e0.blocos, notas: q("#eqNo").value.trim() || null, ...(orig && orig.ativa === false ? { ativa: false, saiuEm: orig.saiuEm || null } : {}) };
     const reg = registadas();
     const i = orig ? reg.findIndex((e) => e.nome === orig.nome) : -1;
     const lista = i >= 0 ? reg.map((e, j) => (j === i ? dados : e)) : [...reg, dados];
@@ -2660,16 +3100,88 @@ function openEquipa(nome, opts = {}) {
       const ids = Object.values(S.acts).filter((a) => a.equipa === orig.nome).map((a) => ({ id: a.id, patch: { equipa: novo } }));
       if (ids.length) await store.updateMuitas(ids, null);
     }
-    if (paraAuto.length) await store.updateMuitas(paraAuto.map((id) => ({ id, patch: { equipa: novo } })), { tipo: "equipa", texto: `${paraAuto.length} trabalhos atribuídos a ${novo}` });
+    if (paraAuto.length) {
+      const ini = (id) => S.res.get(id).inicio || "";
+      const base = filaEquipa(novo).length;
+      const ord = [...paraAuto].sort((x, y) => ini(x).localeCompare(ini(y)));
+      await store.updateMuitas(ord.map((id, i) => ({ id, patch: { equipa: novo, eqOrdem: (base + i + 1) * 10 } })), { tipo: "equipa", texto: `${paraAuto.length} trabalhos atribuídos a ${novo} e postos na fila` });
+    }
     toast(orig ? "Equipa guardada" : `«${novo}» criada${paraAuto.length ? ` e atribuída a ${paraAuto.length} trabalhos` : ""}`);
     if (opts.aoGravar) await opts.aoGravar(novo);
+  };
+  // ---- saída da equipa
+  const planoSaida = () => {
+    const dest = (sh.querySelector('input[name="saiDest"]:checked') || {}).value || "sem";
+    const ficaCurso = !!(q("#saiCurso") && q("#saiCurso").checked);
+    const mover = Object.values(S.acts).filter((a) => a.equipa === orig.nome && S.res.get(a.id).estado !== "concluida" && !(ficaCurso && S.res.get(a.id).estado === "em_curso"))
+      .sort((x, y) => (S.res.get(x.id).provIni || "").localeCompare(S.res.get(y.id).provIni || ""));
+    const lista = [];
+    const ordem = {}; // proxima posição livre em cada fila
+    const livre = {}; // dia em que cada equipa fica livre (estimativa para distribuir)
+    const fila = (n) => { if (ordem[n] == null) { const f = filaEquipa(n); ordem[n] = (f.length ? Number(f[f.length - 1].eqOrdem) : 0) + 10; livre[n] = f.reduce((m, a) => (S.res.get(a.id).provFim > m ? S.res.get(a.id).provFim : m), S.hoje); } };
+    const vai = {};
+    for (const a of mover) {
+      let n = null;
+      if (dest === "outra") n = q("#saiSel").value;
+      else if (dest === "dist") {
+        const cand = S.eqLista.filter((e) => e.ativa !== false && e.nome !== orig.nome && podeFazer(e, a));
+        for (const e of cand) fila(e.nome);
+        cand.sort((x, y) => livre[x.nome].localeCompare(livre[y.nome]));
+        n = cand.length ? cand[0].nome : null;
+      }
+      if (n) { fila(n); lista.push({ id: a.id, patch: { equipa: n, eqOrdem: ordem[n] } }); ordem[n] += 10; const r = S.res.get(a.id); livre[n] = addDays(livre[n] > r.provIni ? livre[n] : r.provIni, r.dur + 1); vai[n] = (vai[n] || 0) + 1; }
+      else { lista.push({ id: a.id, patch: { equipa: null, eqOrdem: null } }); vai["_sem"] = (vai["_sem"] || 0) + 1; }
+    }
+    // as que ficam (em curso) saem da fila, para não prenderem ninguém depois de a equipa sair
+    if (ficaCurso) for (const a of Object.values(S.acts)) if (a.equipa === orig.nome && S.res.get(a.id).estado === "em_curso" && a.eqOrdem != null) lista.push({ id: a.id, patch: { eqOrdem: null } });
+    const pm = new Map(lista.map((l) => [l.id, l.patch]));
+    const novo = Object.values(S.acts).map((a) => (pm.has(a.id) ? { ...a, ...pm.get(a.id) } : a));
+    const novoMap = new Map(novo.map((a) => [a.id, a]));
+    const r2 = schedule(novo, S.cfg.regras || {}, S.hoje, S.cfg.duracoes || {});
+    let mudam = 0, fimObra = "";
+    for (const a of novo) { const x = S.res.get(a.id), y = r2.get(a.id); if (x && y && (x.provIni !== y.provIni || x.provFim !== y.provFim)) mudam++; if (y && y.estado !== "concluida" && y.provFim > fimObra) fimObra = y.provFim; }
+    const fimEq = (n, res) => Object.values(S.acts).filter((a) => novoMap.get(a.id).equipa === n && res.get(a.id).estado !== "concluida").reduce((m, a) => (res.get(a.id).provFim > m ? res.get(a.id).provFim : m), "");
+    const porEq = Object.entries(vai).filter(([n]) => n !== "_sem").map(([n, k]) => ({ n, k, antes: Object.values(S.acts).filter((a) => a.equipa === n && S.res.get(a.id).estado !== "concluida").reduce((m, a) => (S.res.get(a.id).provFim > m ? S.res.get(a.id).provFim : m), ""), depois: fimEq(n, r2) }));
+    return { lista, mudam, fimObra, porEq, sem: vai["_sem"] || 0, n: mover.length, ficam: ficaCurso ? statsEquipa(orig.nome).curso : 0 };
+  };
+  const saiConfirmar = async (pl) => {
+    const reg = registadas();
+    const i = reg.findIndex((e) => e.nome === orig.nome);
+    const dados = { ...(i >= 0 ? reg[i] : { id: "eq" + Date.now().toString(36), nome: orig.nome, esp: orig.esp || [] }), ativa: false, saiuEm: S.hoje };
+    const lista = i >= 0 ? reg.map((e, j) => (j === i ? dados : e)) : [...reg, dados];
+    fechar();
+    await store.setConfig({ equipas: lista }, { tipo: "equipa", texto: `${orig.nome} saiu da obra${pl && pl.n ? `; ${pl.n} trabalhos por fazer ${pl.porEq.length ? "passaram para " + pl.porEq.map((x) => `${x.n} (${x.k})`).join(", ") : ""}${pl.sem ? `${pl.porEq.length ? " e " : ""}${pl.sem} ficaram sem equipa` : ""}` : ""}` });
+    if (pl && pl.lista.length) await store.updateMuitas(pl.lista, null);
+    toast(`${orig.nome} saiu da obra${pl && pl.mudam ? `. ${pl.mudam} atividades mudaram de datas` : ""}`);
+  };
+  const sv = q("#saiVer");
+  if (sv) {
+    const limpa = () => { q("#saiRes").innerHTML = ""; };
+    sh.querySelectorAll('input[name="saiDest"], #saiSel, #saiCurso').forEach((x) => (x.onchange = limpa));
+    sv.onclick = () => {
+      const pl = planoSaida();
+      q("#saiRes").innerHTML = `<div class="sai-res">
+        <p style="margin:0"><b>${pl.n}</b> trabalhos mudam de equipa${pl.ficam ? `; ${pl.ficam} em curso ficam com ${esc(orig.nome)} até acabarem` : ""}.</p>
+        ${pl.porEq.length ? `<ul class="dlg-l">${pl.porEq.map((x) => `<li><b>${esc(x.n)}</b> recebe ${x.k}: ${x.antes ? `acabava a ${fd(x.antes, true)}, ` : ""}passa a acabar a <b>${fd(x.depois, true)}</b></li>`).join("")}</ul>` : ""}
+        ${pl.sem ? `<div class="dlg-av">${pl.sem} ${pl.sem === 1 ? "fica" : "ficam"} sem equipa. Atribua-os depois no Plano das equipas ou em Trabalhos.${(sh.querySelector('input[name="saiDest"]:checked') || {}).value === "dist" ? " Para a aplicação os poder distribuir, diga na ficha de cada equipa que especialidades ela faz." : ""}</div>` : ""}
+        <p style="margin:0">${pl.mudam} atividades mudam de datas. A obra passa a acabar a <b>${fd(pl.fimObra, true)}</b>${S.tot.fim && pl.fimObra !== S.tot.fim ? ` (era ${fd(S.tot.fim, true)})` : " (não muda)"}.</p>
+        <button class="btn warn" type="button" id="saiOk2">Confirmar a saída de ${esc(orig.nome)}</button></div>`;
+      q("#saiOk2").onclick = async () => { if (await confirmar(`${esc(orig.nome)} sai da obra?`, `<p>Os trabalhos por fazer mudam como mostrado. Se se enganar, pode voltar a pôr a equipa na obra, mas os trabalhos não voltam sozinhos para ela.</p>`, "Sim, confirmar a saída")) saiConfirmar(pl); };
+    };
+  }
+  const so = q("#saiOk"); if (so) so.onclick = async () => { if (await confirmar(`${esc(orig.nome)} sai da obra?`, "<p>Deixa de aparecer para atribuir trabalho. Fica no histórico.</p>", "Sim, confirmar a saída")) saiConfirmar(null); };
+  const rt = q("#eqReat"); if (rt) rt.onclick = async () => {
+    const lista = registadas().map((e) => (e.nome === orig.nome ? { ...e, ativa: true, saiuEm: null } : e));
+    fechar();
+    await store.setConfig({ equipas: lista }, { tipo: "equipa", texto: `${orig.nome} voltou à obra` });
+    toast(`${orig.nome} voltou à obra`);
   };
   const del = q("#eqDelOk");
   if (del) del.onclick = async () => {
     if (!(await confirmar(`Eliminar a equipa ${esc(orig.nome)}?`, `<p>A equipa deixa de existir.${nTrab ? ` Os ${nTrab} trabalhos dela ${sh.querySelector('input[name="eqDest"]:checked') && sh.querySelector('input[name="eqDest"]:checked').value === "_outra" ? "passam para a equipa escolhida" : "ficam sem equipa"}.` : ""}</p>`, "Sim, eliminar"))) return;
     const r = sh.querySelector('input[name="eqDest"]:checked');
     const dest = r && r.value === "_outra" ? q("#eqDestSel").value : null;
-    const ids = Object.values(S.acts).filter((a) => a.equipa === orig.nome).map((a) => ({ id: a.id, patch: { equipa: dest } }));
+    const ids = Object.values(S.acts).filter((a) => a.equipa === orig.nome).map((a) => ({ id: a.id, patch: { equipa: dest, eqOrdem: null } }));
     fechar();
     await store.setConfig({ equipas: registadas().filter((e) => e.nome !== orig.nome) }, { tipo: "equipa", texto: `Eliminou a equipa ${orig.nome}${ids.length ? (dest ? `; os ${ids.length} trabalhos passaram para ${dest}` : `; ${ids.length} trabalhos ficaram sem equipa`) : ""}` });
     if (ids.length) await store.updateMuitas(ids, null);
@@ -3047,7 +3559,7 @@ function renderNova() {
     const equipa = q("#nEq").value.trim() || null;
     let alvos = novaAlvos();
     const cfgPatch = {};
-    if (equipa && !S.equipas.some((x) => x.toLowerCase() === equipa.toLowerCase())) cfgPatch.equipas = [...(S.cfg.equipas || []).filter((e) => e && e.nome), { id: "eq" + Date.now().toString(36), nome: equipa, esp: [] }];
+    if (equipa && !S.equipasTodas.some((x) => x.toLowerCase() === equipa.toLowerCase())) cfgPatch.equipas = [...(S.cfg.equipas || []).filter((e) => e && e.nome), { id: "eq" + Date.now().toString(36), nome: equipa, esp: [] }];
     let espKey = n.esp === "__outra" ? null : n.esp;
     if (n.esp === "__outra" && n.novaEsp && dono) {
       let k = slugKey(nome), i = 2;
@@ -3120,12 +3632,12 @@ function renderSheet() {
   const id = ui.sheet.id, a = S.acts[id], r = S.res.get(id);
   if (!a) { closeSheet(); return; }
   const down = downstream(id, S.res);
-  const fonteTxt = { excel: "Excel", regra: "Sequência", manual: "Manual" };
+  const fonteTxt = { excel: "Original", regra: "Sequência", manual: "Manual", equipa: "Fila da equipa" };
   const depRow = (pid, fonte, rem, tipo) => {
     const p = S.acts[pid]; if (!p) return "";
     const pr = S.res.get(pid);
     return `<div class="dep"><div><button class="lnk" data-go="${pid}">${esc(nomeAtiv(p))}</button> <span class="mono muted">${esc(p.unidade)}</span>${p.unidade !== a.unidade ? ` <span class="src outra">outra fração</span>` : ""}${fonte ? ` <span class="src">${fonteTxt[fonte] || ""}</span>` : ""}${tipo === "SS" ? ` <span class="src">em paralelo</span>` : ""}</div>
-      <div class="row" style="gap:6px"><span class="pill st-${pr.estado}">${ESTADO[pr.estado]}</span><span class="mono note">${fd(pr.fim)}</span>${rem ? `<button class="btn sm tira-b" data-rmdep="${pid}|${fonte}" title="Esta atividade deixa de esperar por aquela">× Tirar ligação</button>` : ""}</div></div>`;
+      <div class="row" style="gap:6px"><span class="pill st-${pr.estado}">${ESTADO[pr.estado]}</span><span class="mono note">${fd(pr.fim)}</span>${fonte === "equipa" ? `<button class="btn sm" data-gofila="${esc(a.equipa || "")}" title="A ordem dos trabalhos da equipa muda-se no plano da equipa">Plano da equipa</button>` : rem ? `<button class="btn sm tira-b" data-rmdep="${pid}|${fonte}" title="Esta atividade deixa de esperar por aquela">× Tirar ligação</button>` : ""}</div></div>`;
   };
   const exec = can("executar") && r.estado !== "concluida";
   // percentagem mexida e ainda por guardar: mantém-se se o ecrã se redesenhar (alterações de outros utilizadores)
@@ -3173,7 +3685,7 @@ function renderSheet() {
       <div class="row note"><span>Duração considerada: <b class="num">${r.dur} dias</b></span><span>Empreiteiro <b>${pct}%</b></span><span>Fiscal <b>${a.pctFiscal == null ? "sem vistoria" : Math.round(a.pctFiscal) + "%"}</b></span></div>
       ${r.atrasada ? `<div class="banner warn">A previsão de fim (${fd(r.prevFim)}) já passou há ${r.atraso} dias sem a atividade estar concluída.${can("executar") ? " Se já acabou, escreva o fim real; se não, indique uma nova previsão." : ""}${r.provFim > r.prevFim ? ` As seguintes já contam com o fim a ${fd(r.provFim)}.` : ""}</div>` : ""}
       ${a.motivo ? `<div class="note"><b>Motivo do atraso:</b> ${esc(a.motivo)}</div>` : ""}
-      ${a.obs ? `<div class="note"><b>Observações do Excel:</b> ${esc(a.obs)}</div>` : ""}
+      ${a.obs ? `<div class="note"><b>Observações:</b> ${esc(a.obs)}</div>` : ""}
       ${can("criar") ? `<div class="row" style="gap:6px"><button class="btn sm" id="bNovaU" title="Criar um trabalho novo em ${esc(a.unidade)}">+ Novo trabalho nesta fração</button><button class="btn sm" id="bNovaSeg" title="Criar um trabalho novo que só começa quando este acabar">+ Novo trabalho a seguir a este</button><button class="btn sm" id="bCopiar" title="Criar esta mesma atividade noutros apartamentos, lojas, zonas comuns ou no geral">Copiar para outras frações</button></div>
         ${can("executar") ? `<details class="formbox" id="mudaBox"><summary><b>Mudar para outra fração</b> <span class="note">apartamento, loja, zona comum ou geral</span></summary>
           <div style="display:flex;flex-direction:column;gap:10px;margin-top:10px">
@@ -3389,6 +3901,7 @@ function renderSheet() {
         `${N} passa a esperar ${tipo === "SS" ? "pelo início" : "pelo fim"} de ${nomeAtiv(p)}${p.unidade !== a.unidade ? " em " + p.unidade : ""}`, "dependencia");
     } });
   }
+  sh.querySelectorAll("[data-gofila]").forEach((b) => (b.onclick = () => { ui.eqPlan = b.dataset.gofila; closeSheet(); location.hash = "#planequipa"; }));
   sh.querySelectorAll("[data-rmdep]").forEach((b) => (b.onclick = async () => {
     const [pid, fonte] = b.dataset.rmdep.split("|");
     const p = S.acts[pid];

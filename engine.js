@@ -21,7 +21,7 @@ export function todayISO() {
 
 /**
  * Lista de antecessoras de cada atividade.
- * Fontes: "excel" (importadas), "manual" (acrescentadas na app), "regra" (regra por especialidade).
+ * Fontes: "equipa" (fila da equipa), "excel" (importadas), "manual" (acrescentadas na app), "regra" (regra por especialidade).
  */
 export function buildDeps(acts, regras) {
   const byUnitEsp = new Map();
@@ -32,16 +32,29 @@ export function buildDeps(acts, regras) {
     byUnitEsp.get(k).push(a.id);
   }
   const ids = new Set(acts.map((a) => a.id));
+  // fila de cada equipa: cada trabalho só começa quando a equipa acaba o anterior da fila
+  const antNaFila = new Map();
+  const filas = new Map();
+  for (const a of acts) {
+    if (!a.equipa || a.eqOrdem == null || a.eqOrdem === "") continue;
+    if (!filas.has(a.equipa)) filas.set(a.equipa, []);
+    filas.get(a.equipa).push(a);
+  }
+  for (const f of filas.values()) {
+    f.sort((x, y) => Number(x.eqOrdem) - Number(y.eqOrdem) || String(x.id).localeCompare(String(y.id)));
+    for (let i = 1; i < f.length; i++) antNaFila.set(f[i].id, f[i - 1].id);
+  }
   const preds = new Map();
   for (const a of acts) {
     const list = [];
     const seen = new Set();
     const ignorar = new Set(a.depsIgnorar || []);
     const push = (id, tipo, fonte) => {
-      if (!ids.has(id) || id === a.id || seen.has(id) || ignorar.has(id)) return;
+      if (!ids.has(id) || id === a.id || seen.has(id) || (ignorar.has(id) && fonte !== "equipa")) return;
       seen.add(id);
       list.push({ id, tipo: tipo || "FS", fonte });
     };
+    if (antNaFila.has(a.id)) push(antNaFila.get(a.id), "FS", "equipa");
     for (const d of a.deps || []) push(d.id, d.tipo, "excel");
     for (const d of a.depsExtra || []) push(d.id, d.tipo, "manual");
     if (a.esp && regras && regras[a.esp]) {
