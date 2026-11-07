@@ -115,10 +115,11 @@ export function schedule(acts, regras, hoje = todayISO(), duracoes = null) {
     const r = { id, dur, preds: preds.get(id), succ: succ.get(id), bloqueadaPor: [], ciclo: emCiclo.has(id), atraso: null, atrasoInicio: null };
     const concluida = !!a.concluido || (pct >= 100 && !!a.realFim);
     // primeira data possível dada pelas antecessoras (usa o fim provável delas, para empurrar)
-    let es = null;
+    let es = null, eqFim = null;
     for (const d of r.preds) {
       const pr = res.get(d.id);
       if (!pr) continue; // ciclo: ignora
+      if (d.fonte === "equipa" && pr.estado !== "concluida") eqFim = maxD(eqFim, pr.provFim);
       const cand = d.tipo === "SS" ? pr.provIni : addDays(pr.provFim, 1);
       es = maxD(es, cand);
       if (pr.estado !== "concluida" && d.tipo !== "SS") r.bloqueadaPor.push(d.id);
@@ -138,7 +139,7 @@ export function schedule(acts, regras, hoje = todayISO(), duracoes = null) {
       // um fim prometido antes de arrancar acompanha o início se as antecessoras o empurrarem
       if (!arrancou && propria && a.fimPrevisto >= propria) prevFim = addDays(prevIni, diffDays(propria, a.fimPrevisto));
       else prevFim = maxD(a.fimPrevisto, prevIni);
-    } else if (temDurManual || !a.planFim) prevFim = addDays(prevIni, dur);
+    } else if (temDurManual || !a.planFim || a.inicioPrevisto) prevFim = addDays(prevIni, dur); // início mudado à mão: o fim do plano original já não conta
     else prevFim = maxD(a.planFim, addDays(prevIni, dur));
     r.prevFim = prevFim;
     if (concluida) {
@@ -159,11 +160,14 @@ export function schedule(acts, regras, hoje = todayISO(), duracoes = null) {
         const restante = Math.ceil(dur * (1 - pct / 100));
         r.provIni = a.realInicio;
         r.provFim = maxD(prevFim, addDays(hoje, restante));
+        // já começou, mas a equipa está noutro trabalho da fila: o que falta só se faz quando ela acabar esse
+        if (eqFim && restante > 0) r.provFim = maxD(r.provFim, addDays(eqFim, 1 + restante));
       } else {
         r.estado = r.bloqueadaPor.length ? "bloqueada" : "por_iniciar";
         if (prevIni < hoje) r.atrasoInicio = diffDays(prevIni, hoje);
         r.provIni = maxD(prevIni, hoje);
-        r.provFim = maxD(prevFim, addDays(r.provIni, dur));
+        // conta o prazo previsto (pode ser um fim escrito à mão, mais curto ou mais longo do que a duração)
+        r.provFim = maxD(prevFim, addDays(r.provIni, Math.max(0, diffDays(prevIni, prevFim))));
       }
       r.atraso = prevFim < hoje ? diffDays(prevFim, hoje) : 0;
     }

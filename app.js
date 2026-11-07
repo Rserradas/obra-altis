@@ -1,4 +1,4 @@
-import { schedule, downstream, pctEfetiva, todayISO, diffDays, addDays } from "./engine.js";
+import { schedule, downstream, pctEfetiva, todayISO, diffDays, addDays, duracaoDe } from "./engine.js";
 import { DemoStore, CloudStore } from "./store.js";
 
 /* ============================================================ utilidades */
@@ -1563,6 +1563,14 @@ function primeiraPossivel(r) {
  * Depois de mudar o fim de uma atividade, pergunta o que fazer às seguintes ainda por iniciar.
  * patch: o que vai ser gravado nesta atividade (para simular o efeito antes de gravar).
  */
+/** Ao mudar a data de início de uma atividade, mantém o prazo dela sem fixar o fim:
+ *  se o prazo é o da especialidade, continua a acompanhar os dias por fração; senão fica como duração própria. */
+function prazoDe(sid) {
+  const x = S.acts[sid], xr = S.res.get(sid);
+  const span = Math.max(0, diffDays(xr.prevIni, xr.prevFim));
+  const padrao = duracaoDe({ ...x, duracaoManual: null }, S.cfg.duracoes || {});
+  return { fimPrevisto: null, duracaoManual: span === padrao ? null : span };
+}
 async function decidirSeguintes(id, patch) {
   const a = S.acts[id];
   const naFracao = location.hash.startsWith("#u-"); // a editar no ecrã de um apartamento: só esse apartamento
@@ -1577,7 +1585,7 @@ async function decidirSeguintes(id, patch) {
   const mesmas = abertas.filter((sid) => S.acts[sid].unidade === a.unidade);
   const outras = abertas.filter((sid) => S.acts[sid].unidade !== a.unidade);
   const alvo = naFracao ? mesmas : abertas;
-  const desloca = (lista) => lista.map((sid) => { const xr = S.res.get(sid); return { id: sid, patch: { inicioPrevisto: addDays(xr.prevIni, delta), fimPrevisto: addDays(xr.prevFim, delta), duracaoManual: null, dataOk: true } }; });
+  const desloca = (lista) => lista.map((sid) => { const xr = S.res.get(sid); return { id: sid, patch: { inicioPrevisto: addDays(xr.prevIni, delta), ...prazoDe(sid), dataOk: true } }; });
   // efeito noutras frações se as deste apartamento andarem
   const pAlvo = new Map(desloca(alvo).map((x) => [x.id, x.patch]));
   const simul2 = schedule(todasAct().map((x) => (x.id === id ? { ...x, ...patch } : pAlvo.has(x.id) ? { ...x, ...pAlvo.get(x.id) } : x)), S.cfg.regras || {}, S.hoje, S.cfg.duracoes || {});
@@ -1612,7 +1620,7 @@ async function decidirSeguintes(id, patch) {
       const pt = d.fonte === "manual" ? { depsExtra: (x.depsExtra || []).filter((e) => e.id !== pid) } : { depsIgnorar: [...new Set([...(x.depsIgnorar || []), pid])] };
       // fica nas datas que tem agora (sem a ligação voltaria às datas antigas do Excel)
       const xr = S.res.get(sid);
-      porSid.set(sid, { ...(porSid.get(sid) || {}), ...pt, inicioPrevisto: xr.prevIni, fimPrevisto: xr.prevFim, duracaoManual: null, dataOk: true });
+      porSid.set(sid, { ...(porSid.get(sid) || {}), ...pt, inicioPrevisto: xr.prevIni, ...prazoDe(sid), dataOk: true });
     }
     return { delta, lista: desloca(alvo), cortes: [...porSid.entries()].map(([sid, pt]) => ({ id: sid, patch: pt })) };
   }
@@ -1726,7 +1734,7 @@ async function editarData(id, campo, v) {
       else return render();
     }
     const delta = diffDays(r.prevIni, dia);
-    const patch = { inicioPrevisto: dia, dataOk: true, fimPrevisto: null, duracaoManual: Math.max(0, diffDays(r.prevIni, r.prevFim)) }; // a previsão anda inteira
+    const patch = { inicioPrevisto: dia, dataOk: true, ...prazoDe(id) }; // a previsão anda inteira, com o mesmo prazo
     return gravarComSeguintes(id, patch, reg(`Nova previsão de início para ${N}: ${fd(dia)}`), delta,
       dia !== v ? `Fica a ${fd(dia)}` : delta ? "Previsão guardada" : "Sem alteração");
   }
@@ -2353,7 +2361,9 @@ function regrasView() {
       <div class="rule rule-h ${mexe ? "ordenavel" : ""}">${mexe ? "<span></span>" : ""}<span>${th("nome", "Especialidade")}</span><span>${th("dias", "Dias por fração")}</span><span>${th("cond", "Só começa depois de")}</span></div>
       ${vista.map((e) => {
         const pre = regras[e.key] || [];
-        const disp = esp.filter((x) => x.key !== e.key && !pre.includes(x.key)).sort((x, y) => x.nome.localeCompare(y.nome, "pt", { sensitivity: "base", numeric: true }));
+        // não deixa escolher uma especialidade que já espera (direta ou indiretamente) por esta: seria um círculo
+        const espera = (k, alvo, vis = new Set()) => { if (vis.has(k)) return false; vis.add(k); return (regras[k] || []).some((q) => q === alvo || espera(q, alvo, vis)); };
+        const disp = esp.filter((x) => x.key !== e.key && !pre.includes(x.key) && !espera(x.key, e.key)).sort((x, y) => x.nome.localeCompare(y.nome, "pt", { sensitivity: "base", numeric: true }));
         const i = esp.indexOf(e);
         return `<div class="rule ${mexe ? "ordenavel" : ""}" data-rk="${e.key}" data-rq="${esc(semAcento([e.nome, ...pre.map((k) => (S.espIdx[k] ? S.espIdx[k].nome : k))].join(" ")))}" ${mexe ? 'draggable="true"' : ""}>${mexe ? `<div class="ordb"><button class="ord-b" data-ord="${e.key}|-1" ${i === 0 ? "disabled" : ""} title="Subir" aria-label="Subir ${esc(e.nome)}">▲</button><button class="ord-b" data-ord="${e.key}|1" ${i === esp.length - 1 ? "disabled" : ""} title="Descer" aria-label="Descer ${esc(e.nome)}">▼</button></div>` : ""}<div class="rnome" data-rnome="${e.key}"><b>${esc(e.nome)}</b>${seq ? `<button class="ren-b" data-ren="${e.key}" title="Mudar o nome" aria-label="Mudar o nome de ${esc(e.nome)}"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20h4L18.5 9.5a2.1 2.1 0 0 0-3-3L5 17v3z"/><path d="M14 8l3 3"/></svg></button>` : ""}</div>
           <input class="inp num" type="number" min="0" max="365" value="${dur[e.key] ?? ""}" data-dur="${e.key}" ${seq ? "" : "disabled"} aria-label="Dias por fração de ${esc(e.nome)}">
@@ -2407,6 +2417,15 @@ function regrasView() {
         const k = s.dataset.add, p = s.value;
         if (!p) return;
         const r = { ...regras, [k]: [...(regras[k] || []), p] };
+        // confirma que a regra nova não cria um círculo com as ligações que já existem nos apartamentos
+        const r2 = schedule(Object.values(S.acts), r, S.hoje, S.cfg.duracoes || {});
+        const novos = [...r2.values()].filter((x) => x.ciclo && !S.res.get(x.id).ciclo);
+        if (novos.length) {
+          const a0 = S.acts[novos[0].id];
+          s.value = "";
+          perguntar({ titulo: "Esta regra cria um círculo", texto: `<p>Em ${novos.length} atividades, ${esc(S.espIdx[p].nome)} já espera (direta ou indiretamente) por ${esc(S.espIdx[k].nome)}. Por exemplo: ${esc(nomeAtiv(a0))} em ${esc(a0.unidade)}.</p><p class="note">Com esta regra, uma esperaria pela outra e a aplicação não conseguiria calcular as datas. A regra não foi gravada.</p>`, opcoes: [{ k: "ok", l: "Percebi", estilo: "pri" }] });
+          return;
+        }
         save({ regras: r }, `Sequência: ${S.espIdx[k].nome} passa a esperar por ${S.espIdx[p].nome}`);
       }));
       // ordem das especialidades: setas, arrastar (rato) e ordenar pela sequência
@@ -2972,14 +2991,14 @@ function planEquipaView() {
       ${vis.length ? `<p class="note" style="margin:0">Arraste as linhas ou use as setas para mudar a ordem.</p><div class="fq">${linhas}</div>` : `<div class="empty">A fila está vazia. Junte trabalhos em baixo.</div>`}
     </section>`}
     <section class="card">
-      <div class="card-h"><h2>Trabalhos da equipa ainda sem lugar na fila</h2>${porOrdenar.length > 1 ? `<button class="btn sm" id="fqTodas">Pôr todos na fila</button>` : ""}</div>
-      ${porOrdenar.length ? `<p class="note" style="margin:0">Trabalhos que tirou da fila de propósito. Enquanto aqui estiverem, a app não conta com a disponibilidade da equipa para eles.</p><div class="fq">${porOrdenar.map((a) => { const r = S.res.get(a.id); return `<div class="fq-row fq-po"><span></span><span></span><div class="fq-t"><button class="lnk-b" data-a="${a.id}"><b>${esc(nomeAtiv(a))}</b></button><span class="mono">${esc(a.unidade)}</span></div><span class="pill st-${r.estado}">${ESTADO[r.estado]}</span><span></span><span class="fq-d mono num">${fd(r.inicio)} a ${fd(r.fim)}</span><span></span><span class="fq-ac"><button class="btn sm" data-fqadd="${a.id}">+ Pôr na fila</button><button class="btn sm tira-b" data-fqrem="${a.id}" title="Deixa de ser desta equipa">× Tirar da equipa</button></span></div>`; }).join("")}</div>`
+      <div class="card-h"><h2>Trabalhos da equipa ainda sem lugar na fila</h2>${porOrdenar.length > 1 ? `<button class="btn sm pri" id="fqTodas">Pôr todos na fila</button>` : ""}</div>
+      ${porOrdenar.length ? `<p class="note" style="margin:0">Enquanto aqui estiverem, a app não conta com a disponibilidade da equipa para eles: as datas são as de cada trabalho, como se a equipa os pudesse fazer todos ao mesmo tempo. Ponha-os na fila para isso deixar de acontecer.</p><div class="fq">${porOrdenar.map((a) => { const r = S.res.get(a.id); return `<div class="fq-row fq-po"><span></span><span></span><div class="fq-t"><button class="lnk-b" data-a="${a.id}"><b>${esc(nomeAtiv(a))}</b></button><span class="mono">${esc(a.unidade)}</span></div><span class="pill st-${r.estado}">${ESTADO[r.estado]}</span><span></span><span class="fq-d mono num">${fd(r.provIni)} a ${fd(r.provFim)}</span><span></span><span class="fq-ac"><button class="btn sm" data-fqadd="${a.id}">+ Pôr na fila</button><button class="btn sm tira-b" data-fqrem="${a.id}" title="Deixa de ser desta equipa">× Tirar da equipa</button></span></div>`; }).join("")}</div>`
         : `<div class="note">Todos os trabalhos atribuídos a esta equipa já estão na fila.</div>`}
     </section>
     <section class="card">
       <div class="card-h"><h2>Trabalhos que a equipa pode fazer</h2>${eq && eq.esp && eq.esp.length && potFrs.length ? `<label class="f">Apartamento<select class="inp" id="fqPotFr"><option value="">Todos</option>${potFrs.map((u) => `<option ${ep.potFr === u ? "selected" : ""}>${esc(u)}</option>`).join("")}</select></label>` : ""}</div>
       ${!eq || !eq.esp || !eq.esp.length ? `<div class="note">Diga na ficha da equipa que especialidades ela faz e a aplicação mostra aqui os trabalhos possíveis. <button class="btn sm" data-eqed2="${esc(nome)}">Abrir a ficha da equipa</button></div>`
-        : pot.length ? `<p class="note" style="margin:0">Pelas especialidades${eq.blocos && eq.blocos.length ? " e zonas" : ""} da equipa. Primeiro os que não têm equipa.</p><div class="fq">${pot.slice(0, 40).map((a) => { const r = S.res.get(a.id); const outra = a.equipa && S.equipas.includes(a.equipa); return `<div class="fq-row fq-po"><span></span><span></span><div class="fq-t"><button class="lnk-b" data-a="${a.id}"><b>${esc(nomeAtiv(a))}</b></button><span class="mono">${esc(a.unidade)}${outra ? ` · com ${esc(a.equipa)}` : a.equipa ? ` · era de ${esc(a.equipa)}, que saiu` : " · sem equipa"}</span></div><span class="pill st-${r.estado}">${ESTADO[r.estado]}</span><span></span><span class="fq-d mono num">${fd(r.inicio)} a ${fd(r.fim)}</span><span></span><button class="btn sm" data-fqpot="${a.id}">+ Pôr na fila</button></div>`; }).join("")}</div>${pot.length > 40 ? `<p class="note">E mais ${pot.length - 40}. Escolha um apartamento para ver menos.</p>` : ""}`
+        : pot.length ? `<p class="note" style="margin:0">Pelas especialidades${eq.blocos && eq.blocos.length ? " e zonas" : ""} da equipa. Primeiro os que não têm equipa.</p><div class="fq">${pot.slice(0, 40).map((a) => { const r = S.res.get(a.id); const outra = a.equipa && S.equipas.includes(a.equipa); return `<div class="fq-row fq-po"><span></span><span></span><div class="fq-t"><button class="lnk-b" data-a="${a.id}"><b>${esc(nomeAtiv(a))}</b></button><span class="mono">${esc(a.unidade)}${outra ? ` · com ${esc(a.equipa)}` : a.equipa ? ` · era de ${esc(a.equipa)}, que saiu` : " · sem equipa"}</span></div><span class="pill st-${r.estado}">${ESTADO[r.estado]}</span><span></span><span class="fq-d mono num">${fd(r.provIni)} a ${fd(r.provFim)}</span><span></span><button class="btn sm" data-fqpot="${a.id}">+ Pôr na fila</button></div>`; }).join("")}</div>${pot.length > 40 ? `<p class="note">E mais ${pot.length - 40}. Escolha um apartamento para ver menos.</p>` : ""}`
         : `<div class="note">Não há mais trabalhos por fazer que esta equipa possa fazer.</div>`}
     </section>
     <section class="card">
@@ -3972,6 +3991,8 @@ function renderSheet() {
   on("#bPrev", () => {
     const mot = $("#dMot", sh).value.trim(), dur = $("#dDur", sh).value;
     const patch = { motivo: mot || null, duracaoManual: dur === "" ? null : Math.max(0, Number(dur)) };
+    // uma duração escrita passa a mandar no fim (um fim escrito antes deixaria a duração sem efeito)
+    if (dur !== "" && S.res.get(id).estado !== "concluida") patch.fimPrevisto = null;
     const partes = [];
     if (dur !== "") partes.push("duração de " + dur + " dias");
     if (mot) partes.push("motivo: " + mot);
