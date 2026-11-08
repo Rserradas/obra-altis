@@ -13,4 +13,9 @@
   [headers.values]
     Cache-Control = "no-cache"
 
+[[headers]]
+  for = "/versao.json"
+  [headers.values]
+    Cache-Control = "no-cache"
+
 # Publicado a partir do GitHub (Rserradas/obra-altis).

@@ -57,6 +57,7 @@ const ICON = {
 let store, S = null; // S = estado calculado
 const semAcento = (x) => String(x || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
 const PLANO_PADRAO = () => ({ f: "todas", bloco: "", tipo: "", unidade: "", ativ: "", equipa: "", q: "", soAtr: false, semConc: true, sort: null, editar: false, atribuir: false, atrEq: "", selec: null });
+const VERSAO = "2026.11.08"; // mudar também em versao.json e no CACHE de sw.js
 const ui = { bloco: "todos", plano: PLANO_PADRAO(), unidadeTab: "ativ", vistoria: {}, sheet: null };
 /** Há algum filtro diferente do padrão? */
 function filtrosAlterados() {
@@ -65,6 +66,29 @@ function filtrosAlterados() {
   if (ui.regSort || ui.regQ) return true;
   const ganttMudou = g && (g.bloco || g.unidade || g.ativ || g.abertas === false || g.ligacoes === false || g.zoom !== "semana" || (g.abertosB && g.abertosB.size) || (g.abertos && g.abertos.size) || g.sel);
   return !!(planoMudou || ganttMudou || ui.bloco !== "todos" || ui.unitEdit || ui.uSemConc === false || !!ui.porVist);
+}
+/* Os filtros de Trabalhos, A minha semana e Apartamentos ficam guardados neste dispositivo, por utilizador. */
+let filtrosDe = null;
+const chaveFiltros = () => "obra-filtros-" + ((store && store.user && (store.user.email || store.user.papel)) || "");
+function lerFiltros() {
+  const k = chaveFiltros();
+  if (filtrosDe === k) return;
+  const trocou = filtrosDe !== null;
+  filtrosDe = k;
+  if (trocou) { ui.plano = PLANO_PADRAO(); ui.semana = null; ui.bloco = "todos"; ui.porVist = false; }
+  try {
+    const f = JSON.parse(localStorage.getItem(k) || "null");
+    if (!f) return;
+    if (f.plano) Object.assign(ui.plano, PLANO_PADRAO(), f.plano);
+    if (f.semana) ui.semana = f.semana;
+    if (f.bloco) ui.bloco = f.bloco;
+    if (f.porVist) ui.porVist = true;
+  } catch (e) {}
+}
+function guardarFiltros() {
+  if (filtrosDe !== chaveFiltros()) return;
+  const { bloco, tipo, unidade, ativ, equipa, q, soAtr, semConc, sort, f } = ui.plano;
+  try { localStorage.setItem(filtrosDe, JSON.stringify({ plano: { bloco, tipo, unidade, ativ, equipa, q, soAtr, semConc, sort, f }, semana: ui.semana || null, bloco: ui.bloco, porVist: !!ui.porVist })); } catch (e) {}
 }
 /** Volta todos os ecrãs aos filtros com que a aplicação abre (as vistorias por guardar mantêm-se). */
 function reporFiltros() {
@@ -83,9 +107,25 @@ function reporFiltros() {
   ui.unidadeTab = store.user && store.user.papel === "fiscal" ? "vist" : "ativ";
   window.scrollTo(0, 0);
   render();
-  toast("Filtros repostos");
+  toast("Filtros limpos");
 }
 
+/** Traduz um erro do Firebase ou do browser para português simples. */
+function erroSimples(err) {
+  const c = String((err && (err.code || err.message)) || "");
+  const M = [
+    [/permission|insufficient/i, "não tem permissão para isto"],
+    [/unavailable|network|offline|failed to fetch/i, "sem ligação à internet. Tente outra vez quando houver rede"],
+    [/email-already-in-use/i, "esse email já tem conta"],
+    [/invalid-email/i, "o email não está bem escrito"],
+    [/weak-password/i, "a palavra-passe é curta demais: use pelo menos 6 caracteres"],
+    [/not-found/i, "já não existe, pode ter sido apagado por outra pessoa"],
+    [/quota|resource-exhausted/i, "o limite de utilização do servidor foi atingido por hoje"],
+    [/deadline|timeout/i, "o servidor demorou demasiado a responder. Tente outra vez"],
+  ];
+  for (const [re, txt] of M) if (re.test(c)) return txt;
+  return "aconteceu um erro inesperado" + (c ? ` (${c})` : "");
+}
 /** O servidor recusou uma gravação: o ecrã volta ao valor anterior. Explica porquê. */
 function avisoErroEscrita(er) {
   const sem = /permission/i.test(er.code + " " + er.msg);
@@ -93,17 +133,20 @@ function avisoErroEscrita(er) {
     titulo: "A alteração não foi gravada",
     texto: sem
       ? `<p>O servidor recusou a gravação por falta de permissão, por isso o ecrã voltou ao valor anterior.</p><p class="note">Conta: ${esc(er.email || "")} (${esc(er.papel || "sem perfil")}). Se acabou de mudar as regras do Firebase, confirme que publicou a versão mais recente. Se não, diga ao dono de obra.</p>`
-      : `<p>O servidor recusou a gravação, por isso o ecrã voltou ao valor anterior.</p><p class="note">Detalhe técnico: ${esc(er.code || er.msg || "")}</p>`,
+      : `<p>Não foi possível gravar: ${esc(erroSimples({ code: er.code || er.msg }))}. O ecrã voltou ao valor anterior.</p><p class="note">Tente outra vez. Se continuar a acontecer, diga ao dono de obra e indique este código: ${esc(er.code || er.msg || "")}</p>`,
     opcoes: [{ k: "ok", l: "Percebi", estilo: "pri" }],
   });
 }
 /* ---- Anular: cada alteração guardada fica num "lote" que a mensagem seguinte pode desfazer */
 let loteAnular = [];
 let aAnular = false;
+let snapDatas = null; // datas de todas as atividades antes da primeira gravação do lote, para contar o que mudou
+const fotoDatas = () => (S ? new Map([...S.res].map(([id, r]) => [id, (r.inicio || "") + "|" + (r.fim || "")])) : null);
 function instalarAnular(st) {
   const upd = st.updateAtividade.bind(st), add = st.addAtividades.bind(st), cfg = st.setConfig.bind(st), rem = st.removeAtividades.bind(st);
   const prevCfg = (patch) => { const c = st.data.config || {}; const o = {}; for (const k of Object.keys(patch || {})) o[k] = c[k] === undefined ? null : JSON.parse(JSON.stringify(c[k])); return o; };
   st.updateAtividade = async (id, patch, registo) => {
+    if (!aAnular && !snapDatas) snapDatas = fotoDatas();
     if (!aAnular) {
       const a = st.data.atividades[id] || {};
       const prev = {};
@@ -113,17 +156,20 @@ function instalarAnular(st) {
     return upd(id, patch, registo);
   };
   st.addAtividades = async (lista, cfgPatch, registo) => {
+    if (!aAnular && !snapDatas) snapDatas = fotoDatas();
     if (!aAnular) { loteAnular.push({ t: "add", ids: lista.map((a) => a.id) }); if (cfgPatch) loteAnular.push({ t: "cfg", prev: prevCfg(cfgPatch) }); }
     const antes = aAnular; aAnular = true; // o setConfig interno não entra no lote
     try { return await add(lista, cfgPatch, registo); } finally { aAnular = antes; }
   };
   st.setConfig = async (patch, registo) => {
+    if (!aAnular && !snapDatas) snapDatas = fotoDatas();
     if (!aAnular) loteAnular.push({ t: "cfg", prev: prevCfg(patch) });
     return cfg(patch, registo);
   };
   if (st.updateMuitas) {
     const muitas = st.updateMuitas.bind(st);
     st.updateMuitas = async (lista, registo) => {
+    if (!aAnular && !snapDatas) snapDatas = fotoDatas();
       if (!aAnular) loteAnular.push({ t: "many", lista: lista.map(({ id, patch }) => {
         const a = st.data.atividades[id] || {}, prev = {};
         for (const k of Object.keys(patch || {})) prev[k] = a[k] === undefined ? null : JSON.parse(JSON.stringify(a[k]));
@@ -150,6 +196,7 @@ async function anularLote(lote) {
 function toast(msg, opts = {}) {
   document.querySelectorAll(".toast").forEach((x) => x.remove());
   const lote = loteAnular; loteAnular = [];
+  const snap = snapDatas; snapDatas = null;
   const podeAnular = opts.anular !== false && lote.length > 0;
   const t = document.createElement("div");
   t.className = "toast";
@@ -157,6 +204,19 @@ function toast(msg, opts = {}) {
   t.innerHTML = `<span>${esc(msg)}</span>${podeAnular ? `<button class="tb" data-t="anular">Anular</button>` : ""}${opts.acao ? `<button class="tb" data-t="acao">${esc(opts.acao.label)}</button>` : ""}`;
   document.body.appendChild(t);
   const tempo = setTimeout(() => t.remove(), podeAnular || opts.acao ? 8000 : 2600);
+  // depois de recalcular, diz quantas atividades mudaram de data (incluindo as seguintes)
+  if (snap && podeAnular) {
+    const conta = () => {
+      if (!t.isConnected || !S) return;
+      const ids = [...S.res].filter(([id, r]) => snap.has(id) && snap.get(id) !== (r.inicio || "") + "|" + (r.fim || "")).map(([id]) => id);
+      const fr = new Set(ids.map((id) => S.acts[id] && S.acts[id].unidade).filter(Boolean));
+      let el = t.querySelector(".toast-d");
+      if (!ids.length) { if (el) el.remove(); return; }
+      if (!el) { el = document.createElement("small"); el.className = "toast-d"; t.querySelector("span").appendChild(el); }
+      el.textContent = `No total, mudaram as datas de ${ids.length} atividade${ids.length === 1 ? "" : "s"}${fr.size > 1 ? ` em ${fr.size} frações` : fr.size === 1 ? ` em ${[...fr][0]}` : ""}.`;
+    };
+    setTimeout(conta, 250); setTimeout(conta, 1200);
+  }
   t.onclick = async (e) => {
     const b = e.target.closest("[data-t]"); if (!b) return;
     clearTimeout(tempo); t.remove();
@@ -260,6 +320,70 @@ async function boot() {
   });
   render();
   if ("serviceWorker" in navigator && cloud) navigator.serviceWorker.register("sw.js").catch(() => {});
+  // procura versões novas ao abrir, ao voltar à aplicação e de 15 em 15 minutos
+  setTimeout(verificarVersao, 4000);
+  setInterval(verificarVersao, 15 * 60 * 1000);
+  document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") verificarVersao(); });
+}
+
+/* ============================================================ versão da aplicação */
+let versaoNova = null;
+/** Lê versao.json do servidor (sem cache). Devolve a versão publicada, ou null sem rede. */
+async function versaoPublicada() {
+  try {
+    const r = await fetch("versao.json?t=" + Date.now(), { cache: "no-store" });
+    if (!r.ok) return null;
+    const j = await r.json();
+    return j && j.versao ? String(j.versao) : null;
+  } catch (e) { return null; }
+}
+async function verificarVersao() {
+  const v = await versaoPublicada();
+  if (v && v !== VERSAO) { versaoNova = v; mostrarAvisoVersao(); }
+  return v;
+}
+function mostrarAvisoVersao() {
+  if (document.querySelector(".nova-versao")) return;
+  const el = document.createElement("div");
+  el.className = "nova-versao no-print"; el.setAttribute("role", "status");
+  el.innerHTML = `<span><b>Há uma versão nova da aplicação.</b> Atualize para ter as últimas melhorias. O que já gravou não se perde.</span>
+    <span class="row" style="gap:6px"><button class="btn sm pri" data-nv="sim">Atualizar agora</button><button class="btn sm ghost" data-nv="nao">Mais tarde</button></span>`;
+  el.onclick = (e) => {
+    const b = e.target.closest("[data-nv]"); if (!b) return;
+    if (b.dataset.nv === "sim") atualizarApp(); else el.remove();
+  };
+  document.body.appendChild(el);
+}
+async function atualizarApp() {
+  const pend = store && store.sync && store.sync.pendentes;
+  if (pend) { toast("Ainda há alterações a enviar. Espere que fique Sincronizado e tente outra vez.", { anular: false }); return; }
+  try { const reg = navigator.serviceWorker && (await navigator.serviceWorker.getRegistration()); if (reg) await reg.update(); } catch (e) {}
+  location.reload();
+}
+async function abrirAjuda() {
+  const k = await perguntar({
+    titulo: "Ajuda",
+    texto: `<p>Em cada ecrã, o botão <b>?</b> ao lado do título explica para que serve esse ecrã.</p>
+      <p>O guia rápido mostra, em poucos passos, o essencial para o seu perfil.</p>
+      <p class="note" id="ajVer">Está a usar a versão <b>${esc(VERSAO)}</b>.${versaoNova ? ` Já existe a versão ${esc(versaoNova)}.` : ""}</p>`,
+    opcoes: [{ k: "guia", l: "Ver o guia rápido", estilo: "pri" }, { k: "ver", l: versaoNova ? "Atualizar agora" : "Procurar atualização" }, { k: "nao", l: "Fechar" }],
+  });
+  if (k === "guia") abrirGuia(true);
+  else if (k === "ver") {
+    if (versaoNova) return atualizarApp();
+    const v = await verificarVersao();
+    if (!v) toast("Não foi possível confirmar a versão. Verifique a ligação à internet.", { anular: false });
+    else if (v === VERSAO) toast(`Já tem a versão mais recente (${VERSAO}).`, { anular: false });
+  }
+}
+async function sairConfirmar() {
+  const pend = store.sync && store.sync.pendentes;
+  const k = await perguntar({
+    titulo: "Sair da aplicação?",
+    texto: pend ? `<div class="dlg-av">Ainda há alterações por enviar. Se sair agora, podem perder-se. Espere que fique Sincronizado.</div>` : `<p>Para voltar a entrar precisa do seu email e palavra-passe.</p>`,
+    opcoes: [{ k: "sim", l: "Sim, sair", estilo: "warn" }, { k: "nao", l: "Cancelar" }],
+  });
+  if (k === "sim") store.logout();
 }
 
 /* ============================================================ render principal */
@@ -284,7 +408,9 @@ function render() {
     lastView = "vista";
     return;
   }
+  lerFiltros();
   const view = routeView();
+  guardarFiltros();
   const nav = navItems();
   const scrollY = window.scrollY;
   const same = lastView === location.hash;
@@ -298,18 +424,19 @@ function render() {
         <div id="syncA"></div>
         <div class="who"><b>${esc(store.user.nome)}</b><span class="role">${store.admin ? "Administrador" : PAPEL[store.user.papel]}</span></div>
         ${store.admin ? vistaSelHTML("vistaD") : ""}
-        <button class="btn sm" data-ajuda>Ajuda</button>
-        <button class="btn sm ${filtrosAlterados() ? "repor-on" : ""}" data-repor title="Voltar todos os ecrãs aos filtros padrão">Repor filtros</button>
+        <button class="btn sm" data-ajuda>Ajuda e versão</button>
+        <button class="btn sm ${filtrosAlterados() ? "repor-on" : ""}" data-repor title="Voltar todos os ecrãs aos filtros padrão">Limpar filtros</button>
         <button class="btn sm" data-sair>Sair</button>
+        <span class="note versao" title="Versão da aplicação">Versão ${VERSAO}</span>
       </div>
     </aside>
     ${store.admin ? `<div class="vista-band">A ver como <b>${PAPEL[store.user.papel]}</b>${vistaSelHTML("vistaM")}</div>` : ""}
-    <header class="topbar">${brandHTML(true)}<div class="row" style="gap:4px"><div id="syncB"></div><button class="btn sm repor-on" data-repor data-repor-top title="Há filtros ativos: repor" ${filtrosAlterados() ? "" : "hidden"}>Repor filtros</button><button class="btn sm ghost" data-psqm aria-label="Procurar" title="Procurar">${ICON.lupa}</button><button class="btn sm ghost" data-ajuda aria-label="Ajuda" title="Ajuda">?</button><button class="btn sm ghost" data-sair>Sair</button></div></header>
+    <header class="topbar">${brandHTML(true)}<div class="row" style="gap:4px"><div id="syncB"></div><button class="btn sm repor-on" data-repor data-repor-top title="Há filtros ativos: limpar" ${filtrosAlterados() ? "" : "hidden"}>Limpar filtros</button><button class="btn sm ghost" data-psqm aria-label="Procurar" title="Procurar">${ICON.lupa}</button><button class="btn sm ghost" data-ajuda aria-label="Ajuda" title="Ajuda">?</button><button class="btn sm ghost" data-sair>Sair</button></div></header>
     <main class="main"><div class="main-in" id="view">${view.html}</div></main>
     <nav class="tabbar">${nav.filter((n) => !n.soLado).map((n) => `<a href="#${n.id}" class="${view.nav === n.id ? "on" : ""}">${ICON[n.id]}<span>${n.short || n.label}</span></a>`).join("")}${nav.some((n) => n.soLado) ? `<button type="button" class="tb-mais ${nav.some((n) => n.soLado && view.nav === n.id) ? "on" : ""}" data-mais aria-haspopup="menu" aria-expanded="false">${ICON.mais}<span>Mais</span></button>` : ""}</nav>
     ${nav.some((n) => n.soLado) ? `<div class="mais-m" hidden role="menu" data-maism>${nav.filter((n) => n.soLado).map((n) => `<a href="#${n.id}" role="menuitem" class="${view.nav === n.id ? "on" : ""}">${ICON[n.id]}<span>${n.label}</span></a>`).join("")}</div>` : ""}
   </div>`;
-  app.querySelectorAll("[data-sair]").forEach((b) => (b.onclick = () => store.logout()));
+  app.querySelectorAll("[data-sair]").forEach((b) => (b.onclick = sairConfirmar));
   const bm = app.querySelector("[data-mais]"), mm = app.querySelector("[data-maism]");
   if (bm && mm) {
     bm.onclick = (e) => { e.stopPropagation(); mm.hidden = !mm.hidden; bm.setAttribute("aria-expanded", String(!mm.hidden)); };
@@ -317,10 +444,11 @@ function render() {
   }
   ["#vistaD", "#vistaM"].forEach((id) => { const sl = $(id); if (sl) sl.onchange = () => mudarVista(sl.value); });
   app.querySelectorAll("[data-repor]").forEach((b) => (b.onclick = reporFiltros));
-  app.querySelectorAll("[data-ajuda]").forEach((b) => (b.onclick = () => abrirGuia(true)));
+  app.querySelectorAll("[data-ajuda]").forEach((b) => (b.onclick = abrirAjuda));
   const pd = $("#psqD"); if (pd && S) ligarPesquisa(pd);
   app.querySelectorAll("[data-psqm]").forEach((b) => (b.onclick = abrirPesquisaMovel));
   renderSync();
+  ajudaEcra();
   view.bind && view.bind();
   if (S) abrirGuia(false);
   if (ui.sheet) {
@@ -451,12 +579,75 @@ async function importarComProgresso(soFaltam, aoFalhar) {
     bar.remove();
     toast(soFaltam ? `Importação completa: acrescentados ${n} trabalhos` : "Cronograma importado");
   } catch (e) {
-    bar.innerHTML = `<b>A importação parou:</b> ${esc(e.code || e.message)}. <button class="btn sm" id="impFecha">Fechar</button>`;
+    bar.innerHTML = `<b>A importação parou:</b> ${esc(erroSimples(e))}. O que já entrou fica guardado e pode completar depois. <button class="btn sm" id="impFecha">Fechar</button>`;
     bar.querySelector("#impFecha").onclick = () => bar.remove();
     if (aoFalhar) aoFalhar();
   } finally { importando = false; render(); }
 }
 
+/* ============================================================ precisa de atenção (painel e semana) */
+/** Quantas atividades por concluir dependem desta, direta ou indiretamente. */
+function nSeguintes(id) {
+  const vistos = new Set([id]), fila = [id];
+  let n = 0;
+  while (fila.length) {
+    const r = S.res.get(fila.shift());
+    for (const sid of (r && r.succ) || []) {
+      if (vistos.has(sid)) continue;
+      vistos.add(sid);
+      const rs = S.res.get(sid);
+      if (rs && rs.estado !== "concluida") { n++; fila.push(sid); }
+    }
+  }
+  return n;
+}
+function atencaoDados() {
+  const vivas = actsObra().map((a) => ({ a, r: S.res.get(a.id) })).filter(({ r }) => r && r.estado !== "concluida");
+  const comSeg = (xs) => xs.map((x) => ({ ...x, seg: nSeguintes(x.a.id) })).sort((x, y) => y.seg - x.seg || (y.r.atraso || 0) - (x.r.atraso || 0));
+  // em curso com o fim previsto já passado: muitas vezes já acabaram e ninguém as concluiu
+  const esquecidas = comSeg(vivas.filter(({ r }) => r.estado === "em_curso" && r.atrasada));
+  // livres para começar (as anteriores já acabaram) e com o início previsto já passado
+  const paradas = comSeg(vivas.filter(({ a, r }) => r.estado === "por_iniciar" && !a.realInicio && r.prevIni && r.prevIni < S.hoje));
+  const limite = new Date(Date.now() - 7 * 86400000).toISOString();
+  const semVist = S.unidades.filter((u) => u.n.em_curso > 0 && (!ultimaVistoria(u) || ultimaVistoria(u) < limite));
+  return { esquecidas, paradas, semVist };
+}
+function atencaoHTML({ max = 3, vist = true, fechavel = false } = {}) {
+  const d = atencaoDados();
+  const ex = can("executar");
+  const linha = ({ a, r, seg }, tipo) => `<div class="at-l">
+    <button class="lnk-b at-n" data-a="${a.id}"><span><b>${esc(nomeAtiv(a))}</b> <span class="mono">${esc(a.unidade)}</span></span>
+      <small>${tipo === "fim" ? `devia ter acabado a ${fd(r.prevFim)}` : `podia ter começado a ${fd(r.prevIni)}`}${seg ? ` · atrasa ${seg} atividade${seg === 1 ? "" : "s"} seguinte${seg === 1 ? "" : "s"}` : ""}</small></button>
+    <span class="at-b">${ex ? (tipo === "fim" ? `<button class="btn sm ok" data-at="fim|${a.id}">Concluí hoje</button>` : `<button class="btn sm pri" data-at="ini|${a.id}">Iniciei hoje</button>`) : ""}<button class="btn sm" data-a="${a.id}">Abrir</button></span>
+  </div>`;
+  const grupo = (titulo, sub, xs, tipo, f) => !xs.length ? "" : `<div class="at-g">
+    <h3>${titulo} <span class="note num">${xs.length}</span></h3><p class="note">${sub}</p>
+    ${xs.slice(0, max).map((x) => linha(x, tipo)).join("")}
+    ${xs.length > max ? `<a class="note" href="#plano" data-atver="${f}">Ver as ${xs.length} nos Trabalhos</a>` : ""}</div>`;
+  const corpo = grupo("Em curso, com o fim já passado", "Se já acabaram, conclua-as: as atividades seguintes avançam logo. As que atrasam mais atividades aparecem primeiro.", d.esquecidas, "fim", "em_curso")
+    + grupo("Podiam já ter começado", "As anteriores já estão concluídas e a data de início já passou. Se já começaram, registe o início.", d.paradas, "ini", "proximas")
+    + (vist && d.semVist.length ? `<div class="at-g"><h3>Frações em obra sem vistoria há mais de 7 dias <span class="note num">${d.semVist.length}</span></h3>
+      <div class="at-fr">${d.semVist.slice(0, 12).map((u) => `<a class="mono chip-u" href="#u-${esc(u.id)}">${esc(u.id)}</a>`).join("")}${d.semVist.length > 12 ? `<a class="note" href="#unidades" data-atvist>ver todas</a>` : ""}</div></div>` : "");
+  if (fechavel) {
+    // em A minha semana fica fechado por defeito, para não empurrar as listas da semana
+    if (!corpo) return "";
+    const resumo = [d.esquecidas.length ? `${d.esquecidas.length} em curso com o fim já passado` : "", d.paradas.length ? `${d.paradas.length} podiam já ter começado` : ""].filter(Boolean).join(", ");
+    return `<details class="card atencao" id="atencao" ${ui.atencaoAberta ? "open" : ""}><summary><b>Precisa de atenção</b> <span class="note">${resumo}</span></summary>${corpo}</details>`;
+  }
+  return `<section class="card atencao" id="atencao"><div class="card-h"><h2>Precisa de atenção</h2><span class="note">o que convém tratar primeiro</span></div>
+    ${corpo || `<div class="empty">Nada urgente: não há atividades esquecidas nem paradas.</div>`}</section>`;
+}
+function bindAtencao() {
+  const dt = document.querySelector("details#atencao"); if (dt) dt.ontoggle = () => { ui.atencaoAberta = dt.open; };
+  document.querySelectorAll("[data-atver]").forEach((b) => (b.onclick = () => { Object.assign(ui.plano, PLANO_PADRAO(), { f: b.dataset.atver, soAtr: b.dataset.atver === "em_curso", _fToque: true }); }));
+  document.querySelectorAll("[data-atvist]").forEach((b) => (b.onclick = () => { ui.porVist = true; ui.bloco = "todos"; }));
+  document.querySelectorAll("[data-at]").forEach((b) => (b.onclick = async () => {
+    const [acao, id] = b.dataset.at.split("|");
+    b.disabled = true;
+    if (acao === "fim") await concluirHoje(id);
+    else await editarData(id, "realIni", S.hoje);
+  }));
+}
 /* ============================================================ painel */
 function painelView() {
   const t = S.tot;
@@ -498,6 +689,7 @@ function painelView() {
         <a class="kpi k-bloq" href="#plano" data-f="bloqueada"><b>${t.bloqueada}</b><span>Bloqueadas por outras</span></a>
       </div>
     </div>
+    ${atencaoHTML()}
     <div class="grid2">
       <section class="card">
         <div class="card-h"><h2>Avanço por bloco</h2><span class="note">média ponderada pela duração</span></div>
@@ -524,7 +716,7 @@ function painelView() {
         <span class="li-s"><span>${esc(r.nomePor || r.por)}</span><span class="role">${PAPEL[r.papel] || ""}</span>${r.unidade ? `<a class="mono" href="#u-${esc(r.unidade)}">${esc(r.unidade)}</a>` : ""}</span></div>`).join("")
         : `<div class="empty">Ainda não há registos. Quando o empreiteiro ou o fiscal atualizarem atividades, aparecem aqui.</div>`}</div>
     </section>`;
-  return { html, bind: () => { bindCommon(); resumoSemana(); guardarFotoDiaria(); const bc = $("#corrExp"); if (bc) bc.onclick = corrigirExpiradas; const bf = $("#impFalta"); if (bf) bf.onclick = () => { bf.disabled = true; importarComProgresso(true, () => { bf.disabled = false; }); }; } };
+  return { html, bind: () => { bindCommon(); bindAtencao(); resumoSemana(); guardarFotoDiaria(); const bc = $("#corrExp"); if (bc) bc.onclick = corrigirExpiradas; const bf = $("#impFalta"); if (bf) bf.onclick = () => { bf.disabled = true; importarComProgresso(true, () => { bf.disabled = false; }); }; } };
 }
 /* ============================================================ fim da obra (previsão por bloco e por fração) */
 const NOME_BLOCO = (k) => (k.length === 1 ? "Bloco " + k : k);
@@ -877,8 +1069,7 @@ function unidadeView(id) {
   const nChg = Object.values(ui.vistoria).filter((v) => v.unidade === id && temMud(v)).length;
   const html = `
     <div class="row" style="justify-content:space-between"><div class="row" style="gap:6px"><a class="back" href="#unidades">Apartamentos</a>
-      ${(() => { const vz = vizinhas(u.id); return `<span class="unav">${vz.ant ? `<a class="btn sm" href="#u-${esc(vz.ant)}" title="Fração anterior">‹ ${esc(vz.ant)}</a>` : ""}${vz.seg ? `<a class="btn sm" href="#u-${esc(vz.seg)}" title="Fração seguinte">${esc(vz.seg)} ›</a>` : ""}</span>`; })()}</div><div class="row" style="gap:6px"><a class="btn sm" href="#plano" data-verplano="${esc(u.id)}|${esc(u.bloco)}">Ver nos trabalhos</a><a class="btn sm" href="#gantt" data-vergantt="${esc(u.id)}|${esc(u.bloco)}">Ver no Gantt</a>${can("criar") ? `<button class="btn sm" data-nova="unit:${esc(u.id)}">+ Nova atividade nesta fração</button>` : ""}${store.user.papel === "dono" && !(ui.delUnit && ui.delUnit.id === u.id) ? `<button class="btn sm warn" id="delU">Eliminar fração</button>` : ""}</div></div>
-    ${delUnidadeHTML(u)}
+      ${(() => { const vz = vizinhas(u.id); return `<span class="unav">${vz.ant ? `<a class="btn sm" href="#u-${esc(vz.ant)}" title="Fração anterior">‹ ${esc(vz.ant)}</a>` : ""}${vz.seg ? `<a class="btn sm" href="#u-${esc(vz.seg)}" title="Fração seguinte">${esc(vz.seg)} ›</a>` : ""}</span>`; })()}</div><div class="row" style="gap:6px"><a class="btn sm" href="#plano" data-verplano="${esc(u.id)}|${esc(u.bloco)}">Ver nos trabalhos</a><a class="btn sm" href="#gantt" data-vergantt="${esc(u.id)}|${esc(u.bloco)}">Ver no Gantt</a>${can("criar") ? `<button class="btn sm" data-nova="unit:${esc(u.id)}">+ Nova atividade nesta fração</button>` : ""}</div></div>
     ${u.teste ? `<div class="banner teste-b"><span><b>Fração de teste.</b> Pode mexer à vontade: não conta para o painel, para o fim da obra nem para as estatísticas, e não mexe nas datas das outras frações. Quando acabar os testes, elimine-a.</span></div>` : ""}
     <div class="uhead">
       <div><div class="eyebrow">${esc(u.tipo)}${u.bloco !== "Geral" ? " · " + blocoLabel(u.bloco) : ""}${u.tipo === "Apartamento" ? " · piso " + u.piso : ""}</div><h1>${esc(u.tipo === "Apartamento" || u.tipo === "Loja" ? u.id : u.nome)}</h1></div>
@@ -906,8 +1097,9 @@ function unidadeView(id) {
       <div class="vbar"><span id="vcnt">${nChg ? `${nChg} especialidade${nChg > 1 ? "s" : ""} por guardar` : "Sem alterações"}</span>
         <button class="btn pri" id="vsave" ${nChg ? "" : "disabled"}>Guardar vistoria</button></div>`
       : tab === "fotos" ? `<div id="fotos" class="photos"><div class="note">A carregar fotografias...</div></div>`
-      : `${barraConc}<div class="arows">${rowsAtiv || `<div class="empty">${u.acts.length ? "Tudo concluído nesta fração. Desligue \"Esconder concluídas\" para ver o histórico." : "Sem atividades."}</div>`}</div>
-         <p class="note">Barra: previsão. Traço vermelho: hoje. E e F: percentagem declarada pelo empreiteiro e verificada pelo fiscal. Passe o rato por cima de uma linha para ver o detalhe.</p>`}`;
+      : `${barraConc}<div class="arows">${rowsAtiv || `<div class="empty">${u.acts.length ? "Tudo concluído nesta fração. Desligue \"Esconder concluídas\" para ver o histórico." : can("criar") ? "Esta fração ainda não tem atividades. Crie a primeira com + Nova atividade nesta fração, lá em cima." : "Esta fração ainda não tem atividades."}</div>`}</div>
+         <p class="note">Barra: previsão. Traço vermelho: hoje. E e F: percentagem declarada pelo empreiteiro e verificada pelo fiscal. Passe o rato por cima de uma linha para ver o detalhe.</p>`}
+    ${store.user.papel === "dono" && tab !== "vist" ? `<div class="perigo">${ui.delUnit && ui.delUnit.id === u.id ? delUnidadeHTML(u) : `<button class="btn sm ghost perigo-b" id="delU">Eliminar esta fração</button><span class="note">Apaga a fração e todas as suas atividades. ${u.teste ? "Pede o código para confirmar." : "Pede confirmação três vezes."}</span>`}</div>` : ""}`;
   if (tab === "vist" && !fiscal) ui.unidadeTab = "ativ";
   return { html, bind: () => bindUnidade(u) };
 }
@@ -1035,7 +1227,7 @@ async function loadFotos(unidade, el, ativ) {
   try { fotos = await store.getFotos(unidade); } catch (e) { el.innerHTML = `<div class="err">Não foi possível carregar as fotografias.</div>`; return; }
   if (ativ) fotos = fotos.filter((f) => f.ativ === ativ);
   fotos.sort((a, b) => b.em.localeCompare(a.em));
-  if (!fotos.length) { el.innerHTML = `<div class="empty" style="grid-column:1/-1">Ainda sem fotografias${ativ ? " desta atividade" : " nesta fração"}.</div>`; return; }
+  if (!fotos.length) { el.innerHTML = `<div class="empty" style="grid-column:1/-1">Ainda sem fotografias${ativ ? " desta atividade" : " nesta fração"}. Junte-as na vistoria ou na ficha de cada atividade.</div>`; return; }
   el.innerHTML = fotos.map((f, i) => `<div class="phw" data-phw="${i}"><button class="ph" data-ph="${i}"><img src="${f.data}" alt="Fotografia de obra" loading="lazy"><b>${esc(f.ativ && S.acts[f.ativ] ? nomeAtiv(S.acts[f.ativ]) : "")}</b><span>${fdt(f.em)} · ${esc(f.nomePor || "")}</span>${f.nota ? `<span class="phn">${esc(f.nota)}</span>` : ""}</button>
     ${podeApagarFoto(f) ? `<button class="phx" data-phx="${i}" aria-label="Apagar fotografia" title="Apagar fotografia">×</button>` : ""}
     <div class="phc" data-phc="${i}" hidden><b>Apagar esta fotografia?</b><div class="row" style="gap:6px"><button class="btn sm delfinal" data-phs="${i}">Apagar</button><button class="btn sm" data-phn="${i}">Não</button></div></div></div>`).join("");
@@ -1050,7 +1242,7 @@ async function loadFotos(unidade, el, ativ) {
       await store.removeFoto(f, { tipo: "foto", texto: `Apagou uma fotografia${x ? " de " + nomeAtiv(x) : ""} em ${f.unidade}` });
       toast("Fotografia apagada");
       loadFotos(unidade, el, ativ);
-    } catch (err) { toast("Não foi possível apagar: " + (err.code || err.message)); b.disabled = false; }
+    } catch (err) { toast("Não foi possível apagar: " + erroSimples(err) + ".", { anular: false }); b.disabled = false; }
   }));
   el.querySelectorAll("[data-ph]").forEach((b) => (b.onclick = () => abrirGaleria(fotos, +b.dataset.ph, () => loadFotos(unidade, el, ativ))));
 }
@@ -1092,7 +1284,7 @@ function abrirGaleria(fotos, i0, depoisApagar) {
         if (depoisApagar) depoisApagar();
         if (!fotos.length) { fechar(); return; }
         i = Math.min(i, fotos.length - 1); conf = false; desenha();
-      } catch (err) { toast("Não foi possível apagar: " + (err.code || err.message)); }
+      } catch (err) { toast("Não foi possível apagar: " + erroSimples(err) + ".", { anular: false }); }
     }
   };
   let x0 = null;
@@ -1222,12 +1414,25 @@ function planoView() {
   };
   const html = `
     <div class="card-h"><h1>Trabalhos</h1><div class="row">
-      ${can("executar") ? `<button class="btn ${atr ? "warn" : ""}" id="pAtr" title="Escolher várias atividades para atribuir equipa, iniciar ou concluir de uma vez">${atr ? "Terminar escolha" : "Escolher várias"}</button>` : ""}
+      ${can("executar") ? `<button class="btn ${atr ? "warn" : ""}" id="pAtr" title="Escolher várias atividades para atribuir equipa, iniciar ou concluir de uma vez">${atr ? "Terminar escolha" : "Concluir ou atribuir várias"}</button>` : ""}
       ${can("executar") ? `<button class="btn ${ed ? "warn" : ""}" id="pEdit">${ed ? "Terminar edição" : "Editar datas"}</button>` : ""}
       ${can("criar") ? `<button class="btn pri" data-nova="">+ Nova atividade</button>` : ""}</div></div>
     ${ed ? `<div class="banner">Altere as datas e a percentagem diretamente na tabela, ou toque no estado para iniciar ou concluir hoje. Cada alteração fica guardada logo e as atividades que dependem desta acertam-se sozinhas.
       Nas atividades por iniciar muda a previsão; nas iniciadas ou concluídas, corrige a data real.</div>`
       : papel === "empreiteiro" && !atr ? `<div class="banner">Toque numa atividade para a iniciar, atualizar a percentagem ou concluir. Para mudar várias datas, use Editar datas.</div>` : ""}
+    ${(() => {
+      const r = [];
+      if (p.bloco) r.push(blocoLabel(p.bloco));
+      if (p.tipo) r.push((TIPOS.find(([k]) => k === p.tipo) || [, p.tipo])[1]);
+      if (p.unidade) r.push(p.unidade);
+      if (p.ativ) r.push(p.ativ);
+      if (p.equipa) r.push(p.equipa === "_sem" ? "Sem equipa" : "Equipa " + p.equipa);
+      if (p.f && p.f !== "todas") r.push((ESTADOS.find(([k]) => k === p.f) || [, p.f])[1]);
+      if (p.soAtr) r.push("Só atrasadas");
+      if (p.q.trim()) r.push(`procura "${p.q.trim()}"`);
+      if (!p.semConc && p.f !== "concluida") r.push("com as concluídas");
+      return r.length ? `<div class="fres" role="status"><span>Filtros ativos: <b>${r.map(esc).join(" · ")}</b></span><button class="btn sm repor-on" data-repor>Limpar filtros</button></div>` : "";
+    })()}
     <div class="chips" role="group" aria-label="Bloco">${["", "A", "B", "C", "D", "Geral"].map((b) => `<button class="chip ${p.bloco === b ? "on" : ""}" data-pb="${b}">${b === "Geral" ? "Geral" : b ? "Bloco " + b : "Todos os blocos"}</button>`).join("")}</div>
     <div class="chips" role="group" aria-label="Estado">${ESTADOS.map(([k, l]) => `<button class="chip ${p.f === k ? "on" : ""}" data-pf="${k}">${l} <span class="num" style="opacity:.65">${conta[k]}</span></button>`).join("")}</div>
     <div class="filters">
@@ -1241,7 +1446,7 @@ function planoView() {
       <label class="f" style="flex:1;min-width:180px">Procurar<input class="inp" id="pq" value="${esc(p.q)}" placeholder="Ex.: B-F503, louças, 2#10"></label>
       <label class="check" style="align-self:center"><input type="checkbox" id="psa" ${p.soAtr ? "checked" : ""}><span>Só atrasadas</span></label>
       <label class="check" style="align-self:center" title="${p.f === "concluida" ? "Não se aplica ao ver as concluídas" : "Esconde as atividades 100% concluídas"}"><input type="checkbox" id="psc" ${p.semConc ? "checked" : ""} ${p.f === "concluida" ? "disabled" : ""}><span>Esconder concluídas</span></label>
-      ${filtrosAlterados() ? `<button class="btn sm repor-on" id="pclr" style="align-self:center">Repor filtros</button>` : ""}
+      ${filtrosAlterados() ? `<button class="btn sm repor-on" id="pclr" style="align-self:center">Limpar filtros</button>` : ""}
     </div>
     ${p.f === "porconfirmar" ? `<div class="banner warn"><span>Estas atividades nunca tiveram data. A aplicação deu-lhes a primeira data possível: hoje, ou logo a seguir às anteriores. Corra a lista e, em cada uma, corrija a data (com Editar datas) ou confirme que está certa. Ao mudar uma data, a atividade sai desta lista.</span>${can("executar") && shown.length ? `<button class="btn sm" id="confTodas">Confirmar as ${shown.length} mostradas</button>` : ""}</div>` : ""}
     ${atr ? `<div class="atrbar" id="atrbar">
@@ -1259,7 +1464,7 @@ function planoView() {
       return `<th aria-sort="${on ? (p.sort.dir === "desc" ? "descending" : "ascending") : "none"}"><button class="th-sort ${on ? "on" : ""}" data-sort="${k}" title="Ordenar por ${l.toLowerCase()}">${l}<span class="arr">${on ? (p.sort.dir === "desc" ? "▼" : "▲") : "↕"}</span></button></th>`;
     }).join("")}</tr></thead><tbody>
     ${shown.map(linha).join("")}</tbody></table></div>${list.length > MAX ? `<p class="note">A mostrar ${MAX} de ${list.length}. Use os filtros para afinar.</p>` : ""}`
-    : `<div class="empty">${atr && p.equipa === "_sem" ? "Não há trabalhos sem equipa com estes filtros. Para mudar a equipa de trabalhos que já têm uma, ponha o filtro Equipa em Todas." : "Nenhuma atividade com estes filtros."}</div>`}`;
+    : `<div class="empty">${atr && p.equipa === "_sem" ? "Não há trabalhos sem equipa com estes filtros. Para mudar a equipa de trabalhos que já têm uma, ponha o filtro Equipa em Todas." : `Nenhuma atividade com estes filtros.${filtrosAlterados() ? ` <button class="btn sm" data-repor>Limpar filtros</button>` : ""}`}</div>`}`;
   return {
     html, bind: () => {
       bindCommon();
@@ -1389,7 +1594,7 @@ function pctDuasHTML(a) {
 const pctFiscalHTML = (a) => `<span class="p2 sv"> F ${a.pctFiscal == null ? "s/v" : Math.round(Number(a.pctFiscal)) + "%"}</span>`;
 const pctEdHTML = (a) => `<label class="pct-ed" title="Percentagem feita (empreiteiro)"><input class="inp num" type="number" min="0" max="100" step="5" inputmode="numeric" data-pcted="${a.id}" value="${Math.round(Number(a.pctEmp) || 0)}" aria-label="Percentagem feita de ${esc(nomeAtiv(a))} em ${esc(a.unidade)}"><span>%</span></label>`;
 /** Pede confirmação e conclui a atividade hoje (com os avisos das seguintes). */
-/* ---- Várias de uma vez (Trabalhos, Escolher várias). As seguintes acertam-se sozinhas pela sequência. */
+/* ---- Várias de uma vez (Trabalhos, Concluir ou atribuir várias). As seguintes acertam-se sozinhas pela sequência. */
 const listaNomes = (xs, max = 6) => `<ul class="dlg-l">${xs.slice(0, max).map((a) => `<li>${esc(nomeAtiv(a))} em ${esc(a.unidade)}</li>`).join("")}${xs.length > max ? `<li class="note">e mais ${xs.length - max}</li>` : ""}</ul>`;
 async function concluirVarias(ids, v) {
   if (v > S.hoje) { toast("A data de conclusão não pode ser no futuro.", { anular: false }); return false; }
@@ -1635,7 +1840,8 @@ async function gravarComSeguintes(id, patch, registo, _delta, msg) {
   const extra = dec && dec.cortes && dec.cortes.length ? `, ${dec.cortes.length} ligação${dec.cortes.length > 1 ? "ões" : ""} a outras frações retirada${dec.cortes.length > 1 ? "s" : ""}` : "";
   if (seg && seg.length) {
     await store.updateMuitas(seg, { tipo: "previsao", texto: `${seg.length} atividades seguintes de ${nomeAtiv(a)} em ${a.unidade} movidas ${delta > 0 ? "+" : ""}${delta} dias` });
-    return toast(`${msg}. ${seg.length} atividade${seg.length > 1 ? "s seguintes movidas" : " seguinte movida"} ${delta > 0 ? "+" : ""}${delta} dias${extra}`);
+    const ad = Math.abs(delta);
+    return toast(`${msg}. ${seg.length > 1 ? "As seguintes foram" : "A seguinte foi"} ${delta > 0 ? "para a frente" : "para trás"} ${ad} dia${ad === 1 ? "" : "s"}${extra}`);
   }
   toast(msg + extra);
 }
@@ -1773,13 +1979,13 @@ function semanaView() {
       <div class="si">${tipo === "curso" ? `<div class="sbar"><i style="width:${pct}%"></i></div><span class="num mono">${pct}%</span><span class="note">até ${fd(r.fim)}</span>`
         : `<span class="note">${r.inicio < hoje ? `devia ter começado a ${fd(r.inicio)}` : `${tipo === "espera" ? "pode começar" : "começa"} ${r.inicio === hoje ? "hoje" : fd(r.inicio)}`}</span>`}${deltaHTML(r.atraso)}</div>
       <div class="sa">${tipo === "curso" ? `<button class="btn sm" data-q="mais|${a.id}" ${pct >= 95 ? "disabled" : ""}>+10%</button><button class="btn sm ok" data-q="fim|${a.id}">Concluir</button>`
-        : tipo === "comecar" ? `<button class="btn sm pri" data-q="ini|${a.id}">Iniciar</button>` : `<button class="btn sm" data-a="${a.id}">Ver</button>`}</div>
+        : tipo === "comecar" ? `<button class="btn sm pri" data-q="ini|${a.id}">Iniciar</button>` : `<button class="btn sm" data-a="${a.id}">Ver ficha</button>`}</div>
     </div>`;
   };
   const secao = (titulo, sub, lista, tipo, filtro) => `<section class="card">
     <div class="card-h"><h2>${titulo} <span class="note num">${lista.length}</span></h2>${sub ? `<span class="note">${sub}</span>` : ""}</div>
     ${lista.length ? `<div class="srows">${lista.slice(0, MAX).map((x) => linha(x, tipo)).join("")}</div>${lista.length > MAX ? `<a class="note" href="#plano" data-semver="${filtro}">Ver as ${lista.length} nos Trabalhos</a>` : ""}`
-      : `<div class="empty">Nada nesta lista${w.equipa || w.bloco ? " com estes filtros" : ""}.</div>`}
+      : `<div class="empty">${w.equipa || w.bloco ? `Nada nesta lista com estes filtros. <button class="btn sm" data-repor>Limpar filtros</button>` : "Nada nesta lista."}</div>`}
   </section>`;
   const html = `
     <div class="card-h"><h1>A minha semana</h1><span class="note">De hoje, ${fd(hoje)}, a ${fd(lim)}</span></div>
@@ -1788,6 +1994,7 @@ function semanaView() {
       <button class="kpi k-ok ${w.ver === "comecar" ? "sel" : ""}" data-sver="comecar" aria-pressed="${w.ver === "comecar"}" title="Mostrar só as para começar"><b>${comecar.length}</b><span>Para começar até ${fd(lim)}</span></button>
       <button class="kpi k-bloq ${w.ver === "espera" ? "sel" : ""}" data-sver="espera" aria-pressed="${w.ver === "espera"}" title="Mostrar só as à espera"><b>${espera.length}</b><span>À espera de outras atividades</span></button>
     </div>
+    ${atencaoHTML({ max: 3, vist: false, fechavel: true })}
     <div class="chips" role="group" aria-label="Mostrar">${VER.map(([k, l]) => `<button class="chip ${w.ver === k ? "on" : ""}" data-sver2="${k}">${l}${k ? ` <span class="num" style="opacity:.65">${{ curso: emCurso, comecar, espera }[k].length}</span>` : ""}</button>`).join("")}</div>
     <div class="chips" role="group" aria-label="Bloco">${["", "A", "B", "C", "D", "Geral"].map((b) => `<button class="chip ${w.bloco === b ? "on" : ""}" data-sb="${b}">${b === "Geral" ? "Geral" : b ? "Bloco " + b : "Todos os blocos"}</button>`).join("")}</div>
     <div class="filters"><label class="f">Equipa<select class="inp" id="sEq"><option value="">Todas as equipas</option>${S.equipasTodas.map((e) => `<option ${w.equipa === e ? "selected" : ""}>${esc(e)}</option>`).join("")}<option value="_sem" ${w.equipa === "_sem" ? "selected" : ""}>Sem equipa atribuída</option></select></label></div>
@@ -1796,7 +2003,7 @@ function semanaView() {
     ${!w.ver || w.ver === "espera" ? secao("À espera de outras", "Ainda não podem começar: falta acabar o que está indicado", espera, "espera", "bloqueada") : ""}`;
   return {
     html, bind: () => {
-      bindCommon();
+      bindCommon(); bindAtencao();
       document.querySelectorAll("[data-sb]").forEach((b) => (b.onclick = () => { w.bloco = b.dataset.sb; render(); }));
       document.querySelectorAll("[data-sver]").forEach((b) => (b.onclick = () => { w.ver = w.ver === b.dataset.sver ? "" : b.dataset.sver; render(); }));
       document.querySelectorAll("[data-sver2]").forEach((b) => (b.onclick = () => { w.ver = b.dataset.sver2; render(); }));
@@ -1951,7 +2158,7 @@ function ganttView() {
       <label class="check" style="align-self:center"><input type="checkbox" id="gc" ${g.abertas ? "checked" : ""}><span>Esconder concluídas</span></label>
       <label class="check" style="align-self:center"><input type="checkbox" id="gl" ${g.ligacoes ? "checked" : ""}><span>Mostrar ligações</span></label>
       <div class="row" style="align-self:center;gap:6px" role="group" aria-label="Nível de detalhe"><span class="note">Mostrar:</span><button class="btn sm" id="gnB">Blocos</button><button class="btn sm" id="gnU">Frações</button><button class="btn sm" id="gnA">Tudo</button></div>
-      ${filtrosAlterados() ? `<button class="btn sm repor-on" id="grep" style="align-self:center">Repor filtros</button>` : ""}
+      ${filtrosAlterados() ? `<button class="btn sm repor-on" id="grep" style="align-self:center">Limpar filtros</button>` : ""}
     </div>
     <div class="gsel" id="gsel" hidden></div>
     <div class="legend"><span><i class="gl-bar st-concluida"></i>Concluída</span><span><i class="gl-bar st-em_curso"></i>Em curso</span><span><i class="gl-bar st-bloqueada"></i>Bloqueada</span><span><i class="gl-bar st-por_iniciar"></i>Por iniciar</span><span><i class="gl-bar st-por_iniciar atr"></i>Atrasada</span><span title="Dias desde a previsão de fim até hoje, ou até ao fim provável"><i class="gl-bar gl-tail"></i>Atraso</span><span><i class="gl-today"></i>Hoje</span><span class="note">Toque numa barra para ver a cadeia de dependências.${can("executar") ? " Com o rato, arraste a barra para mudar a data ou puxe a ponta direita para mudar o fim." : ""}</span></div>
@@ -2009,7 +2216,7 @@ function drawGantt() {
       if (aberto) for (const a of x.acts) rows.push({ t: "a", a, r: S.res.get(a.id) });
     }
   }
-  if (!rows.length) { box.innerHTML = `<div class="empty">Nenhuma atividade com estes filtros.</div>`; $("#gsel").hidden = true; return; }
+  if (!rows.length) { box.innerHTML = `<div class="empty">Nenhuma atividade com estes filtros. <button class="btn sm" data-repor>Limpar filtros</button></div>`; box.querySelectorAll("[data-repor]").forEach((b) => (b.onclick = reporFiltros)); $("#gsel").hidden = true; return; }
   // escala
   let t0 = null, t1 = null;
   for (const x of rows) {
@@ -2127,7 +2334,7 @@ function drawGantt() {
       <span class="note">${fd(r.inicio)} a ${fd(r.fim)} · <span class="pill st-${r.estado}">${ESTADO[r.estado]}</span> ${deltaHTML(r.atraso)}</span>
       <span class="note"><span class="gk gk-up"></span>Depende de ${up.size} atividade${up.size === 1 ? "" : "s"} no total${espera.length ? ` (à espera de ${esc([...new Set(espera.map((x) => nomeAtiv(x) + (x.unidade !== a.unidade ? " " + x.unidade : "")))].slice(0, 3).join(", "))})` : ""} · <span class="gk gk-down"></span>${down.size} ${down.size === 1 ? "depende" : "dependem"} desta${fora ? ` · ${fora} fora dos filtros atuais` : ""}</span></div>
       <div class="row">${can("executar") ? `<label class="f" style="flex-direction:row;align-items:center;gap:6px">Início ${dateInput(a.id, "ini", r.estado === "concluida" ? a.realInicio || r.inicio : r.inicio)}</label><label class="f" style="flex-direction:row;align-items:center;gap:6px">Fim ${dateInput(a.id, "fim", r.estado === "concluida" ? a.realFim || r.fim : r.fim)}</label>` : ""}
-        <button class="btn sm pri" data-a="${a.id}">Abrir ficha</button><button class="btn sm" id="gunsel">Limpar seleção</button></div>`;
+        <button class="btn sm pri" data-a="${a.id}">Abrir ficha</button><button class="btn sm" id="gunsel">Limpar escolha</button></div>`;
     bindDateInputs(gs);
     gs.querySelector("[data-a]").onclick = () => openSheet(a.id);
     $("#gunsel").onclick = () => { g.sel = null; drawGantt(); };
@@ -2201,30 +2408,71 @@ function gTip(e, txt) {
   t.style.left = e.clientX + 12 + "px"; t.style.top = e.clientY - 34 + "px";
 }
 
+/* ============================================================ ajuda de cada ecrã (o "?" ao lado do título) */
+const AJUDA_ECRA = {
+  painel: "O ponto de situação da obra: o fim previsto, o que está atrasado e o avanço de cada bloco. Em Precisa de atenção estão as atividades que convém tratar primeiro, com atalhos para as resolver logo.",
+  previsao: "Quando cada bloco e cada apartamento ficam prontos. As datas recalculam-se todos os dias com o estado real das atividades. Toque num apartamento para ver o que ainda falta.",
+  unidades: "Todos os apartamentos, lojas e zonas comuns, com o avanço de cada um. Toque num para ver as atividades, fazer a vistoria ou ver as fotografias.",
+  fracao: "As atividades desta fração, pela ordem da obra. Toque numa atividade para abrir a ficha. Com Editar datas muda as datas e a percentagem diretamente na lista.",
+  plano: "Todas as atividades da obra, com filtros por bloco, fração, atividade e estado. Os filtros ficam guardados até carregar em Limpar filtros. Com Concluir ou atribuir várias trata várias atividades de uma vez.",
+  gantt: "As atividades no tempo, em barras. Arraste uma barra para mudar as datas: as atividades seguintes acertam-se sozinhas. O botão Hoje leva-o ao dia de hoje.",
+  semana: "O que está em curso, o que deve começar nos próximos 7 dias e o que está à espera de outras atividades. Os botões Iniciar, +10% e Concluir gravam logo.",
+  regras: "A sequência entre especialidades e os dias que cada uma leva por fração. Uma mudança aqui acerta as datas de todas as atividades que ainda não começaram.",
+  equipas: "As equipas de trabalho da obra, com o que cada uma pode fazer. Abra uma equipa para ver os seus trabalhos, editar os dados ou tirá-la da obra.",
+  planequipa: "A ordem em que cada equipa vai fazer os seus trabalhos. Uma equipa só faz um trabalho de cada vez, por isso a ordem mexe nas datas.",
+  equipa: "As contas de quem usa a aplicação e o perfil de cada uma. O perfil define o que cada pessoa pode ver e fazer.",
+  vistorias: "As vistorias guardadas pelo fiscal, dia a dia. Escolha os dias para ver o relatório, imprimi-lo ou guardá-lo em PDF.",
+  relatorio: "Um resumo da obra para levar à reunião. Pode imprimir ou guardar em PDF.",
+};
+function ajudaEcra() {
+  let h = location.hash.replace("#", "").split("?")[0];
+  if (!h && S) h = navItems()[0].id;
+  const k = h.startsWith("u-") ? "fracao" : h;
+  const txt = AJUDA_ECRA[k];
+  const h1 = document.querySelector("#view h1");
+  if (!txt || !h1) return;
+  ui.ajudaAberta = ui.ajudaAberta || new Set();
+  const aberta = ui.ajudaAberta.has(k);
+  h1.insertAdjacentHTML("beforeend", ` <button type="button" class="qh no-print" aria-expanded="${aberta}" aria-label="Para que serve este ecrã" title="Para que serve este ecrã">?</button>`);
+  const caixa = document.createElement("div");
+  caixa.className = "ajuda-ecra no-print"; caixa.hidden = !aberta;
+  caixa.innerHTML = `<p>${esc(txt)}</p><button type="button" class="btn sm ghost">Percebi</button>`;
+  const ref = h1.closest(".card-h, .uhead") || h1;
+  ref.insertAdjacentElement("afterend", caixa);
+  const bt = h1.querySelector(".qh");
+  const muda = (abrir) => { caixa.hidden = !abrir; bt.setAttribute("aria-expanded", String(abrir)); if (abrir) ui.ajudaAberta.add(k); else ui.ajudaAberta.delete(k); };
+  bt.onclick = (e) => { e.preventDefault(); e.stopPropagation(); muda(caixa.hidden); };
+  caixa.querySelector("button").onclick = () => muda(false);
+}
 /* ============================================================ guia de primeira utilização */
+const AJUDA_PASSO = ["Ajuda sempre à mão", "Em cada ecrã, o ? ao lado do título explica para que serve. Em Ajuda (o ? lá em cima) volta a ver este guia e confirma a versão da aplicação. Quando houver uma versão nova, aparece um aviso com o botão Atualizar agora."];
 const GUIA = {
   dono: [
-    ["O ponto de situação", "No Painel vê o fim previsto da obra, quantas atividades estão atrasadas ou bloqueadas, o avanço de cada bloco e o mapa dos apartamentos. Toque num número para ver a lista correspondente."],
-    ["Trabalhos e Gantt", "Em Trabalhos estão todas as atividades, com filtros por bloco, apartamento e estado. Mude datas com Editar datas, ou arrastando as barras no Gantt. As atividades que dependem dessa acertam-se sozinhas."],
-    ["Definições", "Em Definições escolhe a sequência entre especialidades e os dias de cada uma, gere as equipas de trabalho e, em Acessos, cria as contas do empreiteiro e do fiscal. Depois de cada alteração aparece Anular em baixo, para desfazer um engano."],
+    ["O ponto de situação", "No Painel vê o fim previsto da obra, o avanço de cada bloco e, em Precisa de atenção, as atividades esquecidas ou paradas que estão a atrasar outras. Toque num número para ver a lista correspondente."],
+    ["Fim da obra", "Em Fim vê quando cada bloco e cada apartamento ficam prontos, recalculado todos os dias com o estado real."],
+    ["Trabalhos e Gantt", "Em Trabalhos estão todas as atividades, com filtros que ficam guardados até carregar em Limpar filtros. Mude datas com Editar datas, ou arrastando as barras no Gantt. As atividades que dependem dessa acertam-se sozinhas."],
+    ["Definições", "Em Definições escolhe a sequência entre especialidades e os dias de cada uma, gere as equipas e, em Acessos, cria as contas do empreiteiro e do fiscal. Depois de cada alteração aparece Anular em baixo, com o número de datas que mudaram."],
+    AJUDA_PASSO,
   ],
   empreiteiro: [
-    ["A minha semana", "Ao entrar vê o que está em curso, o que deve começar nos próximos 7 dias e o que está à espera de outras atividades. Filtre pela sua equipa ou pelo bloco. Os botões Iniciar, +10% e Concluir gravam logo."],
-    ["Mais detalhe", "Toque no nome de uma atividade para abrir a ficha: datas, equipa, motivo de atraso, ligações a outras atividades, fotografias e histórico. Em Trabalhos e no Gantt vê a obra toda."],
-    ["As suas equipas", "Em Definições, Equipas de trabalho, crie e edite as equipas. Em Trabalhos, com Escolher várias, escolha vários trabalhos e atribua-lhes uma equipa, ou inicie-os ou conclua-os de uma vez."],
+    ["A minha semana", "Ao entrar vê o que está em curso, o que deve começar nos próximos 7 dias e o que está à espera de outras atividades. Os botões Iniciar, +10% e Concluir gravam logo."],
+    ["Precisa de atenção", "No topo aparecem as atividades em curso com o fim já passado e as que podiam já ter começado. Se já aconteceu, carregue em Concluí hoje ou Iniciei hoje: as seguintes acertam-se logo."],
+    ["Mais detalhe", "Toque no nome de uma atividade para abrir a ficha: datas, equipa, motivo de atraso, ligações, fotografias e histórico. Em Trabalhos, com Concluir ou atribuir várias, trata várias atividades de uma vez."],
     ["Enganou-se? Sem rede?", "Depois de guardar aparece Anular em baixo, durante alguns segundos. A aplicação funciona sem rede: guarda tudo no telemóvel e envia quando houver ligação."],
+    AJUDA_PASSO,
   ],
   fiscal: [
     ["Escolha o apartamento", "Em Apartamentos escolha onde está. Os que não vê há mais de 7 dias aparecem marcados e pode filtrá-los."],
     ["Faça a vistoria", "Em cada especialidade toque na percentagem que verificou, escreva um comentário e junte fotografias, da câmara ou da galeria. O botão com o número mostra as fotografias já guardadas."],
     ["Guarde e siga", "Guarde a vistoria de uma vez e passe ao apartamento seguinte. Funciona sem rede e envia quando houver ligação. Se se enganar, toque em Anular."],
+    AJUDA_PASSO,
   ],
 };
 function abrirGuia(forcar) {
   const papel = store.user && store.user.papel;
   const passos = GUIA[papel];
   if (!passos || document.querySelector(".guia")) return;
-  const chave = "obra-guia-visto-" + papel;
+  const chave = "obra-guia-v2-" + papel; // v2: guia revisto a 8 nov 2026, volta a aparecer uma vez
   if (!forcar) { try { if (localStorage.getItem(chave)) return; } catch (e) { return; } }
   let i = 0;
   const el = document.createElement("div");
@@ -2529,7 +2777,7 @@ function equipaView() {
           await store.addUser({ nome: $("#un").value.trim(), email: $("#ue").value.trim(), senha: $("#us").value, papel: $("#up").value });
           $("#ust").textContent = "Adicionado. Envie-lhe o endereço da aplicação, o email e a palavra-passe.";
           e.target.reset(); draw();
-        } catch (err) { $("#ust").textContent = "Erro: " + (err.code || err.message); }
+        } catch (err) { $("#ust").textContent = "Não foi possível: " + erroSimples(err) + "."; }
       };
       const dr = $("#dreset");
       if (dr) dr.onclick = () => { store.reset(); toast("Dados de demonstração repostos"); };
@@ -2566,7 +2814,7 @@ function vistoriasView() {
     html, bind: async () => {
       const box = $("#vlista");
       let regs = [];
-      try { regs = await store.getRegistosTipo("vistoria"); } catch (e) { box.innerHTML = `<div class="err">Não foi possível carregar: ${esc(e.message)}</div>`; return; }
+      try { regs = await store.getRegistosTipo("vistoria"); } catch (e) { box.innerHTML = `<div class="err">Não foi possível carregar as vistorias: ${esc(erroSimples(e))}.</div>`; return; }
       const todos = resumoVistorias(regs);
       const fiscais = [...new Map(todos.map((x) => [x.por, x.nome])).entries()];
       const desenha = () => {
@@ -2581,7 +2829,7 @@ function vistoriasView() {
               <span class="vd-n num"><span><b>${x.us.size}</b> ${x.us.size === 1 ? "fração" : "frações"}</span><span><b>${x.ativs.size}</b> ${x.ativs.size === 1 ? "especialidade" : "especialidades"}</span><span><b>${x.fotos}</b> ${x.fotos === 1 ? "fotografia" : "fotografias"}</span><span><b>${x.coments}</b> ${x.coments === 1 ? "comentário" : "comentários"}</span></span>
               <button class="btn sm" data-vd1="${esc(k)}">Ver só este dia</button></label>`; }).join("")}</div>
             <div class="vdbar"><span class="num"><b>${n}</b> ${n === 1 ? "dia escolhido" : "dias escolhidos"}</span><button class="btn pri" id="vdVer" ${n ? "" : "disabled"}>Ver relatório</button></div>`
-          : `<div class="empty">Ainda não há vistorias guardadas${st.por ? " deste fiscal" : ""}.</div>`}`;
+          : `<div class="empty">Ainda não há vistorias guardadas${st.por ? " deste fiscal" : ""}. Quando o fiscal guardar uma vistoria num apartamento, aparece aqui.</div>`}`;
         const fp = $("#vfPor"); if (fp) fp.onchange = () => { st.por = fp.value; st.sel = null; desenha(); };
         box.querySelectorAll("[data-vd]").forEach((c) => (c.onchange = () => { c.checked ? st.sel.add(c.dataset.vd) : st.sel.delete(c.dataset.vd); desenha(); }));
         const abrir = (ks) => { ui.relVist = { chaves: ks }; location.hash = "#relvist"; };
@@ -2602,7 +2850,7 @@ function relVistView() {
       $("#rvPrint").onclick = () => window.print();
       const box = $("#rvBox");
       let regs;
-      try { regs = await store.getRegistosTipo("vistoria"); } catch (e) { box.innerHTML = `<div class="err">Não foi possível carregar: ${esc(e.message)}</div>`; return; }
+      try { regs = await store.getRegistosTipo("vistoria"); } catch (e) { box.innerHTML = `<div class="err">Não foi possível carregar as vistorias: ${esc(erroSimples(e))}.</div>`; return; }
       // chaves "dia|fiscal"; o atalho "Relatório de hoje" usa dias + por
       const chaves = new Set(rv.chaves || (rv.dias || []).map((d) => d + "|" + rv.por));
       const sel = regs.filter((r) => chaves.has(diaLocal(r.em) + "|" + r.por)).sort((a, b) => a.em.localeCompare(b.em));
@@ -3820,7 +4068,7 @@ function renderSheet() {
       ${r.atrasada ? `<div class="banner warn">A previsão de fim (${fd(r.prevFim)}) já passou há ${r.atraso} dias sem a atividade estar concluída.${can("executar") ? " Se já acabou, escreva o fim real; se não, indique uma nova previsão." : ""}${r.provFim > r.prevFim ? ` As seguintes já contam com o fim a ${fd(r.provFim)}.` : ""}</div>` : ""}
       ${a.motivo ? `<div class="note"><b>Motivo do atraso:</b> ${esc(a.motivo)}</div>` : ""}
       ${a.obs ? `<div class="note"><b>Observações:</b> ${esc(a.obs)}</div>` : ""}
-      ${can("criar") ? `<div class="row" style="gap:6px"><button class="btn sm" id="bNovaU" title="Criar um trabalho novo em ${esc(a.unidade)}">+ Novo trabalho nesta fração</button><button class="btn sm" id="bNovaSeg" title="Criar um trabalho novo que só começa quando este acabar">+ Novo trabalho a seguir a este</button><button class="btn sm" id="bCopiar" title="Criar esta mesma atividade noutros apartamentos, lojas, zonas comuns ou no geral">Copiar para outras frações</button></div>
+      ${can("criar") ? `<div class="row" style="gap:6px"><button class="btn sm" id="bNovaU" title="Criar uma atividade nova em ${esc(a.unidade)}">+ Nova atividade nesta fração</button><button class="btn sm" id="bNovaSeg" title="Criar uma atividade nova que só começa quando esta acabar">+ Nova atividade a seguir a esta</button><button class="btn sm" id="bCopiar" title="Criar esta mesma atividade noutros apartamentos, lojas, zonas comuns ou no geral">Copiar para outras frações</button></div>
         ${can("executar") ? `<details class="formbox" id="mudaBox"><summary><b>Mudar para outra fração</b> <span class="note">apartamento, loja, zona comum ou geral</span></summary>
           <div style="display:flex;flex-direction:column;gap:10px;margin-top:10px">
             <p class="note" style="margin:0">A atividade sai de ${esc(a.unidade)} e passa para a fração escolhida, com as mesmas datas, percentagens, ligações e histórico. As fotografias já tiradas continuam na galeria de ${esc(a.unidade)}.</p>
@@ -3874,7 +4122,7 @@ function renderSheet() {
           <div class="row" style="gap:6px"><span class="pill st-${xr.estado}">${ESTADO[xr.estado]}</span><span class="mono note">${fd(xr.inicio)}</span>${podeDeps ? `<button class="btn sm" data-troca="${sid}">Trocar</button><button class="btn sm tira-b" data-tirasuc="${sid}" title="Aquela atividade deixa de esperar por esta">× Tirar ligação</button>` : ""}</div></div>
           ${podeDeps && ui.sheet.troca === sid ? `<div class="formbox trocabox"><b>Trocar ${esc(nomeAtiv(x))} (${esc(x.unidade)}) por:</b>${depPickerHTML("tp", x.unidade, "Trocar por esta")}<button class="btn sm ghost" data-trocacancel>Cancelar</button></div>` : ""}`;
       }).join("") : `<div class="note">Nenhuma.</div>`}</div>
-      ${can("criar") ? `<div class="row" style="gap:6px;margin:8px 0"><button class="btn sm" id="bNovaSeg2" title="Criar um trabalho novo que só começa quando este acabar">+ Criar nova atividade seguinte</button></div>` : ""}
+      ${can("criar") ? `<div class="row" style="gap:6px;margin:8px 0"><button class="btn sm" id="bNovaSeg2" title="Criar uma atividade nova que só começa quando esta acabar">+ Nova atividade a seguir a esta</button></div>` : ""}
       ${podeDeps ? `<details class="formbox" id="sucBox"><summary><b>+ Ligar uma atividade que já existe</b> <span class="note">como seguinte, desta ou de outra fração</span></summary>
         <p class="note" style="margin:8px 0">A atividade que escolher passa a esperar por esta.</p>${depPickerHTML("sp", a.unidade, "Acrescentar")}</details>` : ""}
       </div>

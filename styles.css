@@ -1121,3 +1121,52 @@ a.pv-fr:hover { background: var(--surface-2); }
 .pill.teste-p { background: var(--warn-soft); color: var(--warn); font-weight: 700; letter-spacing: .06em; }
 .ucard.teste { border-style: dashed; border-color: var(--warn); }
 .banner.teste-b { background: var(--warn-soft); border-color: var(--warn); }
+
+/* ---- 8 nov 2026: usabilidade ---- */
+/* aviso de versão nova */
+.nova-versao { position: fixed; left: 50%; transform: translateX(-50%); top: calc(12px + env(safe-area-inset-top, 0px)); z-index: 80; width: min(560px, calc(100% - 24px));
+  background: var(--surface); border: 1px solid var(--accent); border-left-width: 5px; border-radius: var(--r); box-shadow: var(--shadow); padding: 12px 14px;
+  display: flex; gap: 10px; align-items: center; justify-content: space-between; flex-wrap: wrap; font-size: .92rem; }
+.side-foot .versao { font-size: .74rem; }
+/* ajuda de cada ecrã */
+.qh { display: inline-grid; place-items: center; width: 26px; height: 26px; border-radius: 50%; border: 1px solid var(--line); background: var(--surface); color: var(--muted);
+  font: 700 .85rem var(--f-body); vertical-align: middle; margin-left: 6px; cursor: pointer; position: relative; top: -2px; }
+.qh:hover, .qh[aria-expanded="true"] { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); }
+.qh::after { content: ""; position: absolute; inset: -9px; } /* zona de toque maior */
+.ajuda-ecra { background: var(--accent-soft); border-radius: var(--r); padding: 10px 14px; display: flex; gap: 10px; align-items: center; justify-content: space-between; flex-wrap: wrap; margin: 6px 0 4px; }
+.ajuda-ecra p { margin: 0; max-width: 75ch; font-size: .92rem; }
+.ajuda-ecra[hidden] { display: none; }
+/* precisa de atenção */
+.atencao { border-left: 4px solid var(--warn); }
+.at-g { display: flex; flex-direction: column; gap: 6px; padding-top: 10px; border-top: 1px solid var(--line); margin-top: 6px; }
+.at-g:first-of-type { border-top: 0; padding-top: 0; }
+.at-g h3 { margin: 0; font-size: 1rem; }
+.at-g > p.note { margin: 0 0 2px; }
+.at-l { display: flex; align-items: center; gap: 10px; justify-content: space-between; flex-wrap: wrap; padding: 8px 0; border-bottom: 1px dashed var(--line); }
+.at-l:last-of-type { border-bottom: 0; }
+.at-n { text-align: left; display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1 1 220px; }
+.at-n small { color: var(--muted); font-weight: 400; }
+.at-b { display: flex; gap: 6px; flex-wrap: wrap; }
+.at-fr { display: flex; flex-wrap: wrap; gap: 6px; }
+.at-fr .chip-u { font-size: .82rem; padding: 4px 8px; text-decoration: none; color: var(--ink); }
+/* filtros ativos */
+.fres { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; background: var(--warn-soft); border-radius: var(--r); padding: 8px 12px; font-size: .9rem; }
+.empty .btn { margin-left: 6px; }
+/* datas que mudaram, na mensagem com Anular */
+.toast-d { display: block; font-weight: 400; opacity: .85; margin-top: 2px; }
+/* zona para eliminar a fração, no fim da página */
+.perigo { margin-top: 26px; padding-top: 14px; border-top: 1px dashed var(--line); display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.perigo-b { color: var(--crit); border-color: var(--crit-soft); }
+.perigo .delbox { flex: 1 1 100%; }
+/* telemóvel e tablet: botões confortáveis para o dedo */
+@media (pointer: coarse) {
+  .btn { min-height: 44px; }
+  .btn.sm { min-height: 40px; padding: 6px 12px; }
+  .chip { min-height: 38px; }
+  .check input[type="checkbox"] { width: 22px; height: 22px; }
+}
+details.atencao > summary { cursor: pointer; display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; list-style: none; padding: 2px 0; min-height: 32px; }
+details.atencao > summary::-webkit-details-marker { display: none; }
+details.atencao > summary::before { content: "›"; display: inline-block; width: 12px; font-weight: 700; transition: transform .15s; }
+details.atencao[open] > summary::before { transform: rotate(90deg); }
+details.atencao[open] > summary { margin-bottom: 8px; }
