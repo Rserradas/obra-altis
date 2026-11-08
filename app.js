@@ -630,6 +630,8 @@ function pedirTexto({ titulo, texto, placeholder = "", sim = "Guardar", obrigato
   });
 }
 const pendPasso = (acao, nota) => ({ em: new Date().toISOString(), por: store.user.email, nome: store.user.nome, papel: store.user.papel, acao, ...(nota ? { nota } : {}) });
+/** O que o fiscal faz num pendente conta como vistoria: fica no registo de vistorias e aparece no relatório desse dia. */
+const pendReg = (texto) => (store.user.papel === "fiscal" ? { tipo: "vistoria", pend: true, texto } : { tipo: "pendente", texto });
 const PEND_ACAO = { criado: "criou", feito: "marcou como feito", fechado: "fechou", confirmado: "confirmou (fiscal)", reaberto: "reabriu", editado: "editou" };
 async function pendCriar(unidade, ativ, texto) {
   texto = String(texto || "").trim();
@@ -637,7 +639,7 @@ async function pendCriar(unidade, ativ, texto) {
   const a = ativ ? S.acts[ativ] : null;
   const doc = { unidade, ativ: ativ || null, texto, estado: "aberto", fiscalOk: false, criadoPor: store.user.email, criadoNome: store.user.nome,
     criadoPapel: store.user.papel, criadoEm: new Date().toISOString(), historico: [pendPasso("criado")] };
-  await store.addPendente(doc, { tipo: "pendente", texto: `${unidade}${a ? ", " + nomeAtiv(a) : ""}: novo pendente "${texto}"` });
+  await store.addPendente(doc, pendReg(`${unidade}${a ? ", " + nomeAtiv(a) : ""}: novo pendente "${texto}"`));
   toast("Pendente registado", { anular: false });
   return true;
 }
@@ -648,7 +650,7 @@ async function pendAcao(id, acao) {
   if (acao === "apagar") {
     const k = await perguntar({ titulo: "Apagar este pendente?", texto: `<p>"${esc(x.texto)}" desaparece para todos. Use só para pendentes criados por engano. Se já foi resolvido, feche-o.</p>`, opcoes: [{ k: "sim", l: "Sim, apagar", estilo: "warn" }, { k: "nao", l: "Cancelar" }] });
     if (k !== "sim") return;
-    await store.removePendente(id, { tipo: "pendente", texto: `${x.unidade}: apagou o pendente "${x.texto}"` });
+    await store.removePendente(id, pendReg(`${x.unidade}: apagou o pendente "${x.texto}"`));
     toast("Pendente apagado", { anular: false });
     return;
   }
@@ -669,7 +671,7 @@ async function pendAcao(id, acao) {
   if ((acao === "fechar" && fiscal) || acao === "confirmar") Object.assign(patch, { fiscalOk: true, fiscalOkEm: agora, fiscalOkPor: eu, fiscalOkNome: store.user.nome });
   if (acao === "confirmar" && x.estado !== "fechado") Object.assign(patch, { estado: "fechado", fechadoEm: agora, fechadoPor: eu, fechadoNome: store.user.nome, fechadoPapel: "fiscal" });
   if (acao === "reabrir") Object.assign(patch, { estado: "aberto", fiscalOk: false, ultimaNota: nota });
-  await store.updatePendente(id, patch, { tipo: "pendente", texto: `${x.unidade}: ${PEND_ACAO[passo.acao]} o pendente "${x.texto}"${nota ? ` (${nota})` : ""}` });
+  await store.updatePendente(id, patch, pendReg(`${x.unidade}: ${PEND_ACAO[passo.acao]} o pendente "${x.texto}"${nota ? ` (${nota})` : ""}`));
   toast({ feito: "Marcado como feito: falta o ok do fiscal", fechar: fiscal ? "Pendente confirmado e fechado" : "Pendente fechado", confirmar: "Confirmado pelo fiscal", reabrir: "Pendente reaberto" }[acao], { anular: false });
 }
 function pendItemHTML(x, { mostrarAtiv = true } = {}) {
@@ -2974,7 +2976,8 @@ function resumoVistorias(regs) {
     const dia = diaLocal(r.em);
     const k = dia + "|" + r.por;
     const x = dias.get(k) || { dia, por: r.por, nome: r.nomePor || r.por, regs: [], us: new Set(), ativs: new Set(), fotos: 0, coments: 0 };
-    x.regs.push(r); if (r.unidade) x.us.add(r.unidade); if (r.ativ) x.ativs.add(r.ativ);
+    x.regs.push(r); if (r.unidade) x.us.add(r.unidade); if (r.ativ && !r.pend) x.ativs.add(r.ativ);
+    if (r.pend) x.pends = (x.pends || 0) + 1;
     x.fotos += (r.dados && r.dados.nfotos) || (/(\d+) fotografia/.exec(r.texto || "") || [0, 0])[1] * 1;
     if ((r.dados && r.dados.nota) || /comentário:/.test(r.texto || "")) x.coments++;
     dias.set(k, x);
@@ -3003,7 +3006,7 @@ function vistoriasView() {
           ${lista.length ? `<div class="vdias">${lista.map((x) => { const k = x.dia + "|" + x.por; return `<label class="vdia ${st.sel.has(k) ? "on" : ""}">
               <input type="checkbox" data-vd="${esc(k)}" ${st.sel.has(k) ? "checked" : ""}>
               <span class="vd-t"><b>${diaNome(x.dia)}</b><small>${esc(x.nome)} · ${hora(x.regs[x.regs.length - 1].em)} a ${hora(x.regs[0].em)}</small></span>
-              <span class="vd-n num"><span><b>${x.us.size}</b> ${x.us.size === 1 ? "fração" : "frações"}</span><span><b>${x.ativs.size}</b> ${x.ativs.size === 1 ? "especialidade" : "especialidades"}</span><span><b>${x.fotos}</b> ${x.fotos === 1 ? "fotografia" : "fotografias"}</span><span><b>${x.coments}</b> ${x.coments === 1 ? "comentário" : "comentários"}</span></span>
+              <span class="vd-n num"><span><b>${x.us.size}</b> ${x.us.size === 1 ? "fração" : "frações"}</span><span><b>${x.ativs.size}</b> ${x.ativs.size === 1 ? "especialidade" : "especialidades"}</span><span><b>${x.fotos}</b> ${x.fotos === 1 ? "fotografia" : "fotografias"}</span><span><b>${x.coments}</b> ${x.coments === 1 ? "comentário" : "comentários"}</span>${x.pends ? `<span><b>${x.pends}</b> ${x.pends === 1 ? "pendente" : "pendentes"}</span>` : ""}</span>
               <button class="btn sm" data-vd1="${esc(k)}">Ver só este dia</button></label>`; }).join("")}</div>
             <div class="vdbar"><span class="num"><b>${n}</b> ${n === 1 ? "dia escolhido" : "dias escolhidos"}</span><button class="btn pri" id="vdVer" ${n ? "" : "disabled"}>Ver relatório</button></div>`
           : `<div class="empty">Ainda não há vistorias guardadas${st.por ? " deste fiscal" : ""}. Quando o fiscal guardar uma vistoria num apartamento, aparece aqui.</div>`}`;
@@ -3036,7 +3039,7 @@ function relVistView() {
       const fiscais = [...new Set(sel.map((r) => r.nomePor || r.por))];
       // por atividade: primeiro "antes", último "depois"
       const porAt = new Map();
-      for (const r of sel) {
+      for (const r of sel.filter((r) => !r.pend)) {
         const k = r.ativ || r.id;
         const x = porAt.get(k) || { ativ: r.ativ, unidade: r.unidade, regs: [] };
         x.regs.push(r); porAt.set(k, x);
@@ -3049,7 +3052,7 @@ function relVistView() {
         const notas = [...new Set(x.regs.map((r) => r.dados ? r.dados.nota : (/comentário: (.*)$/.exec(r.texto || "") || [])[1]).filter(Boolean))];
         // vistoria anterior ao período (de qualquer fiscal), para ver se a obra andou
         const ini0 = new Date(dias[0] + "T00:00:00").toISOString();
-        const ant = x.ativ ? regs.filter((r) => r.ativ === x.ativ && r.em < ini0).sort((p, q) => q.em.localeCompare(p.em))[0] : null;
+        const ant = x.ativ ? regs.filter((r) => !r.pend && r.ativ === x.ativ && r.em < ini0).sort((p, q) => q.em.localeCompare(p.em))[0] : null;
         const valDe = (r) => (r.dados && r.dados.depois != null ? r.dados.depois : (() => { const m = /: (\d+)% \(empreiteiro/.exec(r.texto || ""); return m ? Number(m[1]) : null; })());
         const prev = ant ? { pct: valDe(ant), em: ant.em } : null;
         const confirmado = x.regs.some((r) => r.dados && r.dados.confirmado);
@@ -3060,6 +3063,7 @@ function relVistView() {
       const parado = linhas.filter((l) => l.prev && l.prev.pct != null && l.depois != null && l.depois < 100 && l.depois <= l.prev.pct && diasEntre(l.prev.em, (l.regs[l.regs.length - 1] || {}).em || new Date().toISOString()) >= 7);
       const porU = new Map();
       for (const l of linhas) { const k = l.unidade || "?"; (porU.get(k) || porU.set(k, []).get(k)).push(l); }
+      const visitadas = new Set([...porU.keys(), ...sel.filter((r) => r.pend && r.unidade).map((r) => r.unidade)]);
       const ordemU = ordenaUnidades([...porU.keys()].map((id) => S.uMap[id] || { id, bloco: "?", piso: 99 })).map((u) => u.id);
       const pctTxt = (v) => (v == null ? "s/v" : v + "%");
       const nomeU = (id) => { const u = S.uMap[id]; return u ? (u.tipo === "Apartamento" || /-L\d+$/.test(u.id) ? u.id : u.nome) : id; };
@@ -3103,7 +3107,7 @@ function relVistView() {
           <tr><th>Horário</th><td>${horario.join("<br>")}</td><th>Emitido</th><td>${fdt(new Date().toISOString())}, por ${esc(store.user.nome)}</td></tr>
         </tbody></table>
         <div class="rv-res num">
-          <div><b>${porU.size}</b><span>${porU.size === 1 ? "fração visitada" : "frações visitadas"}</span></div>
+          <div><b>${visitadas.size}</b><span>${visitadas.size === 1 ? "fração visitada" : "frações visitadas"}</span></div>
           <div><b>${linhas.length}</b><span>${linhas.length === 1 ? "especialidade vistoriada" : "especialidades vistoriadas"}</span></div>
           <div><b>${fotos.length}</b><span>${fotos.length === 1 ? "fotografia" : "fotografias"}</span></div>
           <div class="${atencao.length ? "mau" : ""}"><b>${atencao.length}</b><span>${atencao.length === 1 ? "diferença com o empreiteiro" : "diferenças com o empreiteiro"}</span></div>
