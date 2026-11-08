@@ -691,6 +691,18 @@ function pendItemHTML(x, { mostrarAtiv = true } = {}) {
     ${h.length > 1 ? `<details class="pd-h"><summary>Histórico (${h.length})</summary><ul>${h.map((p) => `<li><span class="num">${fdt(p.em)}</span> ${esc(p.nome || p.por)} ${PEND_ACAO[p.acao] || p.acao}${p.nota ? `: <i>${esc(p.nota)}</i>` : ""}</li>`).join("")}</ul></details>` : ""}
   </div>`;
 }
+/** Estado do pendente num dado momento (ISO), refeito a partir do histórico. Serve para os relatórios antigos não mudarem. */
+function pendEstadoEm(x, limite) {
+  let estado = "aberto", fiscalOk = false;
+  for (const p of x.historico || []) {
+    if ((p.em || "") >= limite) break;
+    if (p.acao === "feito") estado = "feito";
+    else if (p.acao === "fechado") estado = "fechado";
+    else if (p.acao === "confirmado") { estado = "fechado"; fiscalOk = true; }
+    else if (p.acao === "reaberto") { estado = "aberto"; fiscalOk = false; }
+  }
+  return { estado, fiscalOk };
+}
 /** Formulário para criar um pendente numa fração (com escolha de atividade) ou numa atividade fixa. */
 function pendFormHTML(unidade, ativFixa) {
   const k = unidade + "|" + (ativFixa || "");
@@ -3071,15 +3083,15 @@ function relVistView() {
       fotos.sort((a, b) => ordemL.findIndex((l) => l.ativ === a.ativ) - ordemL.findIndex((l) => l.ativ === b.ativ) || (a.em || "").localeCompare(b.em || ""));
       fotos.forEach((f, i) => (f.num = i + 1));
       const refsDe = (ativ) => fotos.filter((f) => f.ativ === ativ).map((f) => `<a href="#rvf${f.num}" class="rv-fr">F${f.num}</a>`).join(" ");
-      // pendentes: os que mexeram nestes dias, e os que continuam por fechar nas frações visitadas
+      // pendentes: todos os que já existiam no fim do período e ainda não estavam fechados nessa altura,
+      // mais os que foram fechados durante o período. O estado é o desse dia (um relatório antigo não muda).
       const iniP = new Date(dias[0] + "T00:00:00").toISOString(), fimP = new Date(new Date(dias[dias.length - 1] + "T00:00:00").getTime() + 86400000).toISOString();
       const noPer = (p) => p.em >= iniP && p.em < fimP && dias.includes(diaLocal(p.em));
-      const visit = new Set(porU.keys());
-      const pendRel = pendTodos().filter((x) => (x.historico || []).some(noPer) || (visit.has(x.unidade) && pendVivo(x)));
-      const pendPorU = new Map();
-      for (const x of pendRel) (pendPorU.get(x.unidade) || pendPorU.set(x.unidade, []).get(x.unidade)).push(x);
-      const ordemPU = ordenaUnidades([...pendPorU.keys()].map((id) => S.uMap[id] || { id, bloco: "?", piso: 99 })).map((u) => u.id);
-      const nPendAb = pendRel.filter(pendAberto).length;
+      const pendRel = pendTodos().filter((x) => (x.criadoEm || "") < fimP && S.uMap[x.unidade] && (!S.idsTeste.has(x.unidade) || porU.has(x.unidade)))
+        .map((x) => ({ x, e: pendEstadoEm(x, fimP), ev: (x.historico || []).filter(noPer) }))
+        .filter(({ e, ev }) => e.estado !== "fechado" || ev.some((p) => p.acao === "fechado" || p.acao === "confirmado"))
+        .sort((a, b) => (b.x.criadoEm || "").localeCompare(a.x.criadoEm || ""));
+      const nPendAb = pendRel.filter(({ e }) => e.estado !== "fechado").length;
       let sec = 0;
       box.innerHTML = `<article class="rv">
         <header class="rv-cab">
@@ -3113,14 +3125,14 @@ function relVistView() {
         </section>
 
         <section class="rv-sec"><h2>${++sec}. Assuntos pendentes</h2>
-          ${pendRel.length ? `<p class="rv-nota">Pontos por resolver registados nas frações. Inclui os que mudaram nestes dias e os que continuam por fechar nas frações visitadas.</p>
-          ${ordemPU.map((uid) => `<div class="rv-u"><h3><span class="mono">${esc(nomeU(uid))}</span><small>${esc(descU(uid))}</small></h3>
-            <table class="rv-t"><thead><tr><th>Pendente</th><th>Atividade</th><th>Estado</th><th>Ok do fiscal</th><th>Nestes dias</th></tr></thead><tbody>
-            ${pendPorU.get(uid).sort((a, b) => (a.criadoEm || "").localeCompare(b.criadoEm || "")).map((x) => { const a = x.ativ ? S.acts[x.ativ] : null; const ev = (x.historico || []).filter(noPer);
-              return `<tr class="${x.estado === "aberto" ? "at" : ""}"><td><b>${esc(x.texto)}</b><small>criado a ${fd(diaLocal(x.criadoEm))} por ${esc(x.criadoNome || "")}</small></td><td>${a ? esc(nomeAtiv(a)) : `<span class="rv-vazio">fração em geral</span>`}</td>
-                <td>${esc(pendEstado(x).l.split(",")[0])}</td><td>${x.fiscalOk ? `<span class="rv-conf">Confirmado${x.fiscalOkEm ? " a " + fd(diaLocal(x.fiscalOkEm)) : ""}</span>` : `<span class="aviso">Por confirmar</span>`}</td>
+          ${pendRel.length ? `<p class="rv-nota">Todos os pontos por resolver em ${fd(dias[dias.length - 1], true)}, os mais recentes primeiro, com a data em que foram registados. Aparecem em todos os relatórios até serem fechados. O estado é o desse dia.</p>
+            <table class="rv-t"><thead><tr><th>Registado</th><th>Fração</th><th>Pendente</th><th>Atividade</th><th>Estado</th><th>Ok do fiscal</th><th>Nestes dias</th></tr></thead><tbody>
+            ${pendRel.map(({ x, e, ev }) => { const a = x.ativ ? S.acts[x.ativ] : null; const novo = noPer({ em: x.criadoEm || "" });
+              return `<tr class="${e.estado === "aberto" ? "at" : ""}"><td class="num">${fd(diaLocal(x.criadoEm))}${novo ? `<small class="rv-novo">novo</small>` : ""}</td><td class="mono">${esc(nomeU(x.unidade))}</td>
+                <td><b>${esc(x.texto)}</b><small>por ${esc(x.criadoNome || "")}</small></td><td>${a ? esc(nomeAtiv(a)) : `<span class="rv-vazio">fração em geral</span>`}</td>
+                <td>${{ aberto: "Por resolver", feito: "Feito, à espera do fiscal", fechado: "Fechado" }[e.estado]}</td><td>${e.fiscalOk ? `<span class="rv-conf">Confirmado</span>` : `<span class="aviso">Por confirmar</span>`}</td>
                 <td>${ev.length ? ev.map((p) => `${fd(diaLocal(p.em))}: ${esc(p.nome || p.por)} ${PEND_ACAO[p.acao] || p.acao}${p.nota ? `: <i>${esc(p.nota)}</i>` : ""}`).join("<br>") : `<span class="rv-vazio">sem alterações</span>`}</td></tr>`; }).join("")}
-            </tbody></table></div>`).join("")}` : `<p class="rv-nota">Sem pendentes nas frações visitadas.</p>`}
+            </tbody></table>` : `<p class="rv-nota">Não havia pendentes por resolver em ${fd(dias[dias.length - 1], true)}.</p>`}
         </section>
 
         <section class="rv-sec"><h2>${++sec}. Registo por fração</h2>

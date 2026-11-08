@@ -1206,3 +1206,4 @@ details.atencao[open] > summary { margin-bottom: 8px; }
 .pd-vist h2 { font-size: 1.05rem; margin: 0; }
 .at-fr .chip-u b { color: var(--crit); }
 .dlg textarea.inp { width: 100%; margin-top: 8px; resize: vertical; font: inherit; }
+.rv-novo { display: block; font-size: 10px; font-weight: 700; color: #b3261e; text-transform: uppercase; letter-spacing: .04em; }
