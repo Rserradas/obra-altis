@@ -155,7 +155,7 @@ export class DemoStore extends Emitter {
   async addPendente(p, registo) {
     const id = "p" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
     this.state.pendentes[id] = { id, ...p };
-    if (registo) this._reg(p.ativ || null, p.unidade, registo);
+    if (registo) this._reg(p.ativ || null, p.unidade, { ...registo, pid: id });
     this._save();
     this.emit("data");
     return id;
@@ -163,14 +163,14 @@ export class DemoStore extends Emitter {
   async updatePendente(id, patch, registo) {
     const x = this.state.pendentes[id]; if (!x) return;
     Object.assign(x, patch);
-    if (registo) this._reg(x.ativ || null, x.unidade, registo);
+    if (registo) this._reg(x.ativ || null, x.unidade, { ...registo, pid: id });
     this._save();
     this.emit("data");
   }
   async removePendente(id, registo) {
     const x = this.state.pendentes[id]; if (!x) return;
     delete this.state.pendentes[id];
-    if (registo) this._reg(x.ativ || null, x.unidade, registo);
+    if (registo) this._reg(x.ativ || null, x.unidade, { ...registo, pid: id });
     this._save();
     this.emit("data");
   }
@@ -371,7 +371,7 @@ export class CloudStore extends Emitter {
     const ref = fb.doc(fb.collection(this.db, "pendentes"));
     const b = fb.writeBatch(this.db);
     b.set(ref, p);
-    if (registo) b.set(fb.doc(fb.collection(this.db, "registos")), this._regDoc(p.ativ || null, p.unidade, registo));
+    if (registo) b.set(fb.doc(fb.collection(this.db, "registos")), this._regDoc(p.ativ || null, p.unidade, { ...registo, pid: ref.id }));
     b.commit().catch((e) => this._erro(e, true));
     this.state.pendentes[ref.id] = { id: ref.id, ...p };
     this.emit("data");
@@ -382,7 +382,7 @@ export class CloudStore extends Emitter {
     const x = this.state.pendentes[id];
     const b = fb.writeBatch(this.db);
     b.update(fb.doc(this.db, "pendentes", id), patch);
-    if (registo) b.set(fb.doc(fb.collection(this.db, "registos")), this._regDoc(x && x.ativ || null, x && x.unidade, registo));
+    if (registo) b.set(fb.doc(fb.collection(this.db, "registos")), this._regDoc(x && x.ativ || null, x && x.unidade, { ...registo, pid: id }));
     b.commit().catch((e) => this._erro(e, true));
     if (x) Object.assign(x, patch);
     this.emit("data");
@@ -392,7 +392,7 @@ export class CloudStore extends Emitter {
     const x = this.state.pendentes[id];
     const b = fb.writeBatch(this.db);
     b.delete(fb.doc(this.db, "pendentes", id));
-    if (registo) b.set(fb.doc(fb.collection(this.db, "registos")), this._regDoc(x && x.ativ || null, x && x.unidade, registo));
+    if (registo) b.set(fb.doc(fb.collection(this.db, "registos")), this._regDoc(x && x.ativ || null, x && x.unidade, { ...registo, pid: id }));
     b.commit().catch((e) => this._erro(e, true));
     delete this.state.pendentes[id];
     this.emit("data");

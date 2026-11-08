@@ -631,6 +631,8 @@ function pedirTexto({ titulo, texto, placeholder = "", sim = "Guardar", obrigato
 }
 const pendPasso = (acao, nota) => ({ em: new Date().toISOString(), por: store.user.email, nome: store.user.nome, papel: store.user.papel, acao, ...(nota ? { nota } : {}) });
 /** O que o fiscal faz num pendente conta como vistoria: fica no registo de vistorias e aparece no relatório desse dia. */
+/** Registos de pendentes de um pendente que entretanto foi apagado deixam de contar. */
+const pendRegVivo = (r) => !r.pend || !r.pid || !!((store.data && store.data.pendentes) || {})[r.pid];
 const pendReg = (texto) => (store.user.papel === "fiscal" ? { tipo: "vistoria", pend: true, texto } : { tipo: "pendente", texto });
 const PEND_ACAO = { criado: "criou", feito: "marcou como feito", fechado: "fechou", confirmado: "confirmou (fiscal)", reaberto: "reabriu", editado: "editou" };
 async function pendCriar(unidade, ativ, texto) {
@@ -650,7 +652,7 @@ async function pendAcao(id, acao) {
   if (acao === "apagar") {
     const k = await perguntar({ titulo: "Apagar este pendente?", texto: `<p>"${esc(x.texto)}" desaparece para todos. Use só para pendentes criados por engano. Se já foi resolvido, feche-o.</p>`, opcoes: [{ k: "sim", l: "Sim, apagar", estilo: "warn" }, { k: "nao", l: "Cancelar" }] });
     if (k !== "sim") return;
-    await store.removePendente(id, pendReg(`${x.unidade}: apagou o pendente "${x.texto}"`));
+    await store.removePendente(id, { tipo: "pendente", texto: `${x.unidade}: apagou o pendente "${x.texto}"` });
     toast("Pendente apagado", { anular: false });
     return;
   }
@@ -2995,6 +2997,7 @@ function vistoriasView() {
       const box = $("#vlista");
       let regs = [];
       try { regs = await store.getRegistosTipo("vistoria"); } catch (e) { box.innerHTML = `<div class="err">Não foi possível carregar as vistorias: ${esc(erroSimples(e))}.</div>`; return; }
+      regs = regs.filter(pendRegVivo); // um pendente apagado sai dos relatórios
       const todos = resumoVistorias(regs);
       const fiscais = [...new Map(todos.map((x) => [x.por, x.nome])).entries()];
       const desenha = () => {
@@ -3031,6 +3034,7 @@ function relVistView() {
       const box = $("#rvBox");
       let regs;
       try { regs = await store.getRegistosTipo("vistoria"); } catch (e) { box.innerHTML = `<div class="err">Não foi possível carregar as vistorias: ${esc(erroSimples(e))}.</div>`; return; }
+      regs = regs.filter(pendRegVivo); // um pendente apagado sai dos relatórios
       // chaves "dia|fiscal"; o atalho "Relatório de hoje" usa dias + por
       const chaves = new Set(rv.chaves || (rv.dias || []).map((d) => d + "|" + rv.por));
       const sel = regs.filter((r) => chaves.has(diaLocal(r.em) + "|" + r.por)).sort((a, b) => a.em.localeCompare(b.em));
