@@ -1213,3 +1213,22 @@ details.atencao[open] > summary { margin-bottom: 8px; }
 .pd-ln b { font-size: 1rem; }
 .pd-cnt { color: var(--crit); font-weight: 600; }
 .ubar { flex-wrap: wrap; row-gap: 6px; }
+/* vistoria: vistas, pendente por atividade, seguinte */
+.vrow.vista { background: color-mix(in srgb, var(--ok) 7%, var(--surface)); }
+.vok { display: inline-grid; place-items: center; width: 20px; height: 20px; border-radius: 50%; background: var(--ok); color: #fff; font-size: .75rem; vertical-align: 1px; }
+.vpd svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2; }
+.vpd { display: inline-flex; align-items: center; gap: 3px; }
+.vpd.tem { color: var(--crit); border-color: var(--crit); }
+.vpd .num { font-size: .78rem; font-weight: 700; }
+.vrow.piscar { animation: piscar 1.2s ease-out; }
+@keyframes piscar { 0% { box-shadow: 0 0 0 3px var(--accent); } 100% { box-shadow: 0 0 0 0 transparent; } }
+.vb-l { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.vbar .vb-seg { color: var(--bg); border-color: color-mix(in srgb, var(--bg) 40%, transparent); }
+.pd-vist.vazio { padding: 8px 12px; }
+.pd-vist .card-h { display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap; }
+.pd-fr { display: flex; flex-direction: column; gap: 8px; }
+.pd-fr h2 { font-size: 1.05rem; margin: 0; }
+.pd-fr h2 a { color: var(--ink); }
+.vbar { flex-wrap: nowrap; }
+.vbar .btn.pri { white-space: nowrap; }
+@media (max-width: 600px) { .chips.rolar { flex-wrap: nowrap; overflow-x: auto; padding-bottom: 4px; scrollbar-width: none; } .chips.rolar .chip { flex: 0 0 auto; } }
