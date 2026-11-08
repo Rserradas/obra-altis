@@ -2847,7 +2847,7 @@ function regrasView() {
     return (vs.dir === "desc" ? -c : c) || a.ordem - b.ordem;
   }) : esp;
   const mexe = seq && !vs; // setas e arrastar só na ordem guardada
-  const NOMES_COL = { nome: "ordem alfabética", dias: "dias por fração", cond: "número de condições", seg: "número de atividades seguintes" };
+  const NOMES_COL = { nome: "ordem alfabética", dias: "dias por fração", cond: "número de condições", seg: "número de atividades que dependem desta" };
   const th = (col, l) => { const on = vs && vs.col === col; return `<button class="th-sort ${on ? "on" : ""}" data-rsort="${col}" title="Ordenar por ${l.toLowerCase()}">${l}<span class="arr">${on ? (vs.dir === "desc" ? "▼" : "▲") : "↕"}</span></button>`; };
   const nAp = S.unidades.filter((u) => u.tipo === "Apartamento").length;
   const html = `
@@ -2858,7 +2858,7 @@ function regrasView() {
     ${vs ? `<div class="banner"><span>A ver por <b>${NOMES_COL[vs.col]}</b>${vs.dir === "desc" ? " (decrescente)" : ""}. A ordem guardada da lista não mudou.</span><span class="row" style="gap:6px">${seq ? `<button class="btn sm" id="rsGuardar">Guardar como ordem da lista</button>` : ""}<button class="btn sm" id="rsVoltar">Voltar à ordem da lista</button></span></div>` : ""}
     <div class="reg-q"><input class="inp" type="search" id="regQ" placeholder="Procurar especialidade" aria-label="Procurar especialidade" autocomplete="off" value="${esc(ui.regQ || "")}"><span class="note" id="regQn"></span></div>
     <div class="rules">
-      <div class="rule rule-h ${mexe ? "ordenavel" : ""}">${mexe ? "<span></span>" : ""}<span>${th("nome", "Especialidade")}</span><span>${th("dias", "Dias por fração")}</span><span>${th("cond", "Só começa depois de")}</span><span>${th("seg", "Atividades seguintes")}</span></div>
+      <div class="rule rule-h ${mexe ? "ordenavel" : ""}">${mexe ? "<span></span>" : ""}<span>${th("nome", "Especialidade")}</span><span>${th("dias", "Dias por fração")}</span><span>${th("cond", "Só começa depois de")}</span><span>${th("seg", "Dependem desta")}</span></div>
       ${vista.map((e) => {
         const pre = regras[e.key] || [];
         // não deixa escolher uma especialidade que já espera (direta ou indiretamente) por esta: seria um círculo
@@ -2869,7 +2869,7 @@ function regrasView() {
           <input class="inp num" type="number" min="0" max="365" value="${dur[e.key] ?? ""}" data-dur="${e.key}" ${seq ? "" : "disabled"} aria-label="Dias por fração de ${esc(e.nome)}">
           <div class="tags">${pre.map((k) => `<span class="tag ${seq ? "" : "ro"}">${esc(S.espIdx[k] ? S.espIdx[k].nome : k)}${seq ? `<button data-rm="${e.key}|${k}" aria-label="Retirar">×</button>` : ""}</span>`).join("") || `<span class="note">Sem condições</span>`}
           ${seq ? `<select class="inp" data-add="${e.key}"><option value="">+ acrescentar</option>${disp.map((x) => `<option value="${x.key}">${esc(x.nome)}</option>`).join("")}</select>` : ""}</div>
-          <div class="tags segs" title="Especialidades que só começam depois desta">${seguintes(e.key).sort((x, y) => x.ordem - y.ordem).map((x) => `<button type="button" class="tag seg" data-rgo="${x.key}" title="Ir para ${esc(x.nome)}">${esc(x.nome)}</button>`).join("") || `<span class="note">Nenhuma</span>`}</div></div>`;
+          <div class="tags segs" title="Especialidades que só começam depois de esta estar concluída">${seguintes(e.key).sort((x, y) => x.ordem - y.ordem).map((x) => `<button type="button" class="tag seg" data-rgo="${x.key}" title="Ir para ${esc(x.nome)}">${esc(x.nome)}</button>`).join("") || `<span class="note">Nenhuma</span>`}</div></div>`;
       }).join("")}
     </div>
     <p class="note">As outras ligações entre trabalhos (por exemplo a sequência da Equipa 4 de apartamento em apartamento) continuam ativas além destas regras.</p>
