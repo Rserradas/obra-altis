@@ -656,9 +656,9 @@ async function pendAcao(id, acao) {
     nota = await pedirTexto({ titulo: "Reabrir o pendente", texto: `<p>"${esc(x.texto)}" volta a Por resolver. Diga o que ainda falta.</p>`, placeholder: "Ex.: o silicone ficou mal acabado no canto", sim: "Reabrir", obrigatorio: true });
     if (nota == null) return;
   } else if (acao === "feito" || acao === "fechar") {
-    nota = await pedirTexto({ titulo: acao === "feito" ? "Marcar como feito" : fiscal ? "Confirmar e fechar" : "Fechar o pendente",
+    nota = await pedirTexto({ titulo: acao === "feito" ? "Marcar como feito" : fiscal ? "Está concluído?" : "Fechar o pendente",
       texto: `<p>"${esc(x.texto)}"</p><p class="note">${acao === "feito" ? "Fica à espera do ok do fiscal. " : fiscal ? "Fica fechado e confirmado pelo fiscal. " : x.fiscalOk ? "" : "Fica fechado, e marcado como ainda sem confirmação do fiscal. "}Nota opcional:</p>`,
-      placeholder: "Ex.: silicone aplicado a 8 nov", sim: acao === "feito" ? "Marcar como feito" : fiscal ? "Confirmar e fechar" : "Fechar" });
+      placeholder: "Ex.: silicone aplicado a 8 nov", sim: acao === "feito" ? "Marcar como feito" : fiscal ? "Sim, está concluído" : "Fechar" });
     if (nota == null) return;
   }
   const agora = new Date().toISOString(), eu = store.user.email;
@@ -687,7 +687,7 @@ function pendItemHTML(x, { mostrarAtiv = true } = {}) {
       <b class="pd-txt">${esc(x.texto)}</b>
       ${x.ultimaNota ? `<span class="pd-nota">Última nota: ${esc(x.ultimaNota)}</span>` : ""}
       <small>${linhas.join(", ")}.${x.estado !== "aberto" ? " " + fok : ""}</small></div>
-    <div class="pd-b">${bt("feito", "Já está feito", "ok")}${bt("fechar", fiscal ? "Confirmar e fechar" : "Fechar", "ok")}${bt("confirmar", "Dar o ok de fiscal", "ok")}${bt("reabrir", fiscal && x.estado !== "aberto" ? "Ainda não está" : "Reabrir")}${bt("apagar", "Apagar", "ghost")}</div>
+    <div class="pd-b">${bt("feito", "Já está feito", "ok")}${bt("fechar", fiscal ? "Concluído?" : "Fechar", "ok")}${bt("confirmar", "Dar o ok de fiscal", "ok")}${bt("reabrir", fiscal && x.estado !== "aberto" ? "Ainda não está" : "Reabrir")}${bt("apagar", "Apagar", "ghost")}</div>
     ${h.length > 1 ? `<details class="pd-h"><summary>Histórico (${h.length})</summary><ul>${h.map((p) => `<li><span class="num">${fdt(p.em)}</span> ${esc(p.nome || p.por)} ${PEND_ACAO[p.acao] || p.acao}${p.nota ? `: <i>${esc(p.nota)}</i>` : ""}</li>`).join("")}</ul></details>` : ""}
   </div>`;
 }
@@ -1257,7 +1257,7 @@ function unidadeView(id) {
     ${edU && tab === "ativ" ? `<div class="banner">Altere as datas e a percentagem de cada atividade, ou toque no estado para a iniciar ou concluir hoje. Cada alteração fica guardada logo e as atividades seguintes acertam-se sozinhas.</div>` : ""}
     ${tab === "vist" && fiscal ? `<div class="row" style="justify-content:space-between;gap:8px"><p class="note" style="margin:0;flex:1 1 300px">Escolha a percentagem que verificou em cada especialidade e tire as fotografias. No fim, guarde a vistoria de uma só vez. Funciona sem rede.</p><button class="btn sm" data-relhoje>Relatório de hoje</button></div>
       <section class="pd-vist"><div class="card-h"><h2>Pendentes deste apartamento <span class="note num">${pendVist.length}</span></h2></div>
-        ${pendVist.length ? `<p class="note" style="margin:0">Veja cada ponto: confirme o que já está bem, ou carregue em Ainda não está.</p><div class="pd-lista">${pendListaHTML(pendVist, { semFechados: true })}</div>` : `<p class="note" style="margin:0">Não há pendentes por ver neste apartamento.</p>`}
+        ${pendVist.length ? `<p class="note" style="margin:0">Veja cada ponto: se já está bem, carregue em «Concluído?»; se não, em «Ainda não está».</p><div class="pd-lista">${pendListaHTML(pendVist, { semFechados: true })}</div>` : `<p class="note" style="margin:0">Não há pendentes por ver neste apartamento.</p>`}
         ${pendFormHTML(u.id)}</section>
       <label class="f">Nota da vistoria (opcional)<input class="inp" id="vnota" value="${esc(ui.vnota || "")}" placeholder="Ex.: humidade no teto do WC, falta silicone na base de duche"></label>
       ${barraConc}
@@ -2640,7 +2640,7 @@ const GUIA = {
   fiscal: [
     ["Escolha o apartamento", "Em Apartamentos escolha onde está. Os que não vê há mais de 7 dias aparecem marcados e pode filtrá-los."],
     ["Faça a vistoria", "Em cada especialidade toque na percentagem que verificou, escreva um comentário e junte fotografias, da câmara ou da galeria. O botão com o número mostra as fotografias já guardadas."],
-    ["Pendentes", "No topo da vistoria estão os pendentes do apartamento. Confirme os que já estão bem, ou carregue em Ainda não está. Para registar um ponto novo (por exemplo, falta silicone numa janela), escreva-o em Novo pendente."],
+    ["Pendentes", "No topo da vistoria estão os pendentes do apartamento. Em cada um, carregue em «Concluído?» se já está bem, ou em «Ainda não está». Para registar um ponto novo (por exemplo, falta silicone numa janela), escreva-o em Novo pendente."],
     ["Guarde e siga", "Guarde a vistoria de uma vez e passe ao apartamento seguinte. Funciona sem rede e envia quando houver ligação. Se se enganar, toque em Anular."],
     AJUDA_PASSO,
   ],
