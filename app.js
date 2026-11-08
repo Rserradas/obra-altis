@@ -2310,7 +2310,7 @@ function relatorioView() {
       </tbody></table>
       <h2>Maiores atrasos por especialidade</h2>
       ${atrG.length ? `<table class="rel-t"><thead><tr><th>Especialidade</th><th>Frações</th><th>Maior atraso</th><th>Onde</th></tr></thead><tbody>
-      ${atrG.map((g) => `<tr><td>${esc(g.nome)}</td><td class="num">${g.n}</td><td class="num">${g.max} dias</td><td class="mono small">${esc(g.us.slice(0, 8).join(", "))}${g.us.length > 8 ? " ..." : ""}</td></tr>`).join("")}</tbody></table>` : `<p>Sem atividades atrasadas.</p>`}
+      ${atrG.map((g) => `<tr><td>${esc(g.nome)}</td><td class="num">${g.n}</td><td class="num">${g.max} dias</td><td class="mono small rel-onde">${g.us.slice(0, 8).map((x) => `<span>${esc(x)}</span>`).join(", ")}${g.us.length > 8 ? " ..." : ""}</td></tr>`).join("")}</tbody></table>` : `<p>Sem atividades atrasadas.</p>`}
       <h2>Situação por fração</h2>
       <table class="rel-t"><thead><tr><th>Fração</th><th>Avanço</th><th>Concluídas</th><th>Em curso</th><th>Atrasadas</th><th>Fim previsto</th><th>Última vistoria</th></tr></thead><tbody>
       ${fr.map((u) => { const uv = ultimaVistoria(u); return `<tr><td class="mono">${esc(u.tipo === "Apartamento" || /-L\d+$/.test(u.id) ? u.id : u.nome)}</td><td class="num">${u.pct}%</td><td class="num">${u.n.concluida}/${u.acts.length}</td><td class="num">${u.n.em_curso}</td><td class="num">${u.n.atrasada}</td><td>${fd(u.fim, true)}</td><td>${uv ? fdc(uv.slice(0, 10)) : "nunca"}</td></tr>`; }).join("")}

@@ -1029,6 +1029,9 @@ a.pv-fr:hover { background: var(--surface-2); }
 @media (max-width: 900px) {
   .pv-row { grid-template-columns: 64px minmax(0, 1fr); }
   .pv-fimb { grid-column: 2; text-align: left; margin-top: -4px; }
+}
+/* Fim da obra, lista por apartamento: em ecrãs médios passa a duas linhas, para o texto não ficar espremido */
+@media (max-width: 1150px) {
   .pv-frh { display: none; }
   .pv-fr { grid-template-columns: minmax(0, 1fr) auto; gap: 6px 10px; }
   .pv-pc { grid-column: 1; }
@@ -1249,3 +1252,9 @@ details.atencao[open] > summary { margin-bottom: 8px; }
 /* fila das equipas: o nome do trabalho nunca fica espremido */
 .fq-row .fq-t { min-width: 140px; }
 .fq-ac { display: flex; gap: 6px; flex-wrap: wrap; }
+
+.rel-onde span { white-space: nowrap; }
+/* barra de baixo: cabe sempre, mesmo com 6 botões em ecrãs estreitos */
+.tabbar a, .tabbar .tb-mais { min-width: 0; }
+.tabbar a span, .tabbar .tb-mais span { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+@media (max-width: 360px) { .tabbar a, .tabbar .tb-mais { font-size: .62rem; padding-left: 0; padding-right: 0; } }
