@@ -2838,14 +2838,16 @@ function regrasView() {
   const regras = S.cfg.regras || {}, dur = S.cfg.duracoes || {};
   // ordenação só de visualização (clicar no título da coluna); a ordem guardada não muda
   const vs = ui.regSort || null;
-  const chave = { nome: (e) => e.nome, dias: (e) => Number(dur[e.key] ?? -1), cond: (e) => (regras[e.key] || []).length };
+  // seguintes: as especialidades que esperam por esta (o inverso de «Só começa depois de»)
+  const seguintes = (k) => esp.filter((x) => (regras[x.key] || []).includes(k));
+  const chave = { nome: (e) => e.nome, dias: (e) => Number(dur[e.key] ?? -1), cond: (e) => (regras[e.key] || []).length, seg: (e) => seguintes(e.key).length };
   const vista = vs ? [...esp].sort((a, b) => {
     const x = chave[vs.col](a), y = chave[vs.col](b);
     const c = typeof x === "string" ? x.localeCompare(y, "pt", { sensitivity: "base", numeric: true }) : x - y;
     return (vs.dir === "desc" ? -c : c) || a.ordem - b.ordem;
   }) : esp;
   const mexe = seq && !vs; // setas e arrastar só na ordem guardada
-  const NOMES_COL = { nome: "ordem alfabética", dias: "dias por fração", cond: "número de condições" };
+  const NOMES_COL = { nome: "ordem alfabética", dias: "dias por fração", cond: "número de condições", seg: "número de atividades seguintes" };
   const th = (col, l) => { const on = vs && vs.col === col; return `<button class="th-sort ${on ? "on" : ""}" data-rsort="${col}" title="Ordenar por ${l.toLowerCase()}">${l}<span class="arr">${on ? (vs.dir === "desc" ? "▼" : "▲") : "↕"}</span></button>`; };
   const nAp = S.unidades.filter((u) => u.tipo === "Apartamento").length;
   const html = `
@@ -2856,7 +2858,7 @@ function regrasView() {
     ${vs ? `<div class="banner"><span>A ver por <b>${NOMES_COL[vs.col]}</b>${vs.dir === "desc" ? " (decrescente)" : ""}. A ordem guardada da lista não mudou.</span><span class="row" style="gap:6px">${seq ? `<button class="btn sm" id="rsGuardar">Guardar como ordem da lista</button>` : ""}<button class="btn sm" id="rsVoltar">Voltar à ordem da lista</button></span></div>` : ""}
     <div class="reg-q"><input class="inp" type="search" id="regQ" placeholder="Procurar especialidade" aria-label="Procurar especialidade" autocomplete="off" value="${esc(ui.regQ || "")}"><span class="note" id="regQn"></span></div>
     <div class="rules">
-      <div class="rule rule-h ${mexe ? "ordenavel" : ""}">${mexe ? "<span></span>" : ""}<span>${th("nome", "Especialidade")}</span><span>${th("dias", "Dias por fração")}</span><span>${th("cond", "Só começa depois de")}</span></div>
+      <div class="rule rule-h ${mexe ? "ordenavel" : ""}">${mexe ? "<span></span>" : ""}<span>${th("nome", "Especialidade")}</span><span>${th("dias", "Dias por fração")}</span><span>${th("cond", "Só começa depois de")}</span><span>${th("seg", "Atividades seguintes")}</span></div>
       ${vista.map((e) => {
         const pre = regras[e.key] || [];
         // não deixa escolher uma especialidade que já espera (direta ou indiretamente) por esta: seria um círculo
@@ -2866,7 +2868,8 @@ function regrasView() {
         return `<div class="rule ${mexe ? "ordenavel" : ""}" data-rk="${e.key}" data-rq="${esc(semAcento([e.nome, ...pre.map((k) => (S.espIdx[k] ? S.espIdx[k].nome : k))].join(" ")))}" ${mexe ? 'draggable="true"' : ""}>${mexe ? `<div class="ordb"><button class="ord-b" data-ord="${e.key}|-1" ${i === 0 ? "disabled" : ""} title="Subir" aria-label="Subir ${esc(e.nome)}">▲</button><button class="ord-b" data-ord="${e.key}|1" ${i === esp.length - 1 ? "disabled" : ""} title="Descer" aria-label="Descer ${esc(e.nome)}">▼</button></div>` : ""}<div class="rnome" data-rnome="${e.key}"><b>${esc(e.nome)}</b>${seq ? `<button class="ren-b" data-ren="${e.key}" title="Mudar o nome" aria-label="Mudar o nome de ${esc(e.nome)}"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20h4L18.5 9.5a2.1 2.1 0 0 0-3-3L5 17v3z"/><path d="M14 8l3 3"/></svg></button>` : ""}</div>
           <input class="inp num" type="number" min="0" max="365" value="${dur[e.key] ?? ""}" data-dur="${e.key}" ${seq ? "" : "disabled"} aria-label="Dias por fração de ${esc(e.nome)}">
           <div class="tags">${pre.map((k) => `<span class="tag ${seq ? "" : "ro"}">${esc(S.espIdx[k] ? S.espIdx[k].nome : k)}${seq ? `<button data-rm="${e.key}|${k}" aria-label="Retirar">×</button>` : ""}</span>`).join("") || `<span class="note">Sem condições</span>`}
-          ${seq ? `<select class="inp" data-add="${e.key}"><option value="">+ acrescentar</option>${disp.map((x) => `<option value="${x.key}">${esc(x.nome)}</option>`).join("")}</select>` : ""}</div></div>`;
+          ${seq ? `<select class="inp" data-add="${e.key}"><option value="">+ acrescentar</option>${disp.map((x) => `<option value="${x.key}">${esc(x.nome)}</option>`).join("")}</select>` : ""}</div>
+          <div class="tags segs" title="Especialidades que só começam depois desta">${seguintes(e.key).sort((x, y) => x.ordem - y.ordem).map((x) => `<button type="button" class="tag seg" data-rgo="${x.key}" title="Ir para ${esc(x.nome)}">${esc(x.nome)}</button>`).join("") || `<span class="note">Nenhuma</span>`}</div></div>`;
       }).join("")}
     </div>
     <p class="note">As outras ligações entre trabalhos (por exemplo a sequência da Equipa 4 de apartamento em apartamento) continuam ativas além destas regras.</p>
@@ -2881,6 +2884,13 @@ function regrasView() {
         render();
       }));
       const rv = $("#rsVoltar"); if (rv) rv.onclick = () => { ui.regSort = null; render(); };
+      document.querySelectorAll("[data-rgo]").forEach((b) => (b.onclick = (ev) => {
+        ev.stopPropagation();
+        const r = document.querySelector(`.rule[data-rk="${b.dataset.rgo}"]`); if (!r) return;
+        if (r.hidden) { const q = $("#regQ"); q.value = ""; q.dispatchEvent(new Event("input")); }
+        r.scrollIntoView({ behavior: "smooth", block: "center" });
+        r.classList.remove("piscar"); void r.offsetWidth; r.classList.add("piscar");
+      }));
       document.querySelectorAll("[data-simeq]").forEach((b) => (b.onclick = () => { ui.simEq = b.dataset.simeq; render(); }));
       document.querySelectorAll("[data-simord]").forEach((b) => (b.onclick = () => { ui.simOrd = b.dataset.simord; render(); }));
       const rq = $("#regQ");
