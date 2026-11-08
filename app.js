@@ -65,7 +65,7 @@ function filtrosAlterados() {
   const planoMudou = ["bloco", "tipo", "unidade", "ativ", "equipa", "q", "soAtr", "editar", "atribuir"].some((k) => !!p[k] !== !!d[k]) || p.semConc === false || !!p.sort || (p.f || "todas") !== "todas";
   if (ui.regSort || ui.regQ) return true;
   const ganttMudou = g && (g.bloco || g.unidade || g.ativ || g.abertas === false || g.ligacoes === false || g.zoom !== "semana" || (g.abertosB && g.abertosB.size) || (g.abertos && g.abertos.size) || g.sel);
-  return !!(planoMudou || ganttMudou || ui.bloco !== "todos" || ui.unitEdit || ui.uSemConc === false || !!ui.porVist);
+  return !!(planoMudou || ganttMudou || ui.bloco !== "todos" || ui.unitEdit || ui.uSemConc === false || !!ui.porVist || !!ui.comPend);
 }
 /* Os filtros de Trabalhos, A minha semana e Apartamentos ficam guardados neste dispositivo, por utilizador. */
 let filtrosDe = null;
@@ -75,7 +75,7 @@ function lerFiltros() {
   if (filtrosDe === k) return;
   const trocou = filtrosDe !== null;
   filtrosDe = k;
-  if (trocou) { ui.plano = PLANO_PADRAO(); ui.semana = null; ui.bloco = "todos"; ui.porVist = false; }
+  if (trocou) { ui.plano = PLANO_PADRAO(); ui.semana = null; ui.bloco = "todos"; ui.porVist = false; ui.comPend = false; }
   try {
     const f = JSON.parse(localStorage.getItem(k) || "null");
     if (!f) return;
@@ -83,12 +83,13 @@ function lerFiltros() {
     if (f.semana) ui.semana = f.semana;
     if (f.bloco) ui.bloco = f.bloco;
     if (f.porVist) ui.porVist = true;
+    if (f.comPend) ui.comPend = true;
   } catch (e) {}
 }
 function guardarFiltros() {
   if (filtrosDe !== chaveFiltros()) return;
   const { bloco, tipo, unidade, ativ, equipa, q, soAtr, semConc, sort, f } = ui.plano;
-  try { localStorage.setItem(filtrosDe, JSON.stringify({ plano: { bloco, tipo, unidade, ativ, equipa, q, soAtr, semConc, sort, f }, semana: ui.semana || null, bloco: ui.bloco, porVist: !!ui.porVist })); } catch (e) {}
+  try { localStorage.setItem(filtrosDe, JSON.stringify({ plano: { bloco, tipo, unidade, ativ, equipa, q, soAtr, semConc, sort, f }, semana: ui.semana || null, bloco: ui.bloco, porVist: !!ui.porVist, comPend: !!ui.comPend })); } catch (e) {}
 }
 /** Volta todos os ecrãs aos filtros com que a aplicação abre (as vistorias por guardar mantêm-se). */
 function reporFiltros() {
@@ -98,6 +99,7 @@ function reporFiltros() {
   ui.unitEdit = false;
   ui.uSemConc = true;
   ui.porVist = false;
+  ui.comPend = false;
   ui.regSort = null;
   ui.regQ = "";
   if (ui.semana) ui.semana = { equipa: "", bloco: "", ver: "" };
@@ -1136,25 +1138,30 @@ function unidadesView() {
   const limite = new Date(Date.now() - 7 * 86400000).toISOString();
   const precisaVist = (u) => u.n.concluida < u.acts.length && (!ultimaVistoria(u) || ultimaVistoria(u) < limite);
   const nPrecisa = S.unidades.filter((u) => (fil === "todos" || u.bloco === fil) && precisaVist(u)).length;
+  const nPendU = (u) => pendDe(u.id).filter(pendAberto).length;
+  const nComPend = S.unidades.filter((u) => (fil === "todos" || u.bloco === fil) && nPendU(u)).length;
   const grupos = [["A", "Bloco A"], ["B", "Bloco B"], ["C", "Bloco C"], ["D", "Bloco D"], ["Geral", "Geral"]];
   const html = `
     <div class="card-h"><h1>Apartamentos</h1>
       <div class="row"><div class="chips">${["todos", "A", "B", "C", "D", "Geral"].map((b) => `<button class="chip ${fil === b ? "on" : ""}" data-bloco="${b}">${b === "todos" ? "Todos" : b === "Geral" ? "Geral" : "Bloco " + b}</button>`).join("")}</div>
       ${store.user.papel === "dono" ? `<button class="btn pri" id="novaFr">+ Nova fração</button>` : ""}</div></div>
     ${store.user.papel === "fiscal" ? `<div class="banner">Escolha o apartamento onde está. Lá dentro registe a percentagem de cada especialidade e tire as fotografias.</div>` : ""}
-    <div class="ubar"><label class="check"><input type="checkbox" id="porVist" ${ui.porVist ? "checked" : ""}><span>Só as por vistoriar há mais de 7 dias</span></label><span class="note num">${nPrecisa} ${nPrecisa === 1 ? "fração" : "frações"} por vistoriar</span></div>
+    <div class="ubar"><label class="check"><input type="checkbox" id="porVist" ${ui.porVist ? "checked" : ""}><span>Só as por vistoriar há mais de 7 dias</span></label><span class="note num">${nPrecisa} ${nPrecisa === 1 ? "fração" : "frações"} por vistoriar</span>
+      <label class="check"><input type="checkbox" id="comPend" ${ui.comPend ? "checked" : ""}><span>Só as com pendentes por fechar</span></label><span class="note num ${nComPend ? "pd-cnt" : ""}">${nComPend} ${nComPend === 1 ? "fração" : "frações"} com pendentes</span></div>
     ${grupos.filter(([g]) => fil === "todos" || fil === g).map(([g, nome]) => {
-      const us = S.unidades.filter((u) => u.bloco === g && (!ui.porVist || precisaVist(u)));
+      const us = S.unidades.filter((u) => u.bloco === g && (!ui.porVist || precisaVist(u)) && (!ui.comPend || nPendU(u)));
       if (!us.length) return "";
       return `<section class="col" style="display:flex;flex-direction:column;gap:10px"><div class="grp">${nome}</div><div class="ucards">${us.map((u) => {
         const dv = u.atraso;
         const uv = ultimaVistoria(u);
-        return `<a class="ucard" href="#u-${esc(u.id)}">
+        const np = nPendU(u);
+        return `<a class="ucard ${np ? "tem-pend" : ""}" href="#u-${esc(u.id)}">
           <div class="ucard-h"><b>${esc(u.tipo === "Apartamento" || u.tipo === "Loja" ? u.id : u.nome)}</b><span class="mono num">${u.pct}%</span></div>
           ${segHTML(u)}
           <div class="ln"><span>Fim previsto</span><span><b>${fd(u.fim)}</b> ${deltaHTML(dv)}</span></div>
           <div class="ln"><span>Última vistoria</span><span class="${!uv || uv < limite ? "vatr" : ""}"><b>${uv ? fdt(uv).split(" ").slice(0, 2).join(" ") : "nunca"}</b></span></div>
-          <div class="meta">${(() => { const n = pendDe(u.id).filter(pendAberto).length; return n ? `<span class="pill pd-pill">${n} pendente${n === 1 ? "" : "s"}</span>` : ""; })()}${u.n.atrasada ? `<span class="pill late">${u.n.atrasada} atrasadas</span>` : ""}${u.n.bloqueada ? `<span class="pill st-bloqueada">${u.n.bloqueada} bloqueadas</span>` : ""}${u.n.em_curso ? `<span class="pill st-em_curso">${u.n.em_curso} em curso</span>` : ""}${!u.n.atrasada && !u.n.bloqueada && !u.n.em_curso ? `<span class="pill st-${u.n.concluida === u.acts.length ? "concluida" : "por_iniciar"}">${u.n.concluida === u.acts.length ? "Tudo concluído" : "Por iniciar"}</span>` : ""}</div>
+          ${np ? `<div class="pd-ln"><span>Pendentes por fechar</span><b class="num">${np}</b></div>` : ""}
+          <div class="meta">${u.n.atrasada ? `<span class="pill late">${u.n.atrasada} atrasadas</span>` : ""}${u.n.bloqueada ? `<span class="pill st-bloqueada">${u.n.bloqueada} bloqueadas</span>` : ""}${u.n.em_curso ? `<span class="pill st-em_curso">${u.n.em_curso} em curso</span>` : ""}${!u.n.atrasada && !u.n.bloqueada && !u.n.em_curso ? `<span class="pill st-${u.n.concluida === u.acts.length ? "concluida" : "por_iniciar"}">${u.n.concluida === u.acts.length ? "Tudo concluído" : "Por iniciar"}</span>` : ""}</div>
         </a>`;
       }).join("")}</div></section>`;
     }).join("")}
@@ -1163,7 +1170,12 @@ function unidadesView() {
         ${segHTML(u)}
         <div class="ln"><span>Atividades</span><span><b>${u.acts.length}</b></span></div>
         <div class="ln"><span>Fim previsto</span><span><b>${fd(u.fim)}</b></span></div></a>`).join("")}</div></section>` : ""}`;
-  return { html, bind: () => { bindCommon(); const nf = $("#novaFr"); if (nf) nf.onclick = openNovaFracao; const pv = $("#porVist"); if (pv) pv.onchange = () => { ui.porVist = pv.checked; render(); }; } };
+  return { html, bind: () => { bindCommon(); const nf = $("#novaFr"); if (nf) nf.onclick = openNovaFracao; const pv = $("#porVist"); if (pv) pv.onchange = () => { ui.porVist = pv.checked; render(); };
+    const cp = $("#comPend"); if (cp) cp.onchange = () => { ui.comPend = cp.checked; render(); };
+    if (ui.porVist || ui.comPend) {
+      if (!document.querySelector("#view .ucard")) document.querySelector("#view .ubar").insertAdjacentHTML("afterend", `<div class="empty">Nenhuma fração com estes filtros. <button class="btn sm" data-repor>Limpar filtros</button></div>`);
+      document.querySelectorAll("#view .empty [data-repor]").forEach((b) => (b.onclick = reporFiltros));
+    } } };
 }
 
 function unidadeView(id) {

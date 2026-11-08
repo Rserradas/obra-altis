@@ -1207,3 +1207,9 @@ details.atencao[open] > summary { margin-bottom: 8px; }
 .at-fr .chip-u b { color: var(--crit); }
 .dlg textarea.inp { width: 100%; margin-top: 8px; resize: vertical; font: inherit; }
 .rv-novo { display: block; font-size: 10px; font-weight: 700; color: #b3261e; text-transform: uppercase; letter-spacing: .04em; }
+/* apartamentos com pendentes por fechar */
+.ucard.tem-pend { border-top: 4px solid var(--crit); }
+.pd-ln { display: flex; justify-content: space-between; align-items: center; background: var(--crit-soft); color: var(--crit); border-radius: 6px; padding: 5px 8px; font-size: .88rem; font-weight: 600; }
+.pd-ln b { font-size: 1rem; }
+.pd-cnt { color: var(--crit); font-weight: 600; }
+.ubar { flex-wrap: wrap; row-gap: 6px; }
