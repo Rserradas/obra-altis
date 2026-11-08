@@ -1060,7 +1060,7 @@ a.pv-fr:hover { background: var(--surface-2); }
 .fq-tl { height: 14px; }
 .fq-d { font-size: .82rem; white-space: nowrap; }
 .fq-row .pill { justify-self: start; }
-@media (max-width: 900px) {
+@media (max-width: 1250px) {
   .fq-row { grid-template-columns: 34px 24px minmax(0, 1fr) auto; }
   .fq-row .fq-tl { grid-column: 3 / -1; }
   .fq-row .fq-d { grid-column: 3; }
@@ -1245,3 +1245,7 @@ details.atencao[open] > summary { margin-bottom: 8px; }
   .rule .tags:not(.segs)::before { content: "Só começa depois de:"; font-size: .78rem; color: var(--muted); font-weight: 600; flex: 0 0 100%; }
   .rule .segs::before { flex: 0 0 100%; }
 }
+
+/* fila das equipas: o nome do trabalho nunca fica espremido */
+.fq-row .fq-t { min-width: 140px; }
+.fq-ac { display: flex; gap: 6px; flex-wrap: wrap; }
