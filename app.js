@@ -585,6 +585,148 @@ async function importarComProgresso(soFaltam, aoFalhar) {
   } finally { importando = false; render(); }
 }
 
+/* ============================================================ pendentes
+   Pontos por resolver numa fração ou numa atividade (ex.: falta silicone numa janela). Todos criam.
+   O dono e o fiscal fecham qualquer um; o empreiteiro marca como feito, e só fecha os que ele criou.
+   Fica sempre à vista se o fiscal já confirmou. Não mexem nas datas. */
+const pendTodos = () => Object.values((store.data && store.data.pendentes) || {});
+const pendDe = (unidade, ativ) => pendTodos().filter((x) => x.unidade === unidade && (ativ === undefined || x.ativ === ativ));
+/** Ainda precisa de alguma coisa: por resolver, à espera do fiscal, ou fechado sem o ok do fiscal. */
+const pendVivo = (x) => x.estado !== "fechado" || !x.fiscalOk;
+const pendAberto = (x) => x.estado !== "fechado";
+function pendEstado(x) {
+  if (x.estado === "aberto") return { k: "por", l: "Por resolver" };
+  if (x.estado === "feito") return { k: "esp", l: "Feito, à espera do fiscal" };
+  return x.fiscalOk ? { k: "ok", l: "Fechado e confirmado pelo fiscal" } : { k: "semok", l: "Fechado, sem confirmação do fiscal" };
+}
+const QUEM = { dono: "Dono de obra", empreiteiro: "Empreiteiro", fiscal: "Fiscal", admin: "Administrador" };
+function pendPode(x, acao) {
+  const p = store.user.papel, eu = store.user.email;
+  switch (acao) {
+    case "feito": return x.estado === "aberto" && p === "empreiteiro" && x.criadoPapel !== "empreiteiro";
+    case "fechar": return x.estado !== "fechado" && (p === "dono" || p === "fiscal" || (p === "empreiteiro" && x.criadoPapel === "empreiteiro"));
+    case "confirmar": return p === "fiscal" && x.estado === "fechado" && !x.fiscalOk;
+    case "reabrir": return x.estado !== "aberto" && (p === "dono" || p === "fiscal" || (x.criadoPor === eu && !x.fiscalOk));
+    case "apagar": return p === "dono" || (x.criadoPor === eu && x.estado === "aberto");
+    default: return false;
+  }
+}
+/** Pede um texto curto (nota) numa caixa. Devolve o texto, "" sem texto, ou null se cancelar. */
+function pedirTexto({ titulo, texto, placeholder = "", sim = "Guardar", obrigatorio = false, valor = "" }) {
+  return new Promise((resolve) => {
+    document.querySelectorAll('[data-dw="dlg"]').forEach((e) => e.remove());
+    document.body.insertAdjacentHTML("beforeend", `<div class="scrim dlg-s" data-dw="dlg"></div>
+      <div class="dlg" data-dw="dlg" role="dialog" aria-modal="true" aria-labelledby="dlgT"><h2 id="dlgT">${titulo}</h2><div class="dlg-t">${texto || ""}
+      <textarea class="inp" id="dlgTxt" rows="3" placeholder="${esc(placeholder)}">${esc(valor)}</textarea></div>
+      <div class="dlg-b"><button class="btn pri" data-dlg="sim">${sim}</button><button class="btn" data-dlg="nao">Cancelar</button></div></div>`);
+    const ta = document.querySelector("#dlgTxt"), bs = document.querySelector('.dlg [data-dlg="sim"]');
+    const atual = () => { bs.disabled = obrigatorio && !ta.value.trim(); };
+    ta.oninput = atual; atual();
+    const fim = (v) => { document.querySelectorAll('[data-dw="dlg"]').forEach((e) => e.remove()); resolve(v); };
+    document.querySelectorAll(".dlg [data-dlg]").forEach((b) => (b.onclick = () => fim(b.dataset.dlg === "sim" ? ta.value.trim() : null)));
+    document.querySelector(".dlg-s").onclick = () => fim(null);
+    ta.onkeydown = (e) => { if (e.key === "Escape") fim(null); };
+    ta.focus();
+  });
+}
+const pendPasso = (acao, nota) => ({ em: new Date().toISOString(), por: store.user.email, nome: store.user.nome, papel: store.user.papel, acao, ...(nota ? { nota } : {}) });
+const PEND_ACAO = { criado: "criou", feito: "marcou como feito", fechado: "fechou", confirmado: "confirmou (fiscal)", reaberto: "reabriu", editado: "editou" };
+async function pendCriar(unidade, ativ, texto) {
+  texto = String(texto || "").trim();
+  if (!texto) { toast("Escreva o que está pendente.", { anular: false }); return false; }
+  const a = ativ ? S.acts[ativ] : null;
+  const doc = { unidade, ativ: ativ || null, texto, estado: "aberto", fiscalOk: false, criadoPor: store.user.email, criadoNome: store.user.nome,
+    criadoPapel: store.user.papel, criadoEm: new Date().toISOString(), historico: [pendPasso("criado")] };
+  await store.addPendente(doc, { tipo: "pendente", texto: `${unidade}${a ? ", " + nomeAtiv(a) : ""}: novo pendente "${texto}"` });
+  toast("Pendente registado", { anular: false });
+  return true;
+}
+async function pendAcao(id, acao) {
+  const x = (store.data.pendentes || {})[id]; if (!x || !pendPode(x, acao)) return;
+  const fiscal = store.user.papel === "fiscal";
+  let nota = "";
+  if (acao === "apagar") {
+    const k = await perguntar({ titulo: "Apagar este pendente?", texto: `<p>"${esc(x.texto)}" desaparece para todos. Use só para pendentes criados por engano. Se já foi resolvido, feche-o.</p>`, opcoes: [{ k: "sim", l: "Sim, apagar", estilo: "warn" }, { k: "nao", l: "Cancelar" }] });
+    if (k !== "sim") return;
+    await store.removePendente(id, { tipo: "pendente", texto: `${x.unidade}: apagou o pendente "${x.texto}"` });
+    toast("Pendente apagado", { anular: false });
+    return;
+  }
+  if (acao === "reabrir") {
+    nota = await pedirTexto({ titulo: "Reabrir o pendente", texto: `<p>"${esc(x.texto)}" volta a Por resolver. Diga o que ainda falta.</p>`, placeholder: "Ex.: o silicone ficou mal acabado no canto", sim: "Reabrir", obrigatorio: true });
+    if (nota == null) return;
+  } else if (acao === "feito" || acao === "fechar") {
+    nota = await pedirTexto({ titulo: acao === "feito" ? "Marcar como feito" : fiscal ? "Confirmar e fechar" : "Fechar o pendente",
+      texto: `<p>"${esc(x.texto)}"</p><p class="note">${acao === "feito" ? "Fica à espera do ok do fiscal. " : fiscal ? "Fica fechado e confirmado pelo fiscal. " : x.fiscalOk ? "" : "Fica fechado, e marcado como ainda sem confirmação do fiscal. "}Nota opcional:</p>`,
+      placeholder: "Ex.: silicone aplicado a 8 nov", sim: acao === "feito" ? "Marcar como feito" : fiscal ? "Confirmar e fechar" : "Fechar" });
+    if (nota == null) return;
+  }
+  const agora = new Date().toISOString(), eu = store.user.email;
+  const passo = pendPasso(acao === "feito" ? "feito" : acao === "fechar" ? (fiscal ? "confirmado" : "fechado") : acao === "confirmar" ? "confirmado" : "reaberto", nota);
+  const patch = { historico: [...(x.historico || []), passo], ultimaNota: nota || x.ultimaNota || "" };
+  if (acao === "feito") Object.assign(patch, { estado: "feito", feitoEm: agora, feitoPor: eu, feitoNome: store.user.nome });
+  if (acao === "fechar") Object.assign(patch, { estado: "fechado", fechadoEm: agora, fechadoPor: eu, fechadoNome: store.user.nome, fechadoPapel: store.user.papel });
+  if ((acao === "fechar" && fiscal) || acao === "confirmar") Object.assign(patch, { fiscalOk: true, fiscalOkEm: agora, fiscalOkPor: eu, fiscalOkNome: store.user.nome });
+  if (acao === "confirmar" && x.estado !== "fechado") Object.assign(patch, { estado: "fechado", fechadoEm: agora, fechadoPor: eu, fechadoNome: store.user.nome, fechadoPapel: "fiscal" });
+  if (acao === "reabrir") Object.assign(patch, { estado: "aberto", fiscalOk: false, ultimaNota: nota });
+  await store.updatePendente(id, patch, { tipo: "pendente", texto: `${x.unidade}: ${PEND_ACAO[passo.acao]} o pendente "${x.texto}"${nota ? ` (${nota})` : ""}` });
+  toast({ feito: "Marcado como feito: falta o ok do fiscal", fechar: fiscal ? "Pendente confirmado e fechado" : "Pendente fechado", confirmar: "Confirmado pelo fiscal", reabrir: "Pendente reaberto" }[acao], { anular: false });
+}
+function pendItemHTML(x, { mostrarAtiv = true } = {}) {
+  const e = pendEstado(x), a = x.ativ ? S.acts[x.ativ] : null;
+  const quem = (nome, papel) => `${esc(nome || "")}${papel && String(nome || "").toLowerCase() !== (QUEM[papel] || papel).toLowerCase() ? ` (${esc((QUEM[papel] || papel).toLowerCase())})` : ""}`;
+  const linhas = [`Criado por ${quem(x.criadoNome, x.criadoPapel)} a ${fd(diaLocal(x.criadoEm))}`];
+  if (x.estado !== "aberto" && x.feitoEm) linhas.push(`feito por ${esc(x.feitoNome || "")} a ${fd(diaLocal(x.feitoEm))}`);
+  if (x.estado === "fechado" && x.fechadoEm) linhas.push(`fechado por ${quem(x.fechadoNome, x.fechadoPapel)} a ${fd(diaLocal(x.fechadoEm))}`);
+  const fok = x.fiscalOk ? `<span class="pd-fok sim">Fiscal confirmou${x.fiscalOkEm ? " a " + fd(diaLocal(x.fiscalOkEm)) : ""}</span>` : `<span class="pd-fok nao">Ainda sem ok do fiscal</span>`;
+  const bt = (k, l, cls = "") => pendPode(x, k) ? `<button class="btn sm ${cls}" data-pd="${k}|${x.id}">${l}</button>` : "";
+  const fiscal = store.user.papel === "fiscal";
+  const h = x.historico || [];
+  return `<div class="pd-i pd-${e.k}">
+    <div class="pd-t"><div class="pd-l1"><span class="pd-e">${e.l}</span>${mostrarAtiv ? (a ? `<button class="lnk-b chip-u" data-a="${a.id}">${esc(nomeAtiv(a))}</button>` : `<span class="chip-u">Fração em geral</span>`) : ""}</div>
+      <b class="pd-txt">${esc(x.texto)}</b>
+      ${x.ultimaNota ? `<span class="pd-nota">Última nota: ${esc(x.ultimaNota)}</span>` : ""}
+      <small>${linhas.join(", ")}.${x.estado !== "aberto" ? " " + fok : ""}</small></div>
+    <div class="pd-b">${bt("feito", "Já está feito", "ok")}${bt("fechar", fiscal ? "Confirmar e fechar" : "Fechar", "ok")}${bt("confirmar", "Dar o ok de fiscal", "ok")}${bt("reabrir", fiscal && x.estado !== "aberto" ? "Ainda não está" : "Reabrir")}${bt("apagar", "Apagar", "ghost")}</div>
+    ${h.length > 1 ? `<details class="pd-h"><summary>Histórico (${h.length})</summary><ul>${h.map((p) => `<li><span class="num">${fdt(p.em)}</span> ${esc(p.nome || p.por)} ${PEND_ACAO[p.acao] || p.acao}${p.nota ? `: <i>${esc(p.nota)}</i>` : ""}</li>`).join("")}</ul></details>` : ""}
+  </div>`;
+}
+/** Formulário para criar um pendente numa fração (com escolha de atividade) ou numa atividade fixa. */
+function pendFormHTML(unidade, ativFixa) {
+  const k = unidade + "|" + (ativFixa || "");
+  ui.pdDraft = ui.pdDraft || {};
+  const d = ui.pdDraft[k] || { t: "", a: "" };
+  const u = S.uMap[unidade];
+  const ops = !ativFixa && u ? u.acts.filter((a) => S.res.get(a.id).estado !== "concluida" || d.a === a.id).concat(u.acts.filter((a) => S.res.get(a.id).estado === "concluida" && d.a !== a.id)) : [];
+  return `<div class="pd-novo" data-pdform="${esc(k)}">
+    <label class="f pd-f1">Novo pendente<input class="inp" data-pdtxt value="${esc(d.t)}" placeholder="Ex.: falta silicone na janela do quarto 2" maxlength="300"></label>
+    ${ativFixa ? "" : `<label class="f">Em que atividade<select class="inp" data-pdativ><option value="">Fração em geral</option>${ops.map((a) => `<option value="${a.id}" ${d.a === a.id ? "selected" : ""}>${esc(nomeAtiv(a))}${S.res.get(a.id).estado === "concluida" ? " (concluída)" : ""}</option>`).join("")}</select></label>`}
+    <button class="btn pri" data-pdadd>Adicionar pendente</button></div>`;
+}
+function pendListaHTML(lista, opts = {}) {
+  const ord = (xs) => xs.sort((a, b) => (b.criadoEm || "").localeCompare(a.criadoEm || ""));
+  const por = ord(lista.filter((x) => x.estado === "aberto")), esp = ord(lista.filter((x) => x.estado === "feito"));
+  const semok = ord(lista.filter((x) => x.estado === "fechado" && !x.fiscalOk)), ok = ord(lista.filter((x) => x.estado === "fechado" && x.fiscalOk));
+  const g = (t, xs, vazio) => xs.length ? `<h3 class="pd-g">${t} <span class="note num">${xs.length}</span></h3>${xs.map((x) => pendItemHTML(x, opts)).join("")}` : vazio || "";
+  if (!lista.length) return `<div class="empty">${opts.vazio || "Sem pendentes. Quando alguém registar um ponto por resolver, aparece aqui."}</div>`;
+  return `${g("Por resolver", por)}${g("Feitos, à espera do fiscal", esp)}${g("Fechados sem confirmação do fiscal", semok)}
+    ${ok.length && !opts.semFechados ? `<details class="pd-fech"><summary>Fechados e confirmados pelo fiscal <span class="note num">${ok.length}</span></summary>${ok.slice(0, 40).map((x) => pendItemHTML(x, opts)).join("")}</details>` : ""}`;
+}
+function bindPendentes(root) {
+  if (!root) return;
+  root.querySelectorAll("[data-pd]").forEach((b) => (b.onclick = (e) => { e.stopPropagation(); const [acao, id] = b.dataset.pd.split("|"); pendAcao(id, acao); }));
+  root.querySelectorAll("[data-pdform]").forEach((f) => {
+    const k = f.dataset.pdform, [unidade, ativFixa] = k.split("|");
+    ui.pdDraft = ui.pdDraft || {};
+    const d = (ui.pdDraft[k] = ui.pdDraft[k] || { t: "", a: "" });
+    const t = f.querySelector("[data-pdtxt]"), sel = f.querySelector("[data-pdativ]"), add = f.querySelector("[data-pdadd]");
+    t.oninput = () => (d.t = t.value);
+    if (sel) sel.onchange = () => (d.a = sel.value);
+    const vai = async () => { if (await pendCriar(unidade, ativFixa || (sel && sel.value) || null, t.value)) { ui.pdDraft[k] = { t: "", a: d.a }; t.value = ""; render(); } };
+    add.onclick = vai;
+    t.onkeydown = (e) => { if (e.key === "Enter") { e.preventDefault(); vai(); } };
+  });
+}
 /* ============================================================ precisa de atenção (painel e semana) */
 /** Quantas atividades por concluir dependem desta, direta ou indiretamente. */
 function nSeguintes(id) {
@@ -610,7 +752,11 @@ function atencaoDados() {
   const paradas = comSeg(vivas.filter(({ a, r }) => r.estado === "por_iniciar" && !a.realInicio && r.prevIni && r.prevIni < S.hoje));
   const limite = new Date(Date.now() - 7 * 86400000).toISOString();
   const semVist = S.unidades.filter((u) => u.n.em_curso > 0 && (!ultimaVistoria(u) || ultimaVistoria(u) < limite));
-  return { esquecidas, paradas, semVist };
+  const pends = pendTodos().filter((x) => !S.idsTeste.has(x.unidade) && S.uMap[x.unidade]);
+  const porFr = (xs) => { const m = new Map(); for (const x of xs) m.set(x.unidade, (m.get(x.unidade) || 0) + 1); return ordenaUnidades([...m.keys()].map((id) => S.uMap[id])).map((u) => [u.id, m.get(u.id)]); };
+  const pendPor = pends.filter((x) => x.estado === "aberto");
+  const pendFiscal = pends.filter((x) => (x.estado === "feito" || x.estado === "fechado") && !x.fiscalOk);
+  return { esquecidas, paradas, semVist, pendPor, pendFiscal, porFr };
 }
 function atencaoHTML({ max = 3, vist = true, fechavel = false } = {}) {
   const d = atencaoDados();
@@ -624,20 +770,25 @@ function atencaoHTML({ max = 3, vist = true, fechavel = false } = {}) {
     <h3>${titulo} <span class="note num">${xs.length}</span></h3><p class="note">${sub}</p>
     ${xs.slice(0, max).map((x) => linha(x, tipo)).join("")}
     ${xs.length > max ? `<a class="note" href="#plano" data-atver="${f}">Ver as ${xs.length} nos Trabalhos</a>` : ""}</div>`;
-  const corpo = grupo("Em curso, com o fim já passado", "Se já acabaram, conclua-as: as atividades seguintes avançam logo. As que atrasam mais atividades aparecem primeiro.", d.esquecidas, "fim", "em_curso")
+  const frs = (lista) => `<div class="at-fr">${d.porFr(lista).slice(0, 16).map(([id, n]) => `<a class="mono chip-u" href="#u-${esc(id)}" data-irpend="${esc(id)}">${esc(id)}${n > 1 ? ` <b>${n}</b>` : ""}</a>`).join("")}</div>`;
+  const papel = store.user.papel;
+  const gPend = (d.pendPor.length && papel !== "fiscal" ? `<div class="at-g"><h3>Pendentes por resolver <span class="note num">${d.pendPor.length}</span></h3><p class="note">${papel === "empreiteiro" ? "Pontos registados nas frações. Quando estiverem feitos, abra a fração e carregue em Já está feito." : "Pontos registados nas frações, à espera do empreiteiro."}</p>${frs(d.pendPor)}</div>` : "")
+    + (d.pendFiscal.length && papel !== "empreiteiro" ? `<div class="at-g"><h3>Pendentes à espera do ok do fiscal <span class="note num">${d.pendFiscal.length}</span></h3><p class="note">${papel === "fiscal" ? "Na próxima vistoria destas frações, confirme se ficaram bem." : "Feitos ou fechados, mas o fiscal ainda não confirmou."}</p>${frs(d.pendFiscal)}</div>` : "");
+  const corpo = gPend + grupo("Em curso, com o fim já passado", "Se já acabaram, conclua-as: as atividades seguintes avançam logo. As que atrasam mais atividades aparecem primeiro.", d.esquecidas, "fim", "em_curso")
     + grupo("Podiam já ter começado", "As anteriores já estão concluídas e a data de início já passou. Se já começaram, registe o início.", d.paradas, "ini", "proximas")
     + (vist && d.semVist.length ? `<div class="at-g"><h3>Frações em obra sem vistoria há mais de 7 dias <span class="note num">${d.semVist.length}</span></h3>
       <div class="at-fr">${d.semVist.slice(0, 12).map((u) => `<a class="mono chip-u" href="#u-${esc(u.id)}">${esc(u.id)}</a>`).join("")}${d.semVist.length > 12 ? `<a class="note" href="#unidades" data-atvist>ver todas</a>` : ""}</div></div>` : "");
   if (fechavel) {
     // em A minha semana fica fechado por defeito, para não empurrar as listas da semana
     if (!corpo) return "";
-    const resumo = [d.esquecidas.length ? `${d.esquecidas.length} em curso com o fim já passado` : "", d.paradas.length ? `${d.paradas.length} podiam já ter começado` : ""].filter(Boolean).join(", ");
+    const resumo = [d.pendPor.length ? `${d.pendPor.length} pendente${d.pendPor.length === 1 ? "" : "s"} por resolver` : "", d.esquecidas.length ? `${d.esquecidas.length} em curso com o fim já passado` : "", d.paradas.length ? `${d.paradas.length} podiam já ter começado` : ""].filter(Boolean).join(", ");
     return `<details class="card atencao" id="atencao" ${ui.atencaoAberta ? "open" : ""}><summary><b>Precisa de atenção</b> <span class="note">${resumo}</span></summary>${corpo}</details>`;
   }
   return `<section class="card atencao" id="atencao"><div class="card-h"><h2>Precisa de atenção</h2><span class="note">o que convém tratar primeiro</span></div>
-    ${corpo || `<div class="empty">Nada urgente: não há atividades esquecidas nem paradas.</div>`}</section>`;
+    ${corpo || `<div class="empty">Nada urgente: não há pendentes, nem atividades esquecidas ou paradas.</div>`}</section>`;
 }
 function bindAtencao() {
+  document.querySelectorAll("#atencao [data-irpend]").forEach((b) => (b.onclick = () => { ui.lastUnit = b.dataset.irpend; ui.unidadeTab = store.user.papel === "fiscal" ? "vist" : "pend"; }));
   const dt = document.querySelector("details#atencao"); if (dt) dt.ontoggle = () => { ui.atencaoAberta = dt.open; };
   document.querySelectorAll("[data-atver]").forEach((b) => (b.onclick = () => { Object.assign(ui.plano, PLANO_PADRAO(), { f: b.dataset.atver, soAtr: b.dataset.atver === "em_curso", _fToque: true }); }));
   document.querySelectorAll("[data-atvist]").forEach((b) => (b.onclick = () => { ui.porVist = true; ui.bloco = "todos"; }));
@@ -674,6 +825,7 @@ function painelView() {
   const corr = (store.user.papel === "dono" || store.admin) && !S.cfg.correcaoExpiradas ? expiradas().length : 0;
   const html = `
     ${corr ? `<div class="banner warn no-print"><span><b>Correção única:</b> ${corr} atividades por concluir têm o fim previsto já passado. Pode pôr todas com fim previsto a ${fd(DATA_CORR, true)}.</span><button class="btn sm pri" id="corrExp">Corrigir datas</button></div>` : ""}
+    ${store.semPendentes && (store.user.papel === "dono" || store.admin) ? `<div class="banner warn no-print"><span><b>Os pendentes ainda não funcionam:</b> falta publicar as regras novas do Firebase (Firestore, Regras). Veja o texto em firestore.rules.</span></div>` : ""}
     ${falta ? `<div class="banner warn no-print"><span><b>A importação do cronograma ficou a meio: faltam ${falta} de ${store.seed.atividades.length} trabalhos.</b> Os que já estão na aplicação não são alterados.</span><button class="btn sm pri" id="impFalta">Completar importação</button></div>` : ""}
     <div class="card-h no-print"><h1>Painel</h1><a class="btn" href="#relatorio">Relatório para reunião</a></div>
     <div class="headline">
@@ -946,6 +1098,7 @@ function bindCommon() {
   }));
   document.querySelectorAll("[data-nova]").forEach((b) => (b.onclick = () => openNova(b.dataset.nova)));
   document.querySelectorAll("[data-a]").forEach((b) => (b.onclick = (e) => { e.preventDefault(); openSheet(b.dataset.a); }));
+  document.querySelectorAll("#view [data-irpend]").forEach((b) => (b.onclick = () => { ui.lastUnit = b.dataset.irpend; ui.unidadeTab = store.user.papel === "fiscal" ? "vist" : "pend"; }));
   document.querySelectorAll("[data-bloco]").forEach((b) => (b.onclick = () => { ui.bloco = b.dataset.bloco; render(); }));
   document.querySelectorAll("a[data-f]").forEach((b) => (b.onclick = () => { ui.plano.f = b.dataset.f; ui.plano._fToque = true; }));
 }
@@ -985,7 +1138,7 @@ function unidadesView() {
           ${segHTML(u)}
           <div class="ln"><span>Fim previsto</span><span><b>${fd(u.fim)}</b> ${deltaHTML(dv)}</span></div>
           <div class="ln"><span>Última vistoria</span><span class="${!uv || uv < limite ? "vatr" : ""}"><b>${uv ? fdt(uv).split(" ").slice(0, 2).join(" ") : "nunca"}</b></span></div>
-          <div class="meta">${u.n.atrasada ? `<span class="pill late">${u.n.atrasada} atrasadas</span>` : ""}${u.n.bloqueada ? `<span class="pill st-bloqueada">${u.n.bloqueada} bloqueadas</span>` : ""}${u.n.em_curso ? `<span class="pill st-em_curso">${u.n.em_curso} em curso</span>` : ""}${!u.n.atrasada && !u.n.bloqueada && !u.n.em_curso ? `<span class="pill st-${u.n.concluida === u.acts.length ? "concluida" : "por_iniciar"}">${u.n.concluida === u.acts.length ? "Tudo concluído" : "Por iniciar"}</span>` : ""}</div>
+          <div class="meta">${(() => { const n = pendDe(u.id).filter(pendAberto).length; return n ? `<span class="pill pd-pill">${n} pendente${n === 1 ? "" : "s"}</span>` : ""; })()}${u.n.atrasada ? `<span class="pill late">${u.n.atrasada} atrasadas</span>` : ""}${u.n.bloqueada ? `<span class="pill st-bloqueada">${u.n.bloqueada} bloqueadas</span>` : ""}${u.n.em_curso ? `<span class="pill st-em_curso">${u.n.em_curso} em curso</span>` : ""}${!u.n.atrasada && !u.n.bloqueada && !u.n.em_curso ? `<span class="pill st-${u.n.concluida === u.acts.length ? "concluida" : "por_iniciar"}">${u.n.concluida === u.acts.length ? "Tudo concluído" : "Por iniciar"}</span>` : ""}</div>
         </a>`;
       }).join("")}</div></section>`;
     }).join("")}
@@ -1067,6 +1220,8 @@ function unidadeView(id) {
   }).join("");
   const temMud = (v) => v.pct != null || (v.fotos && v.fotos.length) || (v.coment && v.coment.trim());
   const nChg = Object.values(ui.vistoria).filter((v) => v.unidade === id && temMud(v)).length;
+  const nPend = pendDe(u.id).filter(pendAberto).length;
+  const pendVist = pendDe(u.id).filter(pendVivo);
   const html = `
     <div class="row" style="justify-content:space-between"><div class="row" style="gap:6px"><a class="back" href="#unidades">Apartamentos</a>
       ${(() => { const vz = vizinhas(u.id); return `<span class="unav">${vz.ant ? `<a class="btn sm" href="#u-${esc(vz.ant)}" title="Fração anterior">‹ ${esc(vz.ant)}</a>` : ""}${vz.seg ? `<a class="btn sm" href="#u-${esc(vz.seg)}" title="Fração seguinte">${esc(vz.seg)} ›</a>` : ""}</span>`; })()}</div><div class="row" style="gap:6px"><a class="btn sm" href="#plano" data-verplano="${esc(u.id)}|${esc(u.bloco)}">Ver nos trabalhos</a><a class="btn sm" href="#gantt" data-vergantt="${esc(u.id)}|${esc(u.bloco)}">Ver no Gantt</a>${can("criar") ? `<button class="btn sm" data-nova="unit:${esc(u.id)}">+ Nova atividade nesta fração</button>` : ""}</div></div>
@@ -1083,11 +1238,15 @@ function unidadeView(id) {
     <div class="tabs">
       ${fiscal ? `<button data-tab="vist" class="${tab === "vist" ? "on" : ""}">Vistoria</button>` : ""}
       <button data-tab="ativ" class="${tab === "ativ" || (tab === "vist" && !fiscal) ? "on" : ""}">Atividades</button>
+      <button data-tab="pend" class="${tab === "pend" ? "on" : ""}">Pendentes${nPend ? ` <span class="tab-n">${nPend}</span>` : ""}</button>
       <button data-tab="fotos" class="${tab === "fotos" ? "on" : ""}">Fotografias</button>
-      ${can("executar") && tab !== "vist" && tab !== "fotos" ? `<button id="uEdit" class="tab-act ${edU ? "on" : ""}">${edU ? "Terminar edição" : "Editar datas"}</button>` : ""}
+      ${can("executar") && tab !== "vist" && tab !== "fotos" && tab !== "pend" ? `<button id="uEdit" class="tab-act ${edU ? "on" : ""}">${edU ? "Terminar edição" : "Editar datas"}</button>` : ""}
     </div>
     ${edU && tab === "ativ" ? `<div class="banner">Altere as datas e a percentagem de cada atividade, ou toque no estado para a iniciar ou concluir hoje. Cada alteração fica guardada logo e as atividades seguintes acertam-se sozinhas.</div>` : ""}
     ${tab === "vist" && fiscal ? `<div class="row" style="justify-content:space-between;gap:8px"><p class="note" style="margin:0;flex:1 1 300px">Escolha a percentagem que verificou em cada especialidade e tire as fotografias. No fim, guarde a vistoria de uma só vez. Funciona sem rede.</p><button class="btn sm" data-relhoje>Relatório de hoje</button></div>
+      <section class="pd-vist"><div class="card-h"><h2>Pendentes deste apartamento <span class="note num">${pendVist.length}</span></h2></div>
+        ${pendVist.length ? `<p class="note" style="margin:0">Veja cada ponto: confirme o que já está bem, ou carregue em Ainda não está.</p><div class="pd-lista">${pendListaHTML(pendVist, { semFechados: true })}</div>` : `<p class="note" style="margin:0">Não há pendentes por ver neste apartamento.</p>`}
+        ${pendFormHTML(u.id)}</section>
       <label class="f">Nota da vistoria (opcional)<input class="inp" id="vnota" value="${esc(ui.vnota || "")}" placeholder="Ex.: humidade no teto do WC, falta silicone na base de duche"></label>
       ${barraConc}
       <div class="arows">${rowsVist || `<div class="empty">Tudo concluído nesta fração.</div>`}</div>
@@ -1096,6 +1255,9 @@ function unidadeView(id) {
       <div id="vfotos" class="photos"><div class="note">A carregar fotografias...</div></div>
       <div class="vbar"><span id="vcnt">${nChg ? `${nChg} especialidade${nChg > 1 ? "s" : ""} por guardar` : "Sem alterações"}</span>
         <button class="btn pri" id="vsave" ${nChg ? "" : "disabled"}>Guardar vistoria</button></div>`
+      : tab === "pend" ? `<p class="note" style="margin:0">Pontos por resolver nesta fração, à vista de todos. O empreiteiro marca como feito e o fiscal confirma na vistoria seguinte.</p>
+        ${pendFormHTML(u.id)}
+        <div class="pd-lista">${pendListaHTML(pendDe(u.id))}</div>`
       : tab === "fotos" ? `<div id="fotos" class="photos"><div class="note">A carregar fotografias...</div></div>`
       : `${barraConc}<div class="arows">${rowsAtiv || `<div class="empty">${u.acts.length ? "Tudo concluído nesta fração. Desligue \"Esconder concluídas\" para ver o histórico." : can("criar") ? "Esta fração ainda não tem atividades. Crie a primeira com + Nova atividade nesta fração, lá em cima." : "Esta fração ainda não tem atividades."}</div>`}</div>
          <p class="note">Barra: previsão. Traço vermelho: hoje. E e F: percentagem declarada pelo empreiteiro e verificada pelo fiscal. Passe o rato por cima de uma linha para ver o detalhe.</p>`}
@@ -1105,6 +1267,7 @@ function unidadeView(id) {
 }
 function bindUnidade(u) {
   bindCommon();
+  bindPendentes(document.querySelector("#view"));
   bindDelUnidade(u);
   const ue = $("#uEdit"); if (ue) ue.onclick = () => { ui.unitEdit = !ui.unitEdit; render(); };
   const usc = $("#uSemConc"); if (usc) usc.onchange = () => { ui.uSemConc = usc.checked; render(); };
@@ -1608,6 +1771,7 @@ async function concluirVarias(ids, v) {
     titulo: `Concluir ${alvo.length} atividade${alvo.length === 1 ? "" : "s"}?`,
     texto: `<p>Ficam concluídas a <b>${fd(v, true)}</b>, com 100%:</p>${listaNomes(alvo)}
       ${baixas.length ? `<div class="dlg-av">Atenção: ${baixas.length} ${baixas.length === 1 ? "está registada" : "estão registadas"} com menos de 90%.</div>` : ""}
+      ${(() => { const n = alvo.filter((a) => pendDe(a.unidade, a.id).some(pendAberto)).length; return n ? `<div class="dlg-av">${n} ${n === 1 ? "tem" : "têm"} pendentes por resolver. Os pendentes continuam abertos.</div>` : ""; })()}
       ${ja.length ? `<p class="note">${ja.length} já ${ja.length === 1 ? "estava concluída e fica" : "estavam concluídas e ficam"} como ${ja.length === 1 ? "estava" : "estavam"}.</p>` : ""}
       ${depois.length ? `<p class="note">${depois.length} ${depois.length === 1 ? "começou" : "começaram"} depois de ${fd(v)} e não ${depois.length === 1 ? "é concluída" : "são concluídas"}.</p>` : ""}
       <p class="note">As atividades seguintes acertam-se sozinhas. Se se enganar, carregue em Anular na mensagem que aparece a seguir.</p>`,
@@ -1645,7 +1809,7 @@ async function concluirHoje(id) {
   const pct = Math.round(pctEfetiva(a));
   const k = await perguntar({
     titulo: "Concluir esta atividade?",
-    texto: `<p>${rotuloAt(a)} fica concluída hoje, <b>${fd(S.hoje, true)}</b>, com 100%.</p>${pct < 90 ? `<p class="note">Atenção: está registada com ${pct}%.</p>` : ""}<p class="note">Se se enganar, pode reabri-la depois.</p>`,
+    texto: `<p>${rotuloAt(a)} fica concluída hoje, <b>${fd(S.hoje, true)}</b>, com 100%.</p>${pct < 90 ? `<p class="note">Atenção: está registada com ${pct}%.</p>` : ""}${(() => { const n = pendDe(a.unidade, a.id).filter(pendAberto).length; return n ? `<div class="dlg-av">Esta atividade tem ${n} pendente${n === 1 ? "" : "s"} por resolver. Pode concluir na mesma; os pendentes continuam abertos.</div>` : ""; })()}<p class="note">Se se enganar, pode reabri-la depois.</p>`,
     opcoes: [{ k: "sim", l: "Sim, concluir hoje", estilo: "ok" }, { k: "nao", l: "Cancelar" }],
   });
   if (k !== "sim") return render();
@@ -2413,7 +2577,7 @@ const AJUDA_ECRA = {
   painel: "O ponto de situação da obra: o fim previsto, o que está atrasado e o avanço de cada bloco. Em Precisa de atenção estão as atividades que convém tratar primeiro, com atalhos para as resolver logo.",
   previsao: "Quando cada bloco e cada apartamento ficam prontos. As datas recalculam-se todos os dias com o estado real das atividades. Toque num apartamento para ver o que ainda falta.",
   unidades: "Todos os apartamentos, lojas e zonas comuns, com o avanço de cada um. Toque num para ver as atividades, fazer a vistoria ou ver as fotografias.",
-  fracao: "As atividades desta fração, pela ordem da obra. Toque numa atividade para abrir a ficha. Com Editar datas muda as datas e a percentagem diretamente na lista.",
+  fracao: "As atividades desta fração, pela ordem da obra. Toque numa atividade para abrir a ficha. Com Editar datas muda as datas e a percentagem na lista. Em Pendentes estão os pontos por resolver: o empreiteiro marca como feito e o fiscal confirma.",
   plano: "Todas as atividades da obra, com filtros por bloco, fração, atividade e estado. Os filtros ficam guardados até carregar em Limpar filtros. Com Concluir ou atribuir várias trata várias atividades de uma vez.",
   gantt: "As atividades no tempo, em barras. Arraste uma barra para mudar as datas: as atividades seguintes acertam-se sozinhas. O botão Hoje leva-o ao dia de hoje.",
   semana: "O que está em curso, o que deve começar nos próximos 7 dias e o que está à espera de outras atividades. Os botões Iniciar, +10% e Concluir gravam logo.",
@@ -2456,7 +2620,7 @@ const GUIA = {
   ],
   empreiteiro: [
     ["A minha semana", "Ao entrar vê o que está em curso, o que deve começar nos próximos 7 dias e o que está à espera de outras atividades. Os botões Iniciar, +10% e Concluir gravam logo."],
-    ["Precisa de atenção", "No topo aparecem as atividades em curso com o fim já passado e as que podiam já ter começado. Se já aconteceu, carregue em Concluí hoje ou Iniciei hoje: as seguintes acertam-se logo."],
+    ["Precisa de atenção", "No topo aparecem os pendentes por resolver, as atividades em curso com o fim já passado e as que podiam já ter começado. Quando resolver um pendente, carregue em Já está feito: o fiscal confirma depois."],
     ["Mais detalhe", "Toque no nome de uma atividade para abrir a ficha: datas, equipa, motivo de atraso, ligações, fotografias e histórico. Em Trabalhos, com Concluir ou atribuir várias, trata várias atividades de uma vez."],
     ["Enganou-se? Sem rede?", "Depois de guardar aparece Anular em baixo, durante alguns segundos. A aplicação funciona sem rede: guarda tudo no telemóvel e envia quando houver ligação."],
     AJUDA_PASSO,
@@ -2464,6 +2628,7 @@ const GUIA = {
   fiscal: [
     ["Escolha o apartamento", "Em Apartamentos escolha onde está. Os que não vê há mais de 7 dias aparecem marcados e pode filtrá-los."],
     ["Faça a vistoria", "Em cada especialidade toque na percentagem que verificou, escreva um comentário e junte fotografias, da câmara ou da galeria. O botão com o número mostra as fotografias já guardadas."],
+    ["Pendentes", "No topo da vistoria estão os pendentes do apartamento. Confirme os que já estão bem, ou carregue em Ainda não está. Para registar um ponto novo (por exemplo, falta silicone numa janela), escreva-o em Novo pendente."],
     ["Guarde e siga", "Guarde a vistoria de uma vez e passe ao apartamento seguinte. Funciona sem rede e envia quando houver ligação. Se se enganar, toque em Anular."],
     AJUDA_PASSO,
   ],
@@ -2472,7 +2637,7 @@ function abrirGuia(forcar) {
   const papel = store.user && store.user.papel;
   const passos = GUIA[papel];
   if (!passos || document.querySelector(".guia")) return;
-  const chave = "obra-guia-v2-" + papel; // v2: guia revisto a 8 nov 2026, volta a aparecer uma vez
+  const chave = "obra-guia-v3-" + papel; // v2: guia revisto a 8 nov 2026, volta a aparecer uma vez
   if (!forcar) { try { if (localStorage.getItem(chave)) return; } catch (e) { return; } }
   let i = 0;
   const el = document.createElement("div");
@@ -2906,6 +3071,15 @@ function relVistView() {
       fotos.sort((a, b) => ordemL.findIndex((l) => l.ativ === a.ativ) - ordemL.findIndex((l) => l.ativ === b.ativ) || (a.em || "").localeCompare(b.em || ""));
       fotos.forEach((f, i) => (f.num = i + 1));
       const refsDe = (ativ) => fotos.filter((f) => f.ativ === ativ).map((f) => `<a href="#rvf${f.num}" class="rv-fr">F${f.num}</a>`).join(" ");
+      // pendentes: os que mexeram nestes dias, e os que continuam por fechar nas frações visitadas
+      const iniP = new Date(dias[0] + "T00:00:00").toISOString(), fimP = new Date(new Date(dias[dias.length - 1] + "T00:00:00").getTime() + 86400000).toISOString();
+      const noPer = (p) => p.em >= iniP && p.em < fimP && dias.includes(diaLocal(p.em));
+      const visit = new Set(porU.keys());
+      const pendRel = pendTodos().filter((x) => (x.historico || []).some(noPer) || (visit.has(x.unidade) && pendVivo(x)));
+      const pendPorU = new Map();
+      for (const x of pendRel) (pendPorU.get(x.unidade) || pendPorU.set(x.unidade, []).get(x.unidade)).push(x);
+      const ordemPU = ordenaUnidades([...pendPorU.keys()].map((id) => S.uMap[id] || { id, bloco: "?", piso: 99 })).map((u) => u.id);
+      const nPendAb = pendRel.filter(pendAberto).length;
       let sec = 0;
       box.innerHTML = `<article class="rv">
         <header class="rv-cab">
@@ -2922,6 +3096,7 @@ function relVistView() {
           <div><b>${fotos.length}</b><span>${fotos.length === 1 ? "fotografia" : "fotografias"}</span></div>
           <div class="${atencao.length ? "mau" : ""}"><b>${atencao.length}</b><span>${atencao.length === 1 ? "diferença com o empreiteiro" : "diferenças com o empreiteiro"}</span></div>
           <div class="${parado.length ? "aviso" : ""}"><b>${parado.length}</b><span>sem avanço desde a vistoria anterior</span></div>
+          <div class="${nPendAb ? "aviso" : ""}"><b>${nPendAb}</b><span>${nPendAb === 1 ? "pendente por resolver" : "pendentes por resolver"}</span></div>
         </div>
 
         <section class="rv-sec"><h2>${++sec}. Pontos de atenção</h2>
@@ -2935,6 +3110,17 @@ function relVistView() {
           <table class="rv-t"><thead><tr><th>Fração</th><th>Especialidade</th><th class="n">Vistoria anterior</th><th class="n">Agora</th><th class="n">Parado há</th></tr></thead><tbody>
           ${parado.map((l) => `<tr><td class="mono">${esc(nomeU(l.unidade))}</td><td>${esc(l.nome)}${l.confirmado ? ` <span class="rv-conf">confirmado</span>` : ""}</td><td class="n">${pctTxt(l.prev.pct)} · ${fd(diaLocal(l.prev.em))}</td><td class="n"><b>${pctTxt(l.depois)}</b></td><td class="n aviso">${diasEntre(l.prev.em, l.regs[l.regs.length - 1].em)} dias</td></tr>`).join("")}
           </tbody></table>` : `<p class="rv-nota">Todas as especialidades com vistoria anterior avançaram (ou não tinham vistoria anterior).</p>`}
+        </section>
+
+        <section class="rv-sec"><h2>${++sec}. Assuntos pendentes</h2>
+          ${pendRel.length ? `<p class="rv-nota">Pontos por resolver registados nas frações. Inclui os que mudaram nestes dias e os que continuam por fechar nas frações visitadas.</p>
+          ${ordemPU.map((uid) => `<div class="rv-u"><h3><span class="mono">${esc(nomeU(uid))}</span><small>${esc(descU(uid))}</small></h3>
+            <table class="rv-t"><thead><tr><th>Pendente</th><th>Atividade</th><th>Estado</th><th>Ok do fiscal</th><th>Nestes dias</th></tr></thead><tbody>
+            ${pendPorU.get(uid).sort((a, b) => (a.criadoEm || "").localeCompare(b.criadoEm || "")).map((x) => { const a = x.ativ ? S.acts[x.ativ] : null; const ev = (x.historico || []).filter(noPer);
+              return `<tr class="${x.estado === "aberto" ? "at" : ""}"><td><b>${esc(x.texto)}</b><small>criado a ${fd(diaLocal(x.criadoEm))} por ${esc(x.criadoNome || "")}</small></td><td>${a ? esc(nomeAtiv(a)) : `<span class="rv-vazio">fração em geral</span>`}</td>
+                <td>${esc(pendEstado(x).l.split(",")[0])}</td><td>${x.fiscalOk ? `<span class="rv-conf">Confirmado${x.fiscalOkEm ? " a " + fd(diaLocal(x.fiscalOkEm)) : ""}</span>` : `<span class="aviso">Por confirmar</span>`}</td>
+                <td>${ev.length ? ev.map((p) => `${fd(diaLocal(p.em))}: ${esc(p.nome || p.por)} ${PEND_ACAO[p.acao] || p.acao}${p.nota ? `: <i>${esc(p.nota)}</i>` : ""}`).join("<br>") : `<span class="rv-vazio">sem alterações</span>`}</td></tr>`; }).join("")}
+            </tbody></table></div>`).join("")}` : `<p class="rv-nota">Sem pendentes nas frações visitadas.</p>`}
         </section>
 
         <section class="rv-sec"><h2>${++sec}. Registo por fração</h2>
@@ -4044,7 +4230,7 @@ function renderSheet() {
       </div>
       <div class="row" style="gap:6px"><span class="pill st-${r.estado}">${ESTADO[r.estado]}</span>${r.atrasada ? '<span class="pill late">Atrasada</span>' : ""}${deltaHTML(r.atraso)}</div></div>
       <button class="x" aria-label="Fechar">×</button></div>
-    <div class="stabs" role="tablist">${[["estado", "Estado"], ["lig", `Ligações <span class="num">${r.preds.length + r.succ.length}</span>`], ["fotos", "Fotografias"], ["hist", "Histórico"]].map(([k, l]) => `<button role="tab" data-stab="${k}" class="${(ui.sheetTab || "estado") === k ? "on" : ""}" aria-selected="${(ui.sheetTab || "estado") === k}">${l}</button>`).join("")}</div>
+    <div class="stabs" role="tablist">${[["estado", "Estado"], ["lig", `Ligações <span class="num">${r.preds.length + r.succ.length}</span>`], ["pend", `Pendentes${pendDe(a.unidade, a.id).filter(pendAberto).length ? ` <span class="num">${pendDe(a.unidade, a.id).filter(pendAberto).length}</span>` : ""}`], ["fotos", "Fotografias"], ["hist", "Histórico"]].map(([k, l]) => `<button role="tab" data-stab="${k}" class="${(ui.sheetTab || "estado") === k ? "on" : ""}" aria-selected="${(ui.sheetTab || "estado") === k}">${l}</button>`).join("")}</div>
     <div class="sheet-b papel-${store.user.papel}">
       <div class="spane" data-pane="estado" ${(ui.sheetTab || "estado") === "estado" ? "" : "hidden"}>
       ${(() => {
@@ -4126,6 +4312,12 @@ function renderSheet() {
       ${podeDeps ? `<details class="formbox" id="sucBox"><summary><b>+ Ligar uma atividade que já existe</b> <span class="note">como seguinte, desta ou de outra fração</span></summary>
         <p class="note" style="margin:8px 0">A atividade que escolher passa a esperar por esta.</p>${depPickerHTML("sp", a.unidade, "Acrescentar")}</details>` : ""}
       </div>
+      <div class="spane" data-pane="pend" ${ui.sheetTab === "pend" ? "" : "hidden"}>
+      <h3>Pendentes desta atividade</h3>
+      ${pendFormHTML(a.unidade, a.id)}
+      <div class="pd-lista">${pendListaHTML(pendDe(a.unidade, a.id), { mostrarAtiv: false, vazio: "Sem pendentes nesta atividade." })}</div>
+      ${pendDe(a.unidade).filter((x) => x.ativ !== a.id && pendAberto(x)).length ? `<p class="note"><a href="#u-${esc(a.unidade)}" data-irpend="${esc(a.unidade)}">Ver todos os pendentes de ${esc(a.unidade)}</a></p>` : ""}
+      </div>
       <div class="spane" data-pane="fotos" ${ui.sheetTab === "fotos" ? "" : "hidden"}>
       <h3>Fotografias</h3>
       <div class="photos" id="sfotos"><div class="note">A carregar...</div></div>
@@ -4149,6 +4341,8 @@ function renderSheet() {
     sh.querySelectorAll("[data-pane]").forEach((x) => (x.hidden = x.dataset.pane !== ui.sheetTab));
     sh.querySelector(".sheet-b").scrollTop = 0;
   }));
+  bindPendentes(sh);
+  sh.querySelectorAll("[data-irpend]").forEach((b) => (b.onclick = () => { ui.lastUnit = b.dataset.irpend; ui.unidadeTab = store.user.papel === "fiscal" ? "vist" : "pend"; closeSheet(); }));
   $('.scrim[data-dw="ativ"]').onclick = closeSheet;
   $(".x", sh).onclick = closeSheet;
   sh.querySelectorAll("[data-close]").forEach((x) => (x.onclick = closeSheet));

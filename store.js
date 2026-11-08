@@ -44,7 +44,7 @@ export class DemoStore extends Emitter {
     for (const a of s.atividades) acts[a.id] = { ...a };
     this.state = {
       config: { nome: s.obra.nome, especialidades: s.especialidades, regras: s.regras, duracoes: s.duracoes, unidades: s.unidades },
-      atividades: acts, fotos: [], registos: [],
+      atividades: acts, fotos: [], registos: [], pendentes: {},
       utilizadores: [
         { email: "dono@demo", nome: "Dono de obra", papel: "dono" },
         { email: "empreiteiro@demo", nome: "Empreiteiro", papel: "empreiteiro" },
@@ -59,6 +59,7 @@ export class DemoStore extends Emitter {
       for (const [id, p] of Object.entries(saved.patches || {})) if (acts[id]) Object.assign(acts[id], p);
       this.state.registos = saved.registos || [];
       this.state.fotos = saved.fotos || [];
+      this.state.pendentes = saved.pendentes || {};
       if (saved.utilizadores) this.state.utilizadores = saved.utilizadores;
     }
     this.patches = (saved && saved.patches) || {};
@@ -69,7 +70,7 @@ export class DemoStore extends Emitter {
     const c = this.state.config;
     const data = { config: { regras: c.regras, duracoes: c.duracoes, especialidades: c.especialidades, unidades: c.unidades, correcaoExpiradas: c.correcaoExpiradas }, patches: this.patches,
       novas: this.novas.filter((a) => this.state.atividades[a.id]), removidas: this.removidas,
-      registos: this.state.registos.slice(-500), utilizadores: this.state.utilizadores };
+      registos: this.state.registos.slice(-500), utilizadores: this.state.utilizadores, pendentes: this.state.pendentes };
     try {
       localStorage.setItem(this.KEY, JSON.stringify({ ...data, fotos: this.state.fotos }));
     } catch (e) {
@@ -150,6 +151,29 @@ export class DemoStore extends Emitter {
     this._save();
     this.emit("data");
   }
+  /** Pendentes: pontos por resolver numa fração (ou numa atividade). */
+  async addPendente(p, registo) {
+    const id = "p" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+    this.state.pendentes[id] = { id, ...p };
+    if (registo) this._reg(p.ativ || null, p.unidade, registo);
+    this._save();
+    this.emit("data");
+    return id;
+  }
+  async updatePendente(id, patch, registo) {
+    const x = this.state.pendentes[id]; if (!x) return;
+    Object.assign(x, patch);
+    if (registo) this._reg(x.ativ || null, x.unidade, registo);
+    this._save();
+    this.emit("data");
+  }
+  async removePendente(id, registo) {
+    const x = this.state.pendentes[id]; if (!x) return;
+    delete this.state.pendentes[id];
+    if (registo) this._reg(x.ativ || null, x.unidade, registo);
+    this._save();
+    this.emit("data");
+  }
   async addFoto(ativ, unidade, dataUrl, nota) {
     this.state.fotos.push({ id: "f" + Date.now() + Math.random().toString(36).slice(2, 6), ativ, unidade, data: dataUrl, nota: nota || "",
       por: this.user.email, nomePor: this.user.nome, em: nowISO() });
@@ -184,7 +208,7 @@ export class CloudStore extends Emitter {
     this.cfg = cfg;
     this.seed = seed;
     this.user = null;
-    this.state = { config: null, atividades: {}, fotos: [], registos: [], utilizadores: [] };
+    this.state = { config: null, atividades: {}, fotos: [], registos: [], utilizadores: [], pendentes: {} };
     this.sync = { online: navigator.onLine, pendentes: 0, texto: "A ligar..." };
     this._unsubs = [];
   }
@@ -238,6 +262,13 @@ export class CloudStore extends Emitter {
       this._meta("atividades", s.metadata);
       this.emit("data");
     }, (e) => this._erro(e)));
+    this._unsubs.push(fb.onSnapshot(fb.collection(db, "pendentes"), meta, (s) => {
+      const m = {};
+      s.forEach((d) => { m[d.id] = { id: d.id, ...d.data() }; });
+      this.state.pendentes = m;
+      this._meta("pendentes", s.metadata);
+      this.emit("data");
+    }, (e) => { console.warn("pendentes", e); this.state.pendentes = {}; this.semPendentes = true; this.emit("data"); }));
     this._unsubs.push(fb.onSnapshot(fb.query(fb.collection(db, "registos"), fb.orderBy("em", "desc"), fb.limit(60)), meta, (s) => {
       this.state.registos = s.docs.map((d) => ({ id: d.id, ...d.data() }));
       this._meta("registos", s.metadata);
@@ -333,6 +364,37 @@ export class CloudStore extends Emitter {
       if (i === 0 && registo) b.set(fb.doc(fb.collection(this.db, "registos")), this._regDoc(null, null, registo));
       b.commit().catch((e) => this._erro(e, true));
     }
+    this.emit("data");
+  }
+  async addPendente(p, registo) {
+    const fb = this.fb;
+    const ref = fb.doc(fb.collection(this.db, "pendentes"));
+    const b = fb.writeBatch(this.db);
+    b.set(ref, p);
+    if (registo) b.set(fb.doc(fb.collection(this.db, "registos")), this._regDoc(p.ativ || null, p.unidade, registo));
+    b.commit().catch((e) => this._erro(e, true));
+    this.state.pendentes[ref.id] = { id: ref.id, ...p };
+    this.emit("data");
+    return ref.id;
+  }
+  async updatePendente(id, patch, registo) {
+    const fb = this.fb;
+    const x = this.state.pendentes[id];
+    const b = fb.writeBatch(this.db);
+    b.update(fb.doc(this.db, "pendentes", id), patch);
+    if (registo) b.set(fb.doc(fb.collection(this.db, "registos")), this._regDoc(x && x.ativ || null, x && x.unidade, registo));
+    b.commit().catch((e) => this._erro(e, true));
+    if (x) Object.assign(x, patch);
+    this.emit("data");
+  }
+  async removePendente(id, registo) {
+    const fb = this.fb;
+    const x = this.state.pendentes[id];
+    const b = fb.writeBatch(this.db);
+    b.delete(fb.doc(this.db, "pendentes", id));
+    if (registo) b.set(fb.doc(fb.collection(this.db, "registos")), this._regDoc(x && x.ativ || null, x && x.unidade, registo));
+    b.commit().catch((e) => this._erro(e, true));
+    delete this.state.pendentes[id];
     this.emit("data");
   }
   async addFoto(ativ, unidade, dataUrl, nota) {

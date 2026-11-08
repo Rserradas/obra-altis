@@ -1170,3 +1170,39 @@ details.atencao > summary::-webkit-details-marker { display: none; }
 details.atencao > summary::before { content: "›"; display: inline-block; width: 12px; font-weight: 700; transition: transform .15s; }
 details.atencao[open] > summary::before { transform: rotate(90deg); }
 details.atencao[open] > summary { margin-bottom: 8px; }
+
+/* ---- pendentes ---- */
+.rv-res { grid-template-columns: repeat(6, minmax(0, 1fr)); }
+@media (max-width: 900px) { .rv-res { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+.tab-n { display: inline-grid; place-items: center; min-width: 20px; height: 20px; padding: 0 5px; border-radius: 10px; background: var(--crit); color: #fff; font-size: .72rem; font-weight: 700; margin-left: 4px; }
+.pd-pill { background: var(--crit-soft); color: var(--crit); }
+.pd-novo { display: flex; gap: 10px; align-items: flex-end; flex-wrap: wrap; background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); padding: 12px; }
+.pd-novo .pd-f1 { flex: 1 1 260px; }
+.pd-novo .f { min-width: 0; }
+.pd-novo select { max-width: 100%; }
+.pd-lista { display: flex; flex-direction: column; gap: 8px; }
+.pd-g { margin: 8px 0 0; font-size: 1rem; }
+.pd-i { background: var(--surface); border: 1px solid var(--line); border-left: 5px solid var(--line); border-radius: var(--r); padding: 10px 12px; display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: flex-start; justify-content: space-between; }
+.pd-i.pd-por { border-left-color: var(--crit); }
+.pd-i.pd-esp { border-left-color: var(--warn); }
+.pd-i.pd-semok { border-left-color: var(--bloq); }
+.pd-i.pd-ok { border-left-color: var(--ok); opacity: .85; }
+.pd-t { display: flex; flex-direction: column; gap: 3px; min-width: 0; flex: 1 1 260px; }
+.pd-l1 { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.pd-e { font-size: .74rem; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); }
+.pd-por .pd-e { color: var(--crit); } .pd-esp .pd-e { color: var(--warn); } .pd-ok .pd-e { color: var(--ok); } .pd-semok .pd-e { color: var(--bloq); }
+.pd-txt { font-size: 1rem; overflow-wrap: anywhere; }
+.pd-nota { font-size: .88rem; font-style: italic; }
+.pd-t small { color: var(--muted); }
+.pd-fok { font-weight: 700; white-space: nowrap; }
+.pd-fok.sim { color: var(--ok); } .pd-fok.nao { color: var(--warn); }
+.pd-b { display: flex; gap: 6px; flex-wrap: wrap; }
+.pd-h { flex: 1 1 100%; font-size: .85rem; }
+.pd-h summary, .pd-fech summary { cursor: pointer; color: var(--muted); font-weight: 600; }
+.pd-h ul { margin: 6px 0 0; padding-left: 18px; }
+.pd-fech { display: flex; flex-direction: column; gap: 8px; }
+.pd-fech[open] > summary { margin-bottom: 8px; }
+.pd-vist { background: var(--surface-2); border-left: 4px solid var(--crit); border-radius: var(--r); padding: 12px; display: flex; flex-direction: column; gap: 10px; }
+.pd-vist h2 { font-size: 1.05rem; margin: 0; }
+.at-fr .chip-u b { color: var(--crit); }
+.dlg textarea.inp { width: 100%; margin-top: 8px; resize: vertical; font: inherit; }

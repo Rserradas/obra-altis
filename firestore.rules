@@ -35,6 +35,19 @@ service cloud.firestore {
       allow create: if membro() && request.resource.data.por == email();
       allow delete: if isDono() || (membro() && resource.data.por == email());
     }
+    // Pendentes: todos criam. O dono e o fiscal fecham qualquer um; só o fiscal dá o ok de fiscal.
+    // O empreiteiro marca como feito e só fecha os que ele próprio criou.
+    match /pendentes/{id} {
+      allow read: if membro();
+      allow create: if membro() && request.resource.data.criadoPor == email();
+      allow update: if isDono() || papel() == "fiscal"
+        || (membro()
+            && request.resource.data.get("fiscalOk", false) == resource.data.get("fiscalOk", false)
+            && request.resource.data.criadoPor == resource.data.criadoPor
+            && request.resource.data.criadoPapel == resource.data.criadoPapel
+            && (request.resource.data.estado != "fechado" || resource.data.estado == "fechado" || resource.data.criadoPapel == papel()));
+      allow delete: if isDono() || (membro() && resource.data.criadoPor == email());
+    }
     match /registos/{id} {
       allow read: if membro();
       allow create: if membro() && request.resource.data.por == email();
