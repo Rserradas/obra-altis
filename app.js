@@ -53,6 +53,7 @@ const ICON = {
   lupa: '<svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="6.5"/><path d="m16 16 4.5 4.5"/></svg>',
   camera: '<svg viewBox="0 0 24 24"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg>',
   pendentes: '<svg viewBox="0 0 24 24"><path d="M5 21V4"/><path d="M5 4h13l-3 4 3 4H5"/></svg>',
+  lig: '<svg viewBox="0 0 24 24"><path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1"/><path d="M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1"/></svg>',
 };
 
 let store, S = null; // S = estado calculado
@@ -1649,15 +1650,35 @@ function planoView() {
   const atr = !!p.atribuir && can("executar");
   if (atr) p.selec = p.selec || new Set();
   const dIn = (id, campo, v, min) => `<input class="inp dt-in" type="date" data-ed="${id}|${campo}" value="${v || ""}" ${min ? `min="${min}"` : ""} aria-label="${campo}">`;
+  ui.ligAberta = ui.ligAberta || new Set();
+  const nCols = 7 + (atr ? 1 : 0);
+  // ligações: o que esta atividade espera e o que espera por ela
+  const ligItem = (id, de, comoSeg) => {
+    const x = S.acts[id], rx = S.res.get(id); if (!x || !rx) return "";
+    const pr = comoSeg ? ((rx.preds || []).find((q) => q.id === de) || {}) : ((S.res.get(de).preds || []).find((q) => q.id === id) || {});
+    const porque = pr.fonte === "equipa" ? "mesma equipa, trabalho anterior" : pr.tipo === "SS" ? "começam juntas" : "";
+    return `<li><button class="lnk-b" data-a="${id}"><span class="mono">${esc(x.unidade)}</span> <b>${esc(nomeAtiv(x))}</b></button>
+      <span class="pill st-${rx.estado}">${ESTADO[rx.estado]}</span><span class="note num">${rx.estado === "concluida" ? "acabou a " + fd(rx.fim) : `${fd(rx.inicio)} a ${fd(rx.fim)}`}</span>${porque ? `<span class="note">(${porque})</span>` : ""}${rx.estado === "concluida" ? "" : deltaHTML(rx.atraso)}</li>`;
+  };
+  const ligHTML = (a, r) => {
+    const ant = (r.preds || []).map((q) => q.id), seg = r.succ || [];
+    const ord = (ids) => ids.slice().sort((x, y) => (S.res.get(x).inicio || "").localeCompare(S.res.get(y).inicio || ""));
+    return `<tr class="lig-row"><td colspan="${nCols}"><div class="lig">
+      <div><h4>Só começa depois de <span class="note num">${ant.length}</span></h4>${ant.length ? `<ul>${ord(ant).map((id) => ligItem(id, a.id, false)).join("")}</ul>` : `<p class="note">Nada: pode começar quando quiser.</p>`}</div>
+      <div><h4>Dependem desta <span class="note num">${seg.length}</span></h4>${seg.length ? `<ul>${ord(seg).map((id) => ligItem(id, a.id, true)).join("")}</ul>` : `<p class="note">Nenhuma atividade espera por esta.</p>`}</div>
+    </div></td></tr>`;
+  };
   const linha = ({ a, r }) => {
+    const nLig = (r.preds || []).length + (r.succ || []).length, aberta = ui.ligAberta.has(a.id);
+    const bLig = `<button type="button" class="lig-b ${aberta ? "on" : ""}" data-lig="${a.id}" aria-expanded="${aberta}" title="Ver as atividades de que esta depende e as que dependem desta">${ICON.lig}<span class="num">${(r.preds || []).length} · ${(r.succ || []).length}</span></button>`;
     const espera = r.estado === "bloqueada" ? [...new Set(r.bloqueadaPor.map((id) => S.acts[id]).filter(Boolean).map((x) => nomeAtiv(x) + (x.unidade !== a.unidade ? " (" + x.unidade + ")" : "")))] : [];
     const ini = r.inicio, fim = r.fim;
     const cIni = ed ? dIn(a.id, "ini", ini) : `<span class="mono num">${fd(ini)}</span>`;
     const cFim = ed ? dIn(a.id, "fim", fim) : `<span class="mono num">${fd(fim)}</span>`;
     const ck = atr ? `<td class="ck"><input type="checkbox" data-ck="${a.id}" ${p.selec.has(a.id) ? "checked" : ""} aria-label="Escolher ${esc(nomeAtiv(a) + " " + a.unidade)}"></td>` : "";
     return `<tr ${ed ? "" : atr ? `data-tck="${a.id}" class="${p.selec.has(a.id) ? "sel" : ""}"` : `data-a="${a.id}"`}>${ck}<td class="mono">${esc(a.unidade)}</td>
-      <td>${ed ? `<button class="lnk-b" data-a="${a.id}"><b>${esc(nomeAtiv(a))}</b></button>` : `<b>${esc(nomeAtiv(a))}</b>`}${a.equipa ? `<div class="note">${esc(a.equipa)}</div>` : atr ? `<div class="note semeq">sem equipa</div>` : ""}${espera.length ? `<div class="wait">À espera de: ${esc(espera.slice(0, 2).join(", "))}${espera.length > 2 ? "..." : ""}</div>` : ""}</td>
-      <td>${ed || can("executar") ? estadoEdHTML(a, r) : `<span class="pill st-${r.estado}">${ESTADO[r.estado]}</span>`}</td><td>${cIni}</td><td>${cFim}</td><td>${p.f === "porconfirmar" && can("executar") ? `<button class="btn sm" data-conf="${a.id}" title="A data mostrada está certa">Confirmar</button>` : deltaHTML(r.atraso)}</td><td class="mono num pctc2">${ed ? pctEdHTML(a) + pctFiscalHTML(a, true) : pctDuasHTML(a)}</td></tr>`;
+      <td><div class="lig-nm">${ed ? `<button class="lnk-b" data-a="${a.id}"><b>${esc(nomeAtiv(a))}</b></button>` : `<b>${esc(nomeAtiv(a))}</b>`}${nLig && !atr ? bLig : ""}</div>${a.equipa ? `<div class="note">${esc(a.equipa)}</div>` : atr ? `<div class="note semeq">sem equipa</div>` : ""}${espera.length ? `<div class="wait">À espera de: ${esc(espera.slice(0, 2).join(", "))}${espera.length > 2 ? "..." : ""}</div>` : ""}</td>
+      <td>${ed || can("executar") ? estadoEdHTML(a, r) : `<span class="pill st-${r.estado}">${ESTADO[r.estado]}</span>`}</td><td>${cIni}</td><td>${cFim}</td><td>${p.f === "porconfirmar" && can("executar") ? `<button class="btn sm" data-conf="${a.id}" title="A data mostrada está certa">Confirmar</button>` : deltaHTML(r.atraso)}</td><td class="mono num pctc2">${ed ? pctEdHTML(a) + pctFiscalHTML(a, true) : pctDuasHTML(a)}</td></tr>${aberta && !atr ? ligHTML(a, r) : ""}`;
   };
   const html = `
     <div class="card-h"><h1>Trabalhos</h1><div class="row">
@@ -1715,6 +1736,12 @@ function planoView() {
   return {
     html, bind: () => {
       bindCommon();
+      document.querySelectorAll("[data-lig]").forEach((b) => (b.onclick = (e) => {
+        e.preventDefault(); e.stopPropagation();
+        const id = b.dataset.lig;
+        if (ui.ligAberta.has(id)) ui.ligAberta.delete(id); else ui.ligAberta.add(id);
+        render();
+      }));
       document.querySelectorAll("[data-pf]").forEach((b) => (b.onclick = () => { p.f = b.dataset.pf; p._fToque = true; render(); }));
       document.querySelectorAll("[data-pb]").forEach((b) => (b.onclick = () => { p.bloco = b.dataset.pb; render(); }));
       $("#pt").onchange = (e) => { p.tipo = e.target.value; render(); };

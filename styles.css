@@ -1258,3 +1258,20 @@ details.atencao[open] > summary { margin-bottom: 8px; }
 .tabbar a, .tabbar .tb-mais { min-width: 0; }
 .tabbar a span, .tabbar .tb-mais span { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 @media (max-width: 360px) { .tabbar a, .tabbar .tb-mais { font-size: .62rem; padding-left: 0; padding-right: 0; } }
+/* Trabalhos: ligações de cada atividade (de que depende e o que depende dela) */
+.lig-nm { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.lig-b { display: inline-flex; align-items: center; gap: 4px; border: 1px solid var(--line); background: var(--surface); color: var(--muted); border-radius: 999px; padding: 2px 8px 2px 6px; font: 600 .74rem var(--f-body); cursor: pointer; min-height: 24px; position: relative; }
+.lig-b::after { content: ""; position: absolute; inset: -6px; }
+.lig-b svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 2; }
+.lig-b:hover, .lig-b.on { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); }
+tr.lig-row > td { background: var(--surface-2); padding: 10px 14px 14px; border-top: 0; }
+.lig { display: grid; grid-template-columns: 1fr 1fr; gap: 16px 28px; }
+.lig h4 { margin: 0 0 6px; font-size: .78rem; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
+.lig ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.lig li { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; font-size: .88rem; }
+.lig li .lnk-b { text-align: left; }
+.lig p { margin: 0; }
+@media (max-width: 760px) { .lig { grid-template-columns: 1fr; } }
+@media (pointer: coarse) { .lig-b { min-height: 32px; padding: 4px 10px 4px 8px; } }
+.lig { position: sticky; left: 14px; max-width: calc(100vw - 60px); }
+@media (min-width: 901px) { .lig { max-width: none; position: static; } }
