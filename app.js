@@ -2163,7 +2163,7 @@ async function gravarComSeguintes(id, patch, registo, _delta, msg) {
 }
 
 /** Grava uma data editada em qualquer ecrã, com avisos quando há conflito com as anteriores ou efeito nas seguintes. */
-async function editarData(id, campo, v) {
+async function editarData(id, campo, v, { manterPrazo = false } = {}) {
   const a = S.acts[id], r = S.res.get(id);
   if (!a || !r) return;
   if (v && !dataCompleta(v)) return; // nunca grava datas a meio de escrever
@@ -2257,7 +2257,8 @@ async function editarData(id, campo, v) {
       else return render();
     }
     const delta = diffDays(r.prevIni, dia);
-    const patch = { inicioPrevisto: dia, dataOk: true, ...prazoDe(id) }; // a previsão anda inteira, com o mesmo prazo
+    // nova previsão de início: o fim volta a contar com a duração normal desta atividade (a do Gantt, ao arrastar a barra, mantém o prazo)
+    const patch = { inicioPrevisto: dia, dataOk: true, ...(manterPrazo ? prazoDe(id) : { fimPrevisto: null, duracaoManual: null }) };
     return gravarComSeguintes(id, patch, reg(`Nova previsão de início para ${N}: ${fd(dia)}`), delta,
       dia !== v ? `Fica a ${fd(dia)}` : delta ? "Previsão guardada" : "Sem alteração");
   }
@@ -2685,7 +2686,7 @@ function drawGantt() {
       if (d && d.moveu) {
         const r = S.res.get(id);
         if (!d.dd) { drawGantt(); return; }
-        if (d.modo === "mover") editarData(id, "ini", addDays(r.estado === "concluida" ? S.acts[id].realInicio || r.inicio : r.inicio, d.dd));
+        if (d.modo === "mover") editarData(id, "ini", addDays(r.estado === "concluida" ? S.acts[id].realInicio || r.inicio : r.inicio, d.dd), { manterPrazo: true });
         else editarData(id, "fim", addDays(r.fim, d.dd));
         return;
       }
