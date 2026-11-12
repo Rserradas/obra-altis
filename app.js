@@ -207,7 +207,7 @@ function toast(msg, opts = {}) {
   t.setAttribute("role", "status");
   t.innerHTML = `<span>${esc(msg)}</span>${podeAnular ? `<button class="tb" data-t="anular">Anular</button>` : ""}${opts.acao ? `<button class="tb" data-t="acao">${esc(opts.acao.label)}</button>` : ""}`;
   document.body.appendChild(t);
-  const tempo = setTimeout(() => t.remove(), podeAnular || opts.acao ? 8000 : 2600);
+  const tempo = setTimeout(() => t.remove(), podeAnular || opts.acao || String(msg).length > 90 ? 8000 : 2600);
   // depois de recalcular, diz quantas atividades mudaram de data (incluindo as seguintes)
   if (snap && podeAnular) {
     const conta = () => {
@@ -879,6 +879,7 @@ function painelView() {
   const corr = (store.user.papel === "dono" || store.admin) && !S.cfg.correcaoExpiradas ? expiradas().length : 0;
   const html = `
     ${corr ? `<div class="banner warn no-print"><span><b>Correção única:</b> ${corr} atividades por concluir têm o fim previsto já passado. Pode pôr todas com fim previsto a ${fd(DATA_CORR, true)}.</span><button class="btn sm pri" id="corrExp">Corrigir datas</button></div>` : ""}
+    ${(() => { const m = datasEstranhas(); return m.length && (can("executar") || store.user.papel === "dono") ? `<div class="banner warn no-print"><span><b>${m.length} ${m.length === 1 ? "atividade tem" : "atividades têm"} uma data impossível</b> (por exemplo, do ano ${esc(m[0].ex.slice(0, 4))}), gravada por engano enquanto se escrevia a data à mão: ${m.slice(0, 4).map((x) => `${esc(nomeAtiv(x.a))} em ${esc(x.a.unidade)}`).join(", ")}${m.length > 4 ? "..." : ""}.</span><button class="btn sm pri" id="limparDatas">Apagar essas datas</button></div>` : ""; })()}
     ${store.semPendentes && (store.user.papel === "dono" || store.admin) ? `<div class="banner warn no-print"><span><b>Os pendentes ainda não funcionam:</b> falta publicar as regras novas do Firebase (Firestore, Regras). Veja o texto em firestore.rules.</span></div>` : ""}
     ${falta ? `<div class="banner warn no-print"><span><b>A importação do cronograma ficou a meio: faltam ${falta} de ${store.seed.atividades.length} trabalhos.</b> Os que já estão na aplicação não são alterados.</span><button class="btn sm pri" id="impFalta">Completar importação</button></div>` : ""}
     <div class="card-h no-print"><h1>Painel</h1><a class="btn" href="#relatorio">Relatório para reunião</a></div>
@@ -922,7 +923,8 @@ function painelView() {
         <span class="li-s"><span>${esc(r.nomePor || r.por)}</span><span class="role">${PAPEL[r.papel] || ""}</span>${r.unidade ? `<a class="mono" href="#u-${esc(r.unidade)}">${esc(r.unidade)}</a>` : ""}</span></div>`).join("")
         : `<div class="empty">Ainda não há registos. Quando o empreiteiro ou o fiscal atualizarem atividades, aparecem aqui.</div>`}</div>
     </section>`;
-  return { html, bind: () => { bindCommon(); bindAtencao(); resumoSemana(); guardarFotoDiaria(); const bc = $("#corrExp"); if (bc) bc.onclick = corrigirExpiradas; const bf = $("#impFalta"); if (bf) bf.onclick = () => { bf.disabled = true; importarComProgresso(true, () => { bf.disabled = false; }); }; } };
+  return { html, bind: () => { bindCommon(); bindAtencao(); resumoSemana();
+    const ld = $("#limparDatas"); if (ld) ld.onclick = limparDatasEstranhas; guardarFotoDiaria(); const bc = $("#corrExp"); if (bc) bc.onclick = corrigirExpiradas; const bf = $("#impFalta"); if (bf) bf.onclick = () => { bf.disabled = true; importarComProgresso(true, () => { bf.disabled = false; }); }; } };
 }
 /* ============================================================ fim da obra (previsão por bloco e por fração) */
 const NOME_BLOCO = (k) => (k.length === 1 ? "Bloco " + k : k);
@@ -1871,6 +1873,7 @@ const pctEdHTML = (a) => `<label class="pct-ed" title="Percentagem feita (emprei
 /* ---- Várias de uma vez (Trabalhos, Concluir ou atribuir várias). As seguintes acertam-se sozinhas pela sequência. */
 const listaNomes = (xs, max = 6) => `<ul class="dlg-l">${xs.slice(0, max).map((a) => `<li>${esc(nomeAtiv(a))} em ${esc(a.unidade)}</li>`).join("")}${xs.length > max ? `<li class="note">e mais ${xs.length - max}</li>` : ""}</ul>`;
 async function concluirVarias(ids, v) {
+  if (!dataCompleta(v)) { toast("Escolha uma data completa.", { anular: false }); return false; }
   if (v > S.hoje) { toast("A data de conclusão não pode ser no futuro.", { anular: false }); return false; }
   const todas = ids.map((id) => S.acts[id]).filter(Boolean);
   const ja = todas.filter((a) => S.res.get(a.id).estado === "concluida");
@@ -1896,6 +1899,7 @@ async function concluirVarias(ids, v) {
   return true;
 }
 async function iniciarVarias(ids, v) {
+  if (!dataCompleta(v)) { toast("Escolha uma data completa.", { anular: false }); return false; }
   if (v > S.hoje) { toast("A data de início real não pode ser no futuro.", { anular: false }); return false; }
   const todas = ids.map((id) => S.acts[id]).filter(Boolean);
   const alvo = todas.filter((a) => { const e = S.res.get(a.id).estado; return e === "por_iniciar" || e === "bloqueada"; });
@@ -1962,14 +1966,51 @@ function bindEstadoPct(root) {
     toast(`${N}: ${v}%`);
   }));
 }
+/** Atividades com datas impossíveis (ano antes de 1900, ex.: 0002-11-16), gravadas por engano ao escrever. */
+const CAMPOS_DATA = ["realInicio", "realFim", "inicioPrevisto", "fimPrevisto"];
+function datasEstranhas() {
+  const out = [];
+  for (const a of Object.values(S.acts)) {
+    const maus = CAMPOS_DATA.filter((k) => a[k] && !dataCompleta(a[k]));
+    if (maus.length) out.push({ a, maus, ex: a[maus[0]] });
+  }
+  return out;
+}
+async function limparDatasEstranhas() {
+  const m = datasEstranhas(); if (!m.length) return;
+  const k = await perguntar({ titulo: "Apagar as datas impossíveis?", texto: `<p>Estas datas foram gravadas por engano e não fazem sentido. Ficam em branco; as atividades voltam ao estado em que estavam antes.</p>${listaNomes(m.map((x) => x.a))}`,
+    opcoes: [{ k: "sim", l: "Sim, apagar", estilo: "pri" }, { k: "nao", l: "Cancelar" }] });
+  if (k !== "sim") return;
+  const lista = m.map(({ a, maus }) => { const patch = {}; for (const c of maus) patch[c] = null; if (maus.includes("realFim")) patch.concluido = false; return { id: a.id, patch }; });
+  await store.updateMuitas(lista, { tipo: "correcao", texto: `Apagou ${lista.length} datas impossíveis (gravadas por engano ao escrever)` });
+  toast(`Datas impossíveis apagadas em ${lista.length} atividade${lista.length === 1 ? "" : "s"}`);
+}
+/** Data completa e plausível (o navegador dá datas como 0002-11-16 enquanto se escreve o ano). */
+const dataCompleta = (v) => /^(19|20|21)\d\d-\d\d-\d\d$/.test(String(v || ""));
 function bindDateInputs(root) {
-  root.querySelectorAll("[data-ed]").forEach((inp) => (inp.onchange = () => {
-    const [id, campo] = inp.dataset.ed.split("|");
-    if (inp.dataset.gravado === inp.value) return; // o mesmo valor não é gravado duas vezes
-    inp.dataset.gravado = inp.value;
-    inp.blur();
-    editarData(id, campo, inp.value);
-  }));
+  root.querySelectorAll("[data-ed]").forEach((inp) => {
+    let espera = null, aEscrever = false;
+    const gravar = () => {
+      clearTimeout(espera); espera = null;
+      const [id, campo] = inp.dataset.ed.split("|");
+      const v = inp.value;
+      if (v && !dataCompleta(v)) { if (!aEscrever) toast("Data incompleta: escreva o dia, o mês e o ano com 4 algarismos.", { anular: false }); return; }
+      if (inp.dataset.gravado === v) return; // o mesmo valor não é gravado duas vezes
+      inp.dataset.gravado = v;
+      aEscrever = false;
+      inp.blur();
+      editarData(id, campo, v);
+    };
+    // escrito à mão: só grava quando a data estiver completa e a pessoa parar de escrever (ou sair do campo)
+    inp.onkeydown = (e) => { if (e.key === "Enter") { e.preventDefault(); aEscrever = false; gravar(); } else if (e.key.length === 1 || e.key === "Backspace" || e.key.startsWith("Arrow")) aEscrever = true; };
+    inp.onchange = () => {
+      clearTimeout(espera);
+      if (inp.value && !dataCompleta(inp.value)) return; // ainda a escrever o ano
+      if (aEscrever) espera = setTimeout(() => { aEscrever = false; gravar(); }, 1500);
+      else gravar(); // escolhida no calendário
+    };
+    inp.onblur = () => { if (aEscrever || espera) { aEscrever = false; gravar(); } };
+  });
 }
 
 /** Grava uma data editada no plano. Traduz a data escolhida no campo certo conforme o estado da atividade. */
@@ -2125,6 +2166,7 @@ async function gravarComSeguintes(id, patch, registo, _delta, msg) {
 async function editarData(id, campo, v) {
   const a = S.acts[id], r = S.res.get(id);
   if (!a || !r) return;
+  if (v && !dataCompleta(v)) return; // nunca grava datas a meio de escrever
   const N = nomeAtiv(a) + " em " + a.unidade;
   const reg = (texto) => ({ tipo: "previsao", texto });
   const falha = (msg) => { toast(msg); render(); };
@@ -2148,7 +2190,7 @@ async function editarData(id, campo, v) {
       await store.updateAtividade(id, { realInicio: null }, { tipo: "correcao", texto: `Anulou o início de ${N}` });
       return toast("Início real apagado: volta a estar por iniciar");
     }
-    if (v > S.hoje) return falha("O início real não pode ser no futuro.");
+    if (v > S.hoje) return falha(`O início real é o dia em que a atividade começou de facto, por isso não pode ser no futuro. Se vai começar a ${fd(v)}, mude a Previsão de início; no dia, registe o início real.`);
     if (a.realFim && conc && v > a.realFim) return falha("O início não pode ser depois do fim real.");
     if (!a.realInicio) {
       // arrancar com antecessoras por acabar
@@ -2175,7 +2217,7 @@ async function editarData(id, campo, v) {
       await store.updateAtividade(id, { realFim: null, concluido: false, pctEmp: Math.min(Number(a.pctEmp) || 0, 90), empEm: new Date().toISOString() }, { tipo: "reabrir", texto: `Reabriu ${N}` });
       return toast("Fim real apagado: a atividade volta a estar em curso");
     }
-    if (v > S.hoje) return falha("O fim real não pode ser no futuro. Para uma data futura use a previsão.");
+    if (v > S.hoje) return falha(`O fim real é o dia em que a atividade acabou de facto, por isso não pode ser no futuro. Se vai acabar a ${fd(v)}, mude a Previsão de fim.`);
     const ini = a.realInicio || (r.prevIni && r.prevIni <= v ? r.prevIni : v);
     if (v < ini) return falha("O fim real não pode ser antes do início real.");
     const patch = { realInicio: ini, realFim: v, concluido: true, pctEmp: 100, empEm: new Date().toISOString() };
