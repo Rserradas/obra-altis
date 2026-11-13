@@ -1275,3 +1275,42 @@ tr.lig-row > td { background: var(--surface-2); padding: 10px 14px 14px; border-
 @media (pointer: coarse) { .lig-b { min-height: 32px; padding: 4px 10px 4px 8px; } }
 .lig { position: sticky; left: 14px; max-width: calc(100vw - 60px); }
 @media (min-width: 901px) { .lig { max-width: none; position: static; } }
+
+/* ---- Gantt: barra própria, ecrã inteiro, impressão e caminho crítico ---- */
+.gzona { display: flex; flex-direction: column; gap: 8px; }
+.gtop { display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap; }
+.gprint-h { display: none; }
+.gzona.full { position: fixed; inset: 0; z-index: 35; background: var(--bg); padding: 10px 12px calc(10px + env(safe-area-inset-bottom, 0px)); }
+.gzona.full .gantt { flex: 1 1 auto; max-height: none; min-height: 0; }
+.gzona.full .legend { font-size: .8rem; }
+body.gfull { overflow: hidden; }
+body.gfull .tabbar, body.gfull .nova-versao { display: none; }
+.gcrit-info { background: var(--crit-soft); border-left: 4px solid var(--crit); border-radius: var(--r); padding: 10px 12px; display: flex; flex-direction: column; gap: 8px; font-size: .92rem; }
+.gcrit-info[hidden] { display: none; }
+.gc-rz { display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: center; }
+.gc-r { background: var(--surface); border: 1px solid var(--line); border-radius: 999px; padding: 3px 10px; text-align: left; }
+.gc-r:hover { border-color: var(--crit); }
+.gbar.gcrit { outline: 0; box-shadow: 0 0 0 2px var(--surface), 0 0 0 4px var(--crit); }
+.gbar.graiz { box-shadow: 0 0 0 2px var(--surface), 0 0 0 5px var(--crit); }
+.gcrit-info details { display: flex; flex-direction: column; gap: 8px; }
+.gcrit-info details > summary { cursor: pointer; }
+.gcrit-info details[open] > summary { margin-bottom: 6px; }
+.gcrit-info details > div + div { margin-top: 8px; }
+@media (max-width: 700px) { .gzona.full .legend, .gzona.full > .note { display: none; } }
+.gcrow .glab .gcu { font-size: .75rem; color: var(--muted); margin-right: 6px; flex: 0 0 auto; }
+.gcrow .glab { display: flex; align-items: center; }
+.garrows path.crit { stroke: var(--crit); stroke-width: 2; opacity: 1; }
+.ahf.crit { fill: var(--crit); }
+@page gantt { size: A4 landscape; margin: 8mm; }
+@media print {
+  /* só o gráfico: esconde tudo o que não contém o gráfico, e o caminho até ele fica sem margens */
+  body.imprimir-gantt *:not(:has(.gzona)):not(.gzona):not(.gzona *) { display: none !important; }
+  body.imprimir-gantt *:has(.gzona) { display: block !important; position: static !important; margin: 0 !important; padding: 0 !important; width: auto !important; max-width: none !important; overflow: visible !important; border: 0 !important; background: #fff !important; grid-template-columns: none !important; }
+  body.imprimir-gantt .gzona { position: static !important; inset: auto; width: auto; page: gantt; padding: 0; background: #fff; display: block; }
+  body.imprimir-gantt .legend .note { display: none; }
+  body.imprimir-gantt .gtop, body.imprimir-gantt .gsel { display: none !important; }
+  body.imprimir-gantt .gprint-h { display: block; font-weight: 700; font-size: 11pt; margin-bottom: 4px; }
+  body.imprimir-gantt .gantt { overflow: visible !important; max-height: none !important; border: 0; }
+  body.imprimir-gantt .ghead { position: static; }
+  body.imprimir-gantt .gantt, body.imprimir-gantt .gantt * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+}

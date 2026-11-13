@@ -2467,8 +2467,7 @@ function ganttView() {
   const us = S.unidades.filter((u) => !g.bloco || u.bloco === g.bloco);
   const nomes = [...new Set(Object.values(S.acts).filter((a) => !g.bloco || (S.uMap[a.unidade] || {}).bloco === g.bloco).map((a) => nomeAtiv(a)))].sort((a, b) => a.localeCompare(b, "pt"));
   const html = `
-    <div class="card-h"><h1>Gantt</h1><div class="row"><button class="btn sm" id="gHoje" title="Mostrar o dia de hoje">Hoje</button>
-      <div class="chips" role="group" aria-label="Escala">${[["dia", "Dias"], ["semana", "Semanas"], ["mes", "Meses"]].map(([k, l]) => `<button class="chip ${g.zoom === k ? "on" : ""}" data-gz="${k}">${l}</button>`).join("")}</div></div></div>
+    <div class="card-h"><h1>Gantt</h1></div>
     <div class="chips" role="group" aria-label="Bloco">${["", ...blocos].map((b) => `<button class="chip ${g.bloco === b ? "on" : ""}" data-gb="${b}">${b ? (b === "Geral" ? "Geral" : "Bloco " + b) : "Todos os blocos"}</button>`).join("")}</div>
     <div class="filters">
       <label class="f">Apartamento ou fração<select class="inp" id="gu"><option value="">Todas${g.bloco ? " do " + (g.bloco === "Geral" ? "geral" : "bloco " + g.bloco) : ""}</option>${us.map((u) => `<option value="${esc(u.id)}" ${g.unidade === u.id ? "selected" : ""}>${esc(u.tipo === "Apartamento" || /-L\d+$/.test(u.id) ? u.id : u.nome)}</option>`).join("")}</select></label>
@@ -2478,9 +2477,22 @@ function ganttView() {
       <div class="row" style="align-self:center;gap:6px" role="group" aria-label="Nível de detalhe"><span class="note">Mostrar:</span><button class="btn sm" id="gnB">Blocos</button><button class="btn sm" id="gnU">Frações</button><button class="btn sm" id="gnA">Tudo</button></div>
       ${filtrosAlterados() ? `<button class="btn sm repor-on" id="grep" style="align-self:center">Limpar filtros</button>` : ""}
     </div>
+    <section class="gzona ${g.full ? "full" : ""}" id="gzona">
+    <div class="gtop no-print-g">
+      <div class="row" style="gap:6px"><button class="btn sm" id="gHoje" title="Mostrar o dia de hoje">Hoje</button>
+        <div class="chips" role="group" aria-label="Escala">${[["dia", "Dias"], ["semana", "Semanas"], ["mes", "Meses"]].map(([k, l]) => `<button class="chip ${g.zoom === k ? "on" : ""}" data-gz="${k}">${l}</button>`).join("")}</div></div>
+      <div class="row" style="gap:6px">
+        <button class="btn sm ${g.crit ? "pri" : ""}" id="gCrit" aria-pressed="${!!g.crit}" title="Mostrar só a cadeia de atividades que decide a data de fim">${g.crit ? "A ver o caminho crítico" : "Caminho crítico"}</button>
+        <button class="btn sm" id="gPrint" title="Imprimir só o gráfico">Imprimir</button>
+        <button class="btn sm" id="gFull" title="${g.full ? "Voltar ao ecrã normal (Esc)" : "Ver o gráfico em ecrã inteiro"}">${g.full ? "Sair do ecrã inteiro" : "Ecrã inteiro"}</button>
+      </div>
+    </div>
+    <div class="gprint-h">Gantt · ALTIS · ${g.crit ? "Caminho crítico" + (g.bloco ? " do " + (g.bloco === "Geral" ? "geral" : "bloco " + g.bloco) : " da obra") : (g.bloco ? (g.bloco === "Geral" ? "Geral" : "Bloco " + g.bloco) : "Todos os blocos") + (g.unidade ? " · " + g.unidade : "") + (g.ativ ? " · " + g.ativ : "")} · impresso a ${fd(S.hoje, true)}</div>
+    <div class="gcrit-info" id="gcrit" hidden></div>
     <div class="gsel" id="gsel" hidden></div>
     <div class="legend"><span><i class="gl-bar st-concluida"></i>Concluída</span><span><i class="gl-bar st-em_curso"></i>Em curso</span><span><i class="gl-bar st-bloqueada"></i>Bloqueada</span><span><i class="gl-bar st-por_iniciar"></i>Por iniciar</span><span><i class="gl-bar st-por_iniciar atr"></i>Atrasada</span><span title="Dias desde a previsão de fim até hoje, ou até ao fim provável"><i class="gl-bar gl-tail"></i>Atraso</span><span><i class="gl-today"></i>Hoje</span><span class="note">Toque numa barra para ver a cadeia de dependências.${can("executar") ? " Com o rato, arraste a barra para mudar a data ou puxe a ponta direita para mudar o fim." : ""}</span></div>
-    <div class="gantt" id="gantt"></div>`;
+    <div class="gantt" id="gantt"></div>
+    </section>`;
   return { html, bind: bindGantt };
 }
 function bindGantt() {
@@ -2495,15 +2507,98 @@ function bindGantt() {
   const todosB = () => [...new Set(S.unidades.map((u) => u.bloco))];
   const gr = $("#grep"); if (gr) gr.onclick = reporFiltros;
   $("#gHoje").onclick = () => { const bx = $("#gantt"); if (bx && g._tx != null) { bx.scrollTo({ left: Math.max(0, g._tx - 160), behavior: "smooth" }); g._sl = Math.max(0, g._tx - 160); } };
+  $("#gCrit").onclick = () => { g.crit = !g.crit; g.sel = null; g._chave = null; render(); };
+  $("#gPrint").onclick = imprimirGantt;
+  $("#gFull").onclick = () => mudarEcraInteiro(!g.full);
+  document.body.classList.toggle("gfull", !!g.full);
   $("#gnB").onclick = () => { g.abertosB.clear(); g.abertos.clear(); g.unidade = ""; render(); };
   $("#gnU").onclick = () => { todosB().forEach((b) => g.abertosB.add(b)); g.abertos.clear(); render(); };
   $("#gnA").onclick = () => { todosB().forEach((b) => g.abertosB.add(b)); S.unidades.forEach((u) => g.abertos.add(u.id)); render(); };
   drawGantt();
 }
+/* ============================================================ caminho crítico
+   A cadeia de atividades que decide a data de fim (da obra, ou do bloco): começa na(s) atividade(s) que acabam
+   em último lugar e anda para trás pelas antecessoras que a estão a prender (sem folga). Atravessa frações
+   quando a ligação é da fila da equipa ou entre frações. As "raízes" são onde a cadeia começa hoje:
+   qualquer dia que lá se ganhe ou perca, ganha-se ou perde-se no fim. */
+const maxD = (a, b) => (!a ? b : !b ? a : a > b ? a : b);
+function cadeiaCritica(bloco) {
+  const vivo = (id) => { const r = S.res.get(id), a = S.acts[id]; return r && a && r.estado !== "concluida" && !S.idsTeste.has(a.unidade); };
+  const alvo = Object.values(S.acts).filter((a) => vivo(a.id) && (!bloco || (S.uMap[a.unidade] || {}).bloco === bloco));
+  if (!alvo.length) return null;
+  const fimEf = (r) => maxD(r.fim, r.provFim);
+  let E = null;
+  for (const a of alvo) E = maxD(E, fimEf(S.res.get(a.id)));
+  const set = new Set(), raizes = new Set(), arestas = new Set();
+  const pilha = alvo.filter((a) => fimEf(S.res.get(a.id)) === E).map((a) => a.id);
+  const fins = [...pilha];
+  while (pilha.length) {
+    const id = pilha.pop();
+    if (set.has(id)) continue;
+    set.add(id);
+    const r = S.res.get(id);
+    let presa = false;
+    for (const q of r.preds || []) {
+      if (!vivo(q.id)) continue;
+      const p = S.res.get(q.id);
+      let aperta;
+      if (r.estado === "em_curso") aperta = q.fonte === "equipa" && addDays(fimEf(p), 1) > S.hoje; // já começou: só a equipa ocupada noutro trabalho a pode atrasar
+      else aperta = q.tipo === "SS" ? p.provIni >= r.provIni : addDays(fimEf(p), 1) >= r.provIni;
+      if (aperta) { presa = true; arestas.add(q.id + ">" + id); pilha.push(q.id); }
+    }
+    if (!presa) raizes.add(id);
+  }
+  const fr = new Set([...set].map((id) => S.acts[id].unidade));
+  return { set, raizes, arestas, fim: E, fins, nFr: fr.size };
+}
+function critInfoHTML(cc, bloco) {
+  const onde = bloco ? (bloco === "Geral" ? "das zonas gerais" : "do bloco " + bloco) : "da obra";
+  if (!cc) return `<span>Não há atividades por concluir ${onde}.</span>`;
+  const rz = [...cc.raizes].map((id) => ({ a: S.acts[id], r: S.res.get(id) })).sort((x, y) => (y.r.atraso || 0) - (x.r.atraso || 0) || (x.r.provIni || "").localeCompare(y.r.provIni || ""));
+  const porque = ({ r }) => r.estado === "em_curso" ? (r.atrasada ? `em curso, ${r.atraso} dias atrasada` : "em curso") : r.estado === "bloqueada" ? "à espera" : r.provIni <= S.hoje ? "pode começar já" : `começa a ${fd(r.provIni)}`;
+  const aberto = !(ui.gantt && ui.gantt.full && window.innerWidth < 700);
+  return `<details ${aberto ? "open" : ""}><summary><b>Fim ${onde}: ${fd(cc.fim, true)}</b> · cadeia de ${cc.set.size} atividade${cc.set.size === 1 ? "" : "s"} em ${cc.nFr} fraç${cc.nFr === 1 ? "ão" : "ões"}</summary>
+    <div>Estas atividades decidem essa data: cada dia de atraso numa delas atrasa o fim, e cada dia ganho adianta-o. As setas vermelhas mostram quem espera por quem; ▶ marca onde a cadeia começa.</div>
+    <div class="gc-rz"><span class="note">Onde a cadeia começa hoje (o que mais convém acelerar):</span>${rz.slice(0, 6).map((x) => `<button class="lnk-b gc-r" data-a="${x.a.id}"><span class="mono">${esc(x.a.unidade)}</span> <b>${esc(nomeAtiv(x.a))}</b> <span class="note">${porque(x)}</span></button>`).join("")}${rz.length > 6 ? `<span class="note">e mais ${rz.length - 6}</span>` : ""}</div></details>`;
+}
+function mudarEcraInteiro(on) {
+  const g = ui.gantt; if (!g) return;
+  g.full = !!on;
+  try {
+    if (on && document.documentElement.requestFullscreen && !document.fullscreenElement) document.documentElement.requestFullscreen().catch(() => {});
+    if (!on && document.fullscreenElement && document.exitFullscreen) document.exitFullscreen().catch(() => {});
+  } catch (e) {}
+  render();
+}
+document.addEventListener("fullscreenchange", () => { if (!document.fullscreenElement && ui.gantt && ui.gantt.full && location.hash.startsWith("#gantt")) { ui.gantt.full = false; render(); } });
+document.addEventListener("keydown", (e) => { if (e.key === "Escape" && ui.gantt && ui.gantt.full && !document.querySelector(".dlg, aside.sheet:not([hidden])")) mudarEcraInteiro(false); });
+/** Imprime só o gráfico, deitado e ajustado à largura da folha. Se ficar pequeno demais, imprime na escala de meses. */
+function imprimirGantt() {
+  const g = ui.gantt; if (!g) return;
+  const zoomAntes = g.zoom;
+  const ajusta = () => {
+    const gin = document.querySelector("#gantt .gin"); if (!gin) return 1;
+    const larg = gin.scrollWidth || parseFloat(gin.style.width) || 1000;
+    return Math.min(1, 1060 / larg);
+  };
+  let esc0 = ajusta();
+  if (esc0 < 0.55 && g.zoom !== "mes") { g.zoom = g.zoom === "dia" ? "semana" : "mes"; drawGantt(); esc0 = ajusta(); if (esc0 < 0.55 && g.zoom !== "mes") { g.zoom = "mes"; drawGantt(); esc0 = ajusta(); } }
+  const gin = document.querySelector("#gantt .gin");
+  if (gin) gin.style.zoom = String(esc0);
+  document.body.classList.add("imprimir-gantt");
+  const fim = () => {
+    document.body.classList.remove("imprimir-gantt");
+    const gi = document.querySelector("#gantt .gin"); if (gi) gi.style.zoom = "";
+    if (g.zoom !== zoomAntes) { g.zoom = zoomAntes; drawGantt(); }
+    window.removeEventListener("afterprint", fim);
+  };
+  window.addEventListener("afterprint", fim);
+  setTimeout(() => window.print(), 60);
+}
 function drawGantt() {
   const g = ui.gantt, box = $("#gantt");
   if (!box) return;
-  const H = 30, LW = window.innerWidth < 640 ? 132 : 250, HEAD = 46;
+  const H = 30, LW = window.innerWidth < 640 ? 150 : g.crit ? 330 : 250, HEAD = 46;
   const k = { dia: 26, semana: 7, mes: 2.2 }[g.zoom];
   // linhas
   const us = S.unidades.filter((u) => (!g.bloco || u.bloco === g.bloco) && (!g.unidade || u.id === g.unidade));
@@ -2534,11 +2629,20 @@ function drawGantt() {
       if (aberto) for (const a of x.acts) rows.push({ t: "a", a, r: S.res.get(a.id) });
     }
   }
+  // caminho crítico: só a cadeia que decide o fim (da obra ou do bloco escolhido), por ordem de início, sem agrupar
+  let cc = null;
+  const ci = $("#gcrit");
+  if (g.crit) {
+    cc = cadeiaCritica(g.bloco);
+    rows.length = 0;
+    if (cc) for (const id of [...cc.set].sort((x, y) => (S.res.get(x).provIni || "").localeCompare(S.res.get(y).provIni || "") || (S.res.get(x).provFim || "").localeCompare(S.res.get(y).provFim || ""))) rows.push({ t: "a", a: S.acts[id], r: S.res.get(id), crit: true, raiz: cc.raizes.has(id) });
+    if (ci) { ci.hidden = false; ci.innerHTML = critInfoHTML(cc, g.bloco); ci.querySelectorAll("[data-a]").forEach((b) => (b.onclick = () => openSheet(b.dataset.a))); }
+  } else if (ci) ci.hidden = true;
   if (!rows.length) { box.innerHTML = `<div class="empty">Nenhuma atividade com estes filtros. <button class="btn sm" data-repor>Limpar filtros</button></div>`; box.querySelectorAll("[data-repor]").forEach((b) => (b.onclick = reporFiltros)); $("#gsel").hidden = true; return; }
   // escala
   let t0 = null, t1 = null;
   for (const x of rows) {
-    const ds = x.t !== "a" ? [x.ini, x.fim] : [x.r.inicio, x.r.fim];
+    const ds = x.t !== "a" ? [x.ini, x.fim] : [x.r.inicio, x.r.fim, x.r.provFim];
     for (const d of ds) if (d) { if (!t0 || d < t0) t0 = d; if (!t1 || d > t1) t1 = d; }
   }
   if (S.hoje < t0) t0 = S.hoje;
@@ -2603,9 +2707,9 @@ function drawGantt() {
     // atraso: a previsão de fim já passou e as seguintes contam com o fim provável
     const plan = r.estado !== "concluida" && r.provFim > fimBarra ? `<div class="gtail" style="left:${LW + X(fimBarra)}px;width:${Math.max(2, X(r.provFim) - X(fimBarra))}px" title="${esc("Atraso de " + r.atraso + " dias: previsto acabar a " + fd(r.fim) + ", as seguintes contam com " + fd(r.provFim))}"></div>` : "";
     const pct = Math.round(pctEfetiva(a));
-    return `<div class="grow ga${cls(a.id)}" style="top:${y}px">
-      <button class="glab" data-gopen="${a.id}" title="Abrir ficha"><span class="gname">${esc(nomeAtiv(a))}</span></button>
-      ${plan}<button class="gbar st-${r.estado}${r.atrasada ? " atr" : ""}" data-gs="${a.id}" style="left:${left}px;width:${w}px" title="${esc(nomeAtiv(a) + " · " + a.unidade + " · " + fd(r.inicio) + " a " + fd(r.fim) + (pct ? " · " + pct + "%" : ""))}">${r.estado === "em_curso" && pct ? `<i style="width:${pct}%"></i>` : ""}${g.zoom !== "mes" && w > 46 ? `<span>${fd(r.fim)}</span>` : ""}</button></div>`;
+    return `<div class="grow ga${cls(a.id)}${x.crit ? " gcrow" : ""}" style="top:${y}px">
+      <button class="glab" data-gopen="${a.id}" title="Abrir ficha">${x.crit ? `<span class="mono gcu">${esc(a.unidade)}</span>` : ""}<span class="gname">${x.raiz ? "▶ " : ""}${esc(nomeAtiv(a))}</span></button>
+      ${plan}<button class="gbar st-${r.estado}${r.atrasada ? " atr" : ""}${x.crit ? " gcrit" : ""}${x.raiz ? " graiz" : ""}" data-gs="${a.id}" style="left:${left}px;width:${w}px" title="${esc(nomeAtiv(a) + " · " + a.unidade + " · " + fd(r.inicio) + " a " + fd(r.fim) + (pct ? " · " + pct + "%" : ""))}">${r.estado === "em_curso" && pct ? `<i style="width:${pct}%"></i>` : ""}${g.zoom !== "mes" && w > 46 ? `<span>${fd(r.fim)}</span>` : ""}</button></div>`;
   }).join("");
   // ligações
   let arrows = "";
@@ -2617,27 +2721,29 @@ function drawGantt() {
       for (const d of x.r.preds) {
         const i1 = pos.get(d.id);
         if (i1 == null) continue;
+        if (cc && !cc.arestas.has(d.id + ">" + x.a.id)) continue;
         const naCadeia = temSel && (d.id === g.sel || up.has(d.id)) && (x.a.id === g.sel || up.has(x.a.id) || down.has(x.a.id)) || (temSel && (d.id === g.sel || down.has(d.id)) && down.has(x.a.id));
         if (muitas && !naCadeia) continue;
         const pr = S.res.get(d.id);
-        const xa = (d.tipo === "SS" ? X(pr.inicio) : X(pr.fim)), ya = i1 * H + H / 2;
+        const xa = (d.tipo === "SS" ? X(pr.inicio) : X(cc ? maxD(pr.fim, pr.provFim) : pr.fim)), ya = i1 * H + H / 2;
         const xb = X(x.r.inicio), yb = i2 * H + H / 2;
         let path;
         if (xb - xa >= 12) path = `M${xa} ${ya}H${xa + 6}V${yb}H${xb - 2}`;
         else path = `M${xa} ${ya}H${xa + 6}V${yb - H / 2 * Math.sign(yb - ya || 1)}H${xb - 8}V${yb}H${xb - 2}`;
-        arrows += `<path d="${path}" class="${naCadeia ? "on" : temSel ? "dim" : ""}" marker-end="url(#${naCadeia ? "ahOn" : "ah"})"/>`;
+        arrows += `<path d="${path}" class="${cc ? "crit" : naCadeia ? "on" : temSel ? "dim" : ""}" marker-end="url(#${cc ? "ahCrit" : naCadeia ? "ahOn" : "ah"})"/>`;
       }
     }
   }
   box.style.setProperty("--lw", LW + "px");
   box.innerHTML = `<div class="gin" style="width:${LW + W}px;height:${HEAD + rows.length * H}px">
-    <div class="ghead" style="width:${LW + W}px"><div class="gcorner">${rows.filter((x) => x.t === "b").length} bloco${rows.filter((x) => x.t === "b").length === 1 ? "" : "s"} · ${rows.filter((x) => x.t === "b").reduce((s, x) => s + x.n, 0)} atividades</div><div class="gscale" style="left:${LW}px;width:${W}px">${head}${ticks}</div></div>
+    <div class="ghead" style="width:${LW + W}px"><div class="gcorner">${cc ? `Caminho crítico · ${rows.length} atividade${rows.length === 1 ? "" : "s"}` : `${rows.filter((x) => x.t === "b").length} bloco${rows.filter((x) => x.t === "b").length === 1 ? "" : "s"} · ${rows.filter((x) => x.t === "b").reduce((s, x) => s + x.n, 0)} atividades`}</div><div class="gscale" style="left:${LW}px;width:${W}px">${head}${ticks}</div></div>
     <div class="gbody" style="top:${HEAD}px;height:${rows.length * H}px">
       <div class="gtoday" style="left:${LW + tx}px"></div>
       ${body}
       <svg class="garrows" style="left:${LW}px" width="${W}" height="${rows.length * H}" viewBox="0 0 ${W} ${rows.length * H}" aria-hidden="true">
         <defs><marker id="ah" viewBox="0 0 6 6" refX="5" refY="3" markerWidth="6" markerHeight="6" orient="auto"><path d="M0 0L6 3L0 6z" class="ahf"/></marker>
-        <marker id="ahOn" viewBox="0 0 6 6" refX="5" refY="3" markerWidth="6" markerHeight="6" orient="auto"><path d="M0 0L6 3L0 6z" class="ahf on"/></marker></defs>
+        <marker id="ahOn" viewBox="0 0 6 6" refX="5" refY="3" markerWidth="6" markerHeight="6" orient="auto"><path d="M0 0L6 3L0 6z" class="ahf on"/></marker>
+        <marker id="ahCrit" viewBox="0 0 6 6" refX="5" refY="3" markerWidth="6" markerHeight="6" orient="auto"><path d="M0 0L6 3L0 6z" class="ahf crit"/></marker></defs>
         ${arrows}</svg>
     </div></div>`;
   if (muitas && g.ligacoes && !temSel) $("#gsel").hidden = false, ($("#gsel").innerHTML = `<span class="note">Com tantas linhas abertas, as ligações só aparecem para a tarefa que tocar.</span>`);
@@ -2711,7 +2817,7 @@ function drawGantt() {
     drawGantt();
   }));
   // ao mudar filtros ou escala, pôr hoje à vista; nos restantes redesenhos manter a posição
-  const chave = [g.bloco, g.unidade, g.ativ, g.zoom, g.abertas].join("|");
+  const chave = [g.bloco, g.unidade, g.ativ, g.zoom, g.abertas, g.crit].join("|");
   if (g._chave !== chave) { g._chave = chave; box.scrollLeft = Math.max(0, tx - 160); g._sl = box.scrollLeft; g._st = 0; }
   else { box.scrollLeft = (g._sl || 0) + (g._t0 ? diffDays(t0, g._t0) * k : 0); box.scrollTop = g._st || 0; }
   g._t0 = t0; g._sl = box.scrollLeft;
