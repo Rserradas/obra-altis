@@ -1633,7 +1633,7 @@ function planoView() {
   const natU = (u) => { const x = S.uMap[u]; return x ? [x.bloco, String(x.piso).padStart(2, "0"), u].join("|") : u; };
   const CHAVE = {
     unidade: (x) => natU(x.a.unidade),
-    atividade: (x) => nomeAtiv(x.a).toLocaleLowerCase("pt"),
+    atividade: (x) => String(ordAt(x.a)).padStart(4, "0") + nomeAtiv(x.a).toLocaleLowerCase("pt"),
     estado: (x) => ORDEM_EST[x.r.estado] * 10 + (x.r.atrasada ? 0 : 1),
     inicio: (x) => x.r.inicio || "",
     fim: (x) => x.r.fim || "",
@@ -1641,7 +1641,10 @@ function planoView() {
     pct: (x) => pctEfetiva(x.a),
   };
   const cmp = (va, vb) => (typeof va === "number" && typeof vb === "number" ? va - vb : String(va).localeCompare(String(vb), "pt"));
-  const natural = (x, y) => (p.f === "atrasada" ? (y.r.atraso || 0) - (x.r.atraso || 0) : 0) || (x.r.inicio || "").localeCompare(y.r.inicio || "") || x.a.unidade.localeCompare(y.a.unidade);
+  // ordem normal: primeiro a atividade (pela sequência da obra), depois a fração
+  const espOrd = Object.fromEntries((S.cfg.especialidades || []).map((e) => [e.key, e.ordem]));
+  const ordAt = (a) => (a.esp && espOrd[a.esp] != null ? espOrd[a.esp] : 999);
+  const natural = (x, y) => ordAt(x.a) - ordAt(y.a) || nomeAtiv(x.a).localeCompare(nomeAtiv(y.a), "pt") || natU(x.a.unidade).localeCompare(natU(y.a.unidade), "pt", { numeric: true }) || (x.r.inicio || "").localeCompare(y.r.inicio || "");
   if (p.sort && CHAVE[p.sort.col]) {
     const f = CHAVE[p.sort.col], dir = p.sort.dir === "desc" ? -1 : 1;
     list.sort((x, y) => dir * cmp(f(x), f(y)) || natural(x, y));
