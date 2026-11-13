@@ -59,7 +59,7 @@ const ICON = {
 let store, S = null; // S = estado calculado
 const semAcento = (x) => String(x || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
 const PLANO_PADRAO = () => ({ f: "todas", bloco: "", tipo: "", unidade: "", ativ: "", equipa: "", q: "", soAtr: false, semConc: true, sort: null, editar: false, atribuir: false, atrEq: "", selec: null });
-const VERSAO = "2026.11.13"; // mudar também em versao.json e no CACHE de sw.js
+const VERSAO = "2026.11.14"; // mudar também em versao.json e no CACHE de sw.js
 const ui = { bloco: "todos", plano: PLANO_PADRAO(), unidadeTab: "ativ", vistoria: {}, sheet: null };
 /** Há algum filtro diferente do padrão? */
 function filtrosAlterados() {
