@@ -4,6 +4,19 @@
 
 const nowISO = () => new Date().toISOString();
 
+/* Cópia de segurança: o mesmo formato na demonstração e na cloud.
+   { formato, versao, criadoEm, por, obra, colecoes: { config: {id: doc}, atividades, pendentes, registos, fotos, utilizadores } } */
+export const COPIA_FORMATO = "obra-altis-copia";
+export const COPIA_COLECOES = ["config", "atividades", "pendentes", "registos", "fotos", "utilizadores"];
+/** Tira tipos que não passam para JSON (datas do Firestore passam a texto ISO). */
+function paraJSON(v) {
+  if (v == null || typeof v !== "object") return v;
+  if (typeof v.toDate === "function") { try { return v.toDate().toISOString(); } catch (e) { return null; } }
+  if (Array.isArray(v)) return v.map(paraJSON);
+  const o = {}; for (const [k, x] of Object.entries(v)) if (x !== undefined) o[k] = paraJSON(x); return o;
+}
+const semId = (o) => { const { id, ...r } = o || {}; return r; };
+
 class Emitter {
   constructor() { this._l = new Set(); }
   on(fn) { this._l.add(fn); return () => this._l.delete(fn); }
@@ -198,6 +211,46 @@ export class DemoStore extends Emitter {
     this._save();
   }
   async reset() { try { localStorage.removeItem(this.KEY); } catch (e) {} this._load(); this.emit("data"); }
+  async exportar() {
+    const st = this.state;
+    const mapa = (lista, k = "id") => Object.fromEntries(lista.map((x) => [x[k], k === "id" ? semId(x) : x]));
+    return paraJSON({
+      config: { obra: st.config },
+      atividades: Object.fromEntries(Object.values(st.atividades).map((a) => [a.id, semId(a)])),
+      pendentes: Object.fromEntries(Object.entries(st.pendentes).map(([id, x]) => [id, semId(x)])),
+      registos: mapa(st.registos),
+      fotos: mapa(st.fotos),
+      utilizadores: Object.fromEntries(st.utilizadores.map((u) => [u.email, u])),
+    });
+  }
+  /** Substitui tudo pelo que está na cópia (os acessos nunca se apagam, só se acrescentam). */
+  async repor(C, onProgress) {
+    const seedActs = Object.fromEntries(this.seed.atividades.map((a) => [a.id, a]));
+    const acts = C.atividades || {};
+    this.removidas = Object.keys(seedActs).filter((id) => !(id in acts));
+    this.novas = Object.entries(acts).filter(([id]) => !seedActs[id]).map(([id, d]) => ({ ...d, id }));
+    this.patches = {};
+    for (const [id, d] of Object.entries(acts)) {
+      if (!seedActs[id]) continue;
+      const pt = { ...d };
+      for (const k of Object.keys(seedActs[id])) if (k !== "id" && !(k in d)) pt[k] = null;
+      this.patches[id] = pt;
+    }
+    const cfg = (C.config && C.config.obra) || {};
+    this.state.config = { ...this.state.config, ...cfg };
+    this.state.pendentes = Object.fromEntries(Object.entries(C.pendentes || {}).map(([id, x]) => [id, { id, ...x }]));
+    this.state.registos = Object.entries(C.registos || {}).map(([id, x]) => ({ id, ...x }));
+    this.state.fotos = Object.entries(C.fotos || {}).map(([id, x]) => ({ id, ...x }));
+    const us = new Map(this.state.utilizadores.map((u) => [u.email, u]));
+    for (const [email, u] of Object.entries(C.utilizadores || {})) us.set(email, { ...u, email });
+    this.state.utilizadores = [...us.values()];
+    this._save();
+    this._load();
+    this._reg(null, null, { tipo: "copia", texto: "Repôs uma cópia de segurança" });
+    this._save();
+    try { onProgress && onProgress(1, 1); } catch (e) {}
+    this.emit("data");
+  }
 }
 
 /* ---------------------------------------------------------------- CLOUD */
@@ -456,6 +509,54 @@ export class CloudStore extends Emitter {
       }
     }
     await fb.setDoc(fb.doc(this.db, "utilizadores", email), { nome, papel, criadoEm: nowISO() });
+  }
+  /** Lê tudo o que está na base de dados (precisa de rede, para não sair uma cópia incompleta). */
+  async exportar(onProgress) {
+    if (!navigator.onLine) throw new Error("Sem rede: ligue-se à internet para fazer a cópia de segurança.");
+    const fb = this.fb, out = {};
+    for (const [i, c] of COPIA_COLECOES.entries()) {
+      try { onProgress && onProgress(i, COPIA_COLECOES.length, c); } catch (e) {}
+      const snap = await fb.getDocs(fb.collection(this.db, c));
+      const m = {}; snap.forEach((d) => { m[d.id] = paraJSON(d.data()); });
+      out[c] = m;
+    }
+    return out;
+  }
+  /** Substitui tudo pelo que está na cópia: escreve os documentos da cópia e apaga os que não estavam lá.
+      Os acessos (utilizadores) nunca se apagam, só se repõem ou acrescentam. */
+  async repor(C, onProgress) {
+    if (!navigator.onLine) throw new Error("Sem rede: ligue-se à internet para repor a cópia.");
+    const fb = this.fb, db = this.db, ops = [];
+    // antes de mexer em nada: confirmar que as regras da base de dados deixam o dono repor tudo
+    try {
+      const b0 = fb.writeBatch(db);
+      for (const c of ["registos", "fotos"]) b0.set(fb.doc(db, c, "_teste_copia"), { teste: true, por: "_", criadoPor: "_" });
+      await b0.commit();
+      const b1 = fb.writeBatch(db);
+      for (const c of ["registos", "fotos"]) b1.delete(fb.doc(db, c, "_teste_copia"));
+      await b1.commit();
+    } catch (e) {
+      throw new Error("as regras de acesso da base de dados ainda não deixam repor cópias (é preciso atualizá-las na consola do Firebase). Nada foi alterado");
+    }
+    for (const c of ["config", "atividades", "pendentes", "registos", "fotos"]) {
+      const novo = C[c] || {};
+      const atual = await fb.getDocs(fb.collection(db, c));
+      atual.forEach((d) => { if (!(d.id in novo)) ops.push({ c, id: d.id, del: true }); });
+      for (const [id, data] of Object.entries(novo)) ops.push({ c, id, data });
+    }
+    for (const [id, data] of Object.entries(C.utilizadores || {})) ops.push({ c: "utilizadores", id, data });
+    let b = fb.writeBatch(db), n = 0, peso = 0, feitos = 0;
+    const avisa = () => { try { onProgress && onProgress(feitos, ops.length); } catch (e) {} };
+    avisa();
+    for (const op of ops) {
+      const ref = fb.doc(db, op.c, op.id);
+      if (op.del) b.delete(ref); else b.set(ref, op.data);
+      n++; peso += op.del ? 100 : JSON.stringify(op.data).length;
+      if (n >= 400 || peso > 3000000) { await b.commit(); feitos += n; avisa(); b = fb.writeBatch(db); n = 0; peso = 0; }
+    }
+    if (n) { await b.commit(); feitos += n; avisa(); }
+    await fb.addDoc(fb.collection(db, "registos"), this._regDoc(null, null, { tipo: "copia", texto: "Repôs uma cópia de segurança" }));
+    return ops.length;
   }
   /** Importa o cronograma do Excel. Com soFaltam, só acrescenta os trabalhos que ainda não estão na base de dados. */
   async importSeed(onProgress, { soFaltam = false } = {}) {

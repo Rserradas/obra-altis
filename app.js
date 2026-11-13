@@ -1,5 +1,5 @@
 import { schedule, downstream, pctEfetiva, todayISO, diffDays, addDays, duracaoDe } from "./engine.js";
-import { DemoStore, CloudStore } from "./store.js";
+import { DemoStore, CloudStore, COPIA_FORMATO, COPIA_COLECOES } from "./store.js";
 
 /* ============================================================ utilidades */
 const $ = (s, el = document) => el.querySelector(s);
@@ -501,11 +501,11 @@ function routeView() {
     if (ui.lastUnit !== uid) { ui.lastUnit = uid; ui.unidadeTab = store.user.papel === "fiscal" ? "vist" : "ativ"; }
     return { nav: "unidades", ...unidadeView(uid) };
   }
-  if (h === "equipa" && store.user.papel !== "dono") h = "painel";
+  if ((h === "equipa" || h === "copia") && store.user.papel !== "dono") h = "painel";
   if (h === "equipas" && !can("executar")) h = "painel";
-  const v = { pendentes: pendentesView, painel: painelView, unidades: unidadesView, plano: planoView, regras: regrasView, equipa: equipaView, equipas: equipasView, gantt: ganttView, semana: semanaView, relatorio: relatorioView, vistorias: vistoriasView, relvist: relVistView, previsao: previsaoView, planequipa: planEquipaView }[h] || painelView;
+  const v = { pendentes: pendentesView, painel: painelView, unidades: unidadesView, plano: planoView, regras: regrasView, equipa: equipaView, copia: copiaView, equipas: equipasView, gantt: ganttView, semana: semanaView, relatorio: relatorioView, vistorias: vistoriasView, relvist: relVistView, previsao: previsaoView, planequipa: planEquipaView }[h] || painelView;
   if (h === "planequipa" && !can("executar")) h = "painel";
-  const navDe = { equipa: "regras", equipas: "regras", planequipa: "regras", relatorio: "painel", relvist: "vistorias" };
+  const navDe = { equipa: "regras", copia: "regras", equipas: "regras", planequipa: "regras", relatorio: "painel", relvist: "vistorias" };
   return { nav: navDe[h] || (h in { painel: 1, unidades: 1, plano: 1, regras: 1, gantt: 1, semana: 1, vistorias: 1, previsao: 1, pendentes: 1 } ? h : "painel"), ...v() };
 }
 
@@ -3092,7 +3092,7 @@ function abrirGuia(forcar) {
 function defTabs(atual) {
   const t = [["regras", "Sequência e durações"]];
   if (can("executar")) t.push(["equipas", "Equipas de trabalho"], ["planequipa", "Plano das equipas"]);
-  if (store.user.papel === "dono") t.push(["equipa", "Acessos"]);
+  if (store.user.papel === "dono") t.push(["equipa", "Acessos"], ["copia", "Cópia de segurança"]);
   return `<div class="eyebrow">Definições</div><div class="tabs">${t.map(([h, l]) => `<a href="#${h}" class="deftab ${atual === h ? "on" : ""}">${l}</a>`).join("")}</div>`;
 }
 /* ============================================================ simulação do tempo mínimo
@@ -3380,6 +3380,124 @@ function equipaView() {
       };
       const dr = $("#dreset");
       if (dr) dr.onclick = () => { store.reset(); toast("Dados de demonstração repostos"); };
+    },
+  };
+}
+
+/* ============================================================ cópia de segurança
+   Só o dono de obra. Descarrega um ficheiro com tudo o que está registado (trabalhos, datas, pendentes,
+   histórico, fotografias, notas, equipas, sequência e acessos) e pode repor tudo a partir desse ficheiro. */
+const COPIA_NOMES = { config: "definições da obra", atividades: "atividades", pendentes: "pendentes", registos: "registos do histórico", fotos: "fotografias", utilizadores: "acessos" };
+const COPIA_ULT = "obra-ultima-copia";
+function copiaConta(C) { return Object.fromEntries(COPIA_COLECOES.map((c) => [c, Object.keys((C && C[c]) || {}).length])); }
+function copiaResumoHTML(n) {
+  return `<ul class="copia-n">${["atividades", "pendentes", "registos", "fotos", "utilizadores"].map((c) => `<li><b class="num">${n[c] || 0}</b> ${COPIA_NOMES[c]}</li>`).join("")}</ul>`;
+}
+const nomeFicheiroCopia = (quando) => { const d = new Date(quando); const p2 = (x) => String(x).padStart(2, "0"); return `obra-${(S.cfg.nome || "altis").toLowerCase().replace(/[^a-z0-9]+/g, "-")}-copia-${d.getFullYear()}-${p2(d.getMonth() + 1)}-${p2(d.getDate())}-${p2(d.getHours())}${p2(d.getMinutes())}.json`; };
+/** Lê tudo e descarrega o ficheiro. Devolve o número de documentos de cada tipo, ou null se falhar. */
+async function descarregarCopia(estado) {
+  const marca = (t) => { if (estado) estado.textContent = t; };
+  try {
+    marca("A ler os dados...");
+    const C = await store.exportar((i, n, c) => marca(`A ler ${COPIA_NOMES[c] || c} (${i + 1} de ${n})...`));
+    const quando = new Date().toISOString();
+    const copia = { formato: COPIA_FORMATO, versao: 1, app: VERSAO, criadoEm: quando, por: store.user.email, nomePor: store.user.nome, obra: S.cfg.nome || "", modo: store.modo, colecoes: C };
+    const blob = new Blob([JSON.stringify(copia)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url; a.download = nomeFicheiroCopia(quando);
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 4000);
+    try { localStorage.setItem(COPIA_ULT + "-" + store.modo, JSON.stringify({ em: quando, ficheiro: a.download, mb: +(blob.size / 1048576).toFixed(1) })); } catch (e) {}
+    marca("");
+    return copiaConta(C);
+  } catch (e) {
+    marca("");
+    toast("Não foi possível fazer a cópia: " + erroSimples(e) + ".", { anular: false });
+    return null;
+  }
+}
+function copiaView() {
+  const st = (ui.copia = ui.copia || { lida: null, nomeF: "", erro: "" });
+  let ult = null; try { ult = JSON.parse(localStorage.getItem(COPIA_ULT + "-" + store.modo) || "null"); } catch (e) {}
+  const dias = ult ? Math.floor((Date.now() - new Date(ult.em).getTime()) / 86400000) : null;
+  const L = st.lida;
+  const html = `
+    ${defTabs("copia")}
+    <h1>Cópia de segurança</h1>
+    <p style="max-width:70ch">A cópia é um ficheiro com tudo o que está registado${store.modo === "demo" ? " (nesta demonstração, os dados deste dispositivo)" : " online"}: atividades e datas, percentagens, notas da fiscalização, pendentes, histórico, fotografias, equipas, sequência e acessos. Guarde-a no computador ou numa pasta partilhada da empresa. Não inclui as palavras-passe.</p>
+    <section class="card"><h2>Fazer uma cópia</h2>
+      ${ult ? `<p>Última cópia feita neste dispositivo: <b>${fd(ult.em.slice(0, 10), true)}</b>${dias ? `, há ${dias} dia${dias === 1 ? "" : "s"}` : ", hoje"}${ult.mb != null ? ` (${ult.mb} MB)` : ""}.</p>` : `<p>Ainda não fez nenhuma cópia neste dispositivo.</p>`}
+      ${dias != null && dias >= 7 ? `<div class="banner warn"><span>Já passou mais de uma semana desde a última cópia.</span></div>` : ""}
+      <div class="row" style="gap:10px;align-items:center"><button class="btn pri" id="cpDesc">Descarregar cópia de segurança</button><span class="note" id="cpEst"></span></div>
+      <p class="note">Sugestão: faça uma cópia por semana, por exemplo antes da reunião de obra. Com muitas fotografias o ficheiro pode ter vários MB.</p>
+    </section>
+    <section class="card"><h2>Repor a partir de uma cópia</h2>
+      <p style="max-width:70ch">Volta a pôr tudo exatamente como estava quando a cópia foi feita. <b>O que foi registado depois disso perde-se.</b> Antes de repor, a aplicação descarrega automaticamente uma cópia do estado atual, para poder voltar atrás. Os acessos das pessoas nunca são apagados.</p>
+      <label class="btn" style="cursor:pointer;display:inline-flex;width:auto">Escolher ficheiro da cópia<input type="file" id="cpFich" accept=".json,application/json" hidden></label>
+      ${st.erro ? `<div class="err" style="margin-top:10px">${esc(st.erro)}</div>` : ""}
+      ${L ? `<div class="copia-lida">
+        <p><b>${esc(st.nomeF)}</b></p>
+        <p>Cópia feita a <b>${fd(L.criadoEm.slice(0, 10), true)}</b> às ${hora(L.criadoEm)}${L.nomePor ? ` por ${esc(L.nomePor)}` : ""}${L.obra ? `, obra ${esc(L.obra)}` : ""}${L.modo === "demo" ? " (cópia da demonstração)" : ""}.</p>
+        <h3>O que tem</h3>${copiaResumoHTML(copiaConta(L.colecoes))}
+        ${L.modo && L.modo !== store.modo ? `<div class="dlg-av">Atenção: esta cópia foi feita ${L.modo === "demo" ? "na demonstração" : "na versão online"} e vai ser reposta ${store.modo === "demo" ? "na demonstração" : "na versão online"}.</div>` : ""}
+        <div class="row" style="gap:10px;margin-top:12px;align-items:center"><button class="btn warn" id="cpRepor">Repor esta cópia</button><button class="btn ghost" id="cpCanc">Cancelar</button><span class="note" id="cpEst2"></span></div>
+      </div>` : ""}
+    </section>`;
+  return {
+    html, bind: () => {
+      bindCommon();
+      $("#cpDesc").onclick = async (e) => {
+        const b = e.currentTarget; b.disabled = true;
+        const n = await descarregarCopia($("#cpEst"));
+        b.disabled = false;
+        if (n) { toast(`Cópia descarregada: ${n.atividades} atividades, ${n.pendentes} pendentes, ${n.registos} registos, ${n.fotos} fotografias`, { anular: false }); render(); }
+      };
+      $("#cpFich").onchange = async (e) => {
+        const f = e.target.files && e.target.files[0]; if (!f) return;
+        st.lida = null; st.erro = ""; st.nomeF = f.name;
+        try {
+          const j = JSON.parse(await f.text());
+          if (!j || j.formato !== COPIA_FORMATO || !j.colecoes || !j.colecoes.atividades) throw new Error("formato");
+          if (!Object.keys(j.colecoes.atividades).length) throw new Error("vazia");
+          st.lida = j;
+        } catch (err) {
+          st.erro = err.message === "vazia" ? "Esta cópia não tem atividades. Não pode ser reposta." : "Este ficheiro não é uma cópia de segurança desta aplicação.";
+        }
+        render();
+      };
+      const cc = $("#cpCanc"); if (cc) cc.onclick = () => { st.lida = null; st.erro = ""; render(); };
+      const cr = $("#cpRepor");
+      if (cr) cr.onclick = async () => {
+        const L = st.lida, n = copiaConta(L.colecoes);
+        const k1 = await perguntar({
+          titulo: "Repor esta cópia?",
+          texto: `<p>Tudo volta a ficar como estava a <b>${fd(L.criadoEm.slice(0, 10), true)}</b> às ${hora(L.criadoEm)}: ${n.atividades} atividades, ${n.pendentes} pendentes, ${n.registos} registos e ${n.fotos} fotografias.</p>
+            <div class="dlg-av">O que foi registado depois dessa data perde-se, para todas as pessoas.</div>
+            <p class="note">Primeiro é descarregada uma cópia do estado atual, para poder voltar atrás.</p>`,
+          opcoes: [{ k: "sim", l: "Continuar", estilo: "warn" }, { k: "nao", l: "Cancelar", estilo: "pri" }],
+        });
+        if (k1 !== "sim") return;
+        const est = $("#cpEst2");
+        const atual = await descarregarCopia(est);
+        if (!atual) { toast("A cópia do estado atual falhou, por isso nada foi reposto.", { anular: false }); return; }
+        const k2 = await perguntar({
+          titulo: "Tem a certeza?",
+          texto: `<p>A cópia do estado atual já foi descarregada (${atual.atividades} atividades, ${atual.registos} registos). Confirme que a encontra na pasta de transferências.</p><p>Vai agora substituir tudo pelos dados da cópia de ${fd(L.criadoEm.slice(0, 10), true)}. Isto não se anula com o botão Anular.</p>`,
+          opcoes: [{ k: "sim", l: "Sim, substituir tudo", estilo: "warn" }, { k: "nao", l: "Cancelar", estilo: "pri" }],
+        });
+        if (k2 !== "sim") return;
+        cr.disabled = true;
+        try {
+          await store.repor(L.colecoes, (i, tot) => { if (est) est.textContent = tot > 1 ? `A repor... ${Math.round((100 * i) / tot)}%` : "A repor..."; });
+          st.lida = null;
+          toast("Cópia reposta. Os dados são agora os da cópia.", { anular: false });
+          render();
+        } catch (e) {
+          cr.disabled = false; if (est) est.textContent = "";
+          toast("A reposição falhou a meio: " + erroSimples(e) + ". Volte a repor a cópia, ou reponha a cópia do estado atual que foi descarregada.", { anular: false });
+        }
+      };
     },
   };
 }
