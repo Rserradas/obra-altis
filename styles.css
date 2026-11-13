@@ -1315,3 +1315,15 @@ body.gfull .tabbar, body.gfull .nova-versao { display: none; }
   body.imprimir-gantt .gantt, body.imprimir-gantt .gantt * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
 }
 .atrbar label.f.atr-q { flex: 1 1 100%; max-width: 420px; }
+/* Gantt: escolher várias atividades */
+.msel-w { position: relative; display: flex; flex-direction: column; gap: 5px; flex: 1 1 200px; min-width: 0; }
+.msel-l { font-size: .85rem; color: var(--muted); font-weight: 600; }
+.msel { position: relative; }
+.msel > summary { list-style: none; cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding-right: 28px; position: relative; display: flex; align-items: center; }
+.msel > summary::-webkit-details-marker { display: none; }
+.msel > summary::after { content: ""; position: absolute; right: 12px; top: 50%; width: 7px; height: 7px; border-right: 1.5px solid currentColor; border-bottom: 1.5px solid currentColor; transform: translateY(-70%) rotate(45deg); opacity: .6; }
+.msel-p { position: absolute; z-index: 40; top: calc(100% + 4px); left: 0; width: min(360px, 92vw); background: var(--surface, #fff); border: 1px solid var(--line, #ccc); border-radius: var(--r, 8px); box-shadow: 0 8px 24px rgba(0,0,0,.15); padding: 10px; }
+.msel-l2 { max-height: 300px; overflow: auto; display: flex; flex-direction: column; gap: 2px; }
+.msel-l2 .check { padding: 4px 2px; }
+.msel-l2 .check[hidden] { display: none; }
+.filters label.f.gper { flex: 0 1 160px; }

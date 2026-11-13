@@ -66,7 +66,7 @@ function filtrosAlterados() {
   const p = ui.plano, d = PLANO_PADRAO(), g = ui.gantt;
   const planoMudou = ["bloco", "tipo", "unidade", "ativ", "equipa", "q", "soAtr", "editar", "atribuir"].some((k) => !!p[k] !== !!d[k]) || p.semConc === false || !!p.sort || (p.f || "todas") !== "todas";
   if (ui.regSort || ui.regQ) return true;
-  const ganttMudou = g && (g.bloco || g.unidade || g.ativ || g.abertas === false || g.ligacoes === false || g.zoom !== "semana" || (g.abertosB && g.abertosB.size) || (g.abertos && g.abertos.size) || g.sel);
+  const ganttMudou = g && (g.bloco || g.unidade || g.ativ || (g.ativs && g.ativs.length) || g.estado || g.equipa || g.tipo || g.q || g.de || g.ate || g.abertas === false || g.ligacoes === false || g.zoom !== "semana" || (g.abertosB && g.abertosB.size) || (g.abertos && g.abertos.size) || g.sel);
   return !!(planoMudou || ganttMudou || ui.bloco !== "todos" || ui.unitEdit || ui.uSemConc === false || !!ui.porVist || !!ui.comPend);
 }
 /* Os filtros de Trabalhos, A minha semana e Apartamentos ficam guardados neste dispositivo, por utilizador. */
@@ -2543,20 +2543,33 @@ function abrirPesquisaMovel() {
 function ganttView() {
   const g = (ui.gantt = ui.gantt || { bloco: "", unidade: "", ativ: "", abertas: true, zoom: "semana", abertos: new Set(), sel: null, ligacoes: true });
   g.abertosB = g.abertosB || new Set();
+  if (!g.ativs) g.ativs = g.ativ ? [g.ativ] : [];
+  g.estado = g.estado || ""; g.equipa = g.equipa || ""; g.tipo = g.tipo || ""; g.q = g.q || ""; g.de = g.de || ""; g.ate = g.ate || "";
   const blocos = ["A", "B", "C", "D", "Geral"];
-  const us = S.unidades.filter((u) => !g.bloco || u.bloco === g.bloco);
-  const nomes = [...new Set(Object.values(S.acts).filter((a) => !g.bloco || (S.uMap[a.unidade] || {}).bloco === g.bloco).map((a) => nomeAtiv(a)))].sort((a, b) => a.localeCompare(b, "pt"));
+  const us = S.unidades.filter((u) => (!g.bloco || u.bloco === g.bloco) && (!g.tipo || u.tipo === g.tipo));
+  const nomes = ganttNomesAtiv(g.bloco);
+  const nA = g.ativs.length;
   const html = `
     <div class="card-h"><h1>Gantt</h1></div>
     <div class="chips" role="group" aria-label="Bloco">${["", ...blocos].map((b) => `<button class="chip ${g.bloco === b ? "on" : ""}" data-gb="${b}">${b ? (b === "Geral" ? "Geral" : "Bloco " + b) : "Todos os blocos"}</button>`).join("")}</div>
+    <div class="chips" role="group" aria-label="Estado">${GANTT_EST.map(([k, l]) => `<button class="chip ${g.estado === k ? "on" : ""}" data-gest="${k}">${l}</button>`).join("")}</div>
     <div class="filters">
+      <label class="f">Frações<select class="inp" id="gt">${[["", "Todas as frações"], ["Apartamento", "Apartamentos"], ["Loja", "Lojas"], ["Zona comum", "Zonas comuns"], ["Geral", "Geral"]].map(([k, l]) => `<option value="${k}" ${g.tipo === k ? "selected" : ""}>${l}</option>`).join("")}</select></label>
       <label class="f">Apartamento ou fração<select class="inp" id="gu"><option value="">Todas${g.bloco ? " do " + (g.bloco === "Geral" ? "geral" : "bloco " + g.bloco) : ""}</option>${us.map((u) => `<option value="${esc(u.id)}" ${g.unidade === u.id ? "selected" : ""}>${esc(u.tipo === "Apartamento" || /-L\d+$/.test(u.id) ? u.id : u.nome)}</option>`).join("")}</select></label>
-      <label class="f">Atividade<select class="inp" id="ga"><option value="">Todas</option>${nomes.map((n) => `<option ${g.ativ === n ? "selected" : ""}>${esc(n)}</option>`).join("")}</select></label>
-      <label class="check" style="align-self:center"><input type="checkbox" id="gc" ${g.abertas ? "checked" : ""}><span>Esconder concluídas</span></label>
+      <div class="f msel-w"><span class="msel-l">Atividades</span><details class="msel" id="gaD" ${g._mselAberto ? "open" : ""}><summary class="inp" id="gaS">${nA ? (nA === 1 ? esc(g.ativs[0]) : nA + " atividades") : "Todas"}</summary>
+        <div class="msel-p"><div class="row" style="gap:6px;margin-bottom:6px"><input class="inp" id="gaQ" type="search" placeholder="Procurar atividade" style="flex:1;min-width:0"><button class="btn sm" id="gaT" type="button">Todas</button><button class="btn sm" id="gaN" type="button">Nenhuma</button></div>
+        <div class="msel-l2">${nomes.map((n) => `<label class="check" data-gan="${esc(semAcentos(n))}"><input type="checkbox" value="${esc(n)}" ${g.ativs.includes(n) ? "checked" : ""}><span>${esc(n)}</span></label>`).join("")}</div>
+        <button class="btn sm pri" id="gaOk" type="button" style="margin-top:8px;width:100%">Aplicar</button></div></details></div>
+      <label class="f">Equipa<select class="inp" id="ge"><option value="">Todas</option><option value="_sem" ${g.equipa === "_sem" ? "selected" : ""}>Sem equipa</option>${S.equipasTodas.map((e) => `<option ${g.equipa === e ? "selected" : ""}>${esc(e)}</option>`).join("")}</select></label>
+      <label class="f">Procurar<input class="inp" id="gq" type="search" value="${esc(g.q)}" placeholder="Ex.: louças B-F503"></label>
+      <label class="f gper">Mostrar de<input class="inp" type="date" id="gde" value="${g.de}"></label>
+      <label class="f gper">até<input class="inp" type="date" id="gate" value="${g.ate}"></label>
+      <label class="check" style="align-self:center"><input type="checkbox" id="gc" ${g.abertas ? "checked" : ""} ${g.estado === "concluida" ? "disabled" : ""}><span>Esconder concluídas</span></label>
       <label class="check" style="align-self:center"><input type="checkbox" id="gl" ${g.ligacoes ? "checked" : ""}><span>Mostrar ligações</span></label>
       <div class="row" style="align-self:center;gap:6px" role="group" aria-label="Nível de detalhe"><span class="note">Mostrar:</span><button class="btn sm" id="gnB">Blocos</button><button class="btn sm" id="gnU">Frações</button><button class="btn sm" id="gnA">Tudo</button></div>
       ${filtrosAlterados() ? `<button class="btn sm repor-on" id="grep" style="align-self:center">Limpar filtros</button>` : ""}
     </div>
+    ${g.crit && ganttFiltrado() ? `<p class="note">O caminho crítico mostra sempre a cadeia toda${g.bloco ? " do bloco" : " da obra"}: os outros filtros não se aplicam enquanto estiver ligado.</p>` : ""}
     <section class="gzona ${g.full ? "full" : ""}" id="gzona">
     <div class="gtop no-print-g">
       <div class="row" style="gap:6px"><button class="btn sm" id="gHoje" title="Mostrar o dia de hoje">Hoje</button>
@@ -2567,7 +2580,7 @@ function ganttView() {
         <button class="btn sm" id="gFull" title="${g.full ? "Voltar ao ecrã normal (Esc)" : "Ver o gráfico em ecrã inteiro"}">${g.full ? "Sair do ecrã inteiro" : "Ecrã inteiro"}</button>
       </div>
     </div>
-    <div class="gprint-h">Gantt · ALTIS · ${g.crit ? "Caminho crítico" + (g.bloco ? " do " + (g.bloco === "Geral" ? "geral" : "bloco " + g.bloco) : " da obra") : (g.bloco ? (g.bloco === "Geral" ? "Geral" : "Bloco " + g.bloco) : "Todos os blocos") + (g.unidade ? " · " + g.unidade : "") + (g.ativ ? " · " + g.ativ : "")} · impresso a ${fd(S.hoje, true)}</div>
+    <div class="gprint-h">Gantt · ALTIS · ${g.crit ? "Caminho crítico" + (g.bloco ? " do " + (g.bloco === "Geral" ? "geral" : "bloco " + g.bloco) : " da obra") : (g.bloco ? (g.bloco === "Geral" ? "Geral" : "Bloco " + g.bloco) : "Todos os blocos") + ganttResumoFiltros()} · impresso a ${fd(S.hoje, true)}</div>
     <div class="gcrit-info" id="gcrit" hidden></div>
     <div class="gsel" id="gsel" hidden></div>
     <div class="legend"><span><i class="gl-bar st-concluida"></i>Concluída</span><span><i class="gl-bar st-em_curso"></i>Em curso</span><span><i class="gl-bar st-bloqueada"></i>Bloqueada</span><span><i class="gl-bar st-por_iniciar"></i>Por iniciar</span><span><i class="gl-bar st-por_iniciar atr"></i>Atrasada</span><span title="Dias desde a previsão de fim até hoje, ou até ao fim provável"><i class="gl-bar gl-tail"></i>Atraso</span><span><i class="gl-today"></i>Hoje</span><span class="note">Toque numa barra para ver a cadeia de dependências.${can("executar") ? " Com o rato, arraste a barra para mudar a data ou puxe a ponta direita para mudar o fim." : ""}</span></div>
@@ -2578,10 +2591,25 @@ function ganttView() {
 function bindGantt() {
   const g = ui.gantt;
   bindCommon();
-  document.querySelectorAll("[data-gb]").forEach((b) => (b.onclick = () => { g.bloco = b.dataset.gb; if (g.bloco) g.abertosB.add(g.bloco); g.unidade = ""; g.ativ = ""; g.sel = null; render(); }));
+  document.querySelectorAll("[data-gb]").forEach((b) => (b.onclick = () => { g.bloco = b.dataset.gb; if (g.bloco) g.abertosB.add(g.bloco); g.unidade = ""; g.sel = null; const ns = new Set(ganttNomesAtiv(g.bloco)); g.ativs = g.ativs.filter((n) => ns.has(n)); render(); }));
   document.querySelectorAll("[data-gz]").forEach((b) => (b.onclick = () => { g.zoom = b.dataset.gz; render(); }));
   $("#gu").onchange = (e) => { g.unidade = e.target.value; if (g.unidade) { g.abertos.add(g.unidade); g.abertosB.add(S.uMap[g.unidade].bloco); } render(); };
-  $("#ga").onchange = (e) => { g.ativ = e.target.value; render(); };
+  document.querySelectorAll("[data-gest]").forEach((b) => (b.onclick = () => { g.estado = b.dataset.gest; render(); }));
+  $("#gt").onchange = (e) => { g.tipo = e.target.value; if (g.unidade && S.uMap[g.unidade] && g.tipo && S.uMap[g.unidade].tipo !== g.tipo) g.unidade = ""; render(); };
+  $("#ge").onchange = (e) => { g.equipa = e.target.value; render(); };
+  let tq; $("#gq").oninput = (e) => { clearTimeout(tq); tq = setTimeout(() => { g.q = e.target.value; render(); const i = $("#gq"); if (i) { i.focus(); const n = i.value.length; try { i.setSelectionRange(n, n); } catch {} } }, 300); };
+  const per = (sel, k) => { const el = $(sel); el.onchange = () => { const v = el.value; if (v && !dataCompleta(v)) return; g[k] = v; if (g.de && g.ate && g.ate < g.de) { toast("A data final não pode ser antes da inicial.", { anular: false }); g[k] = ""; } render(); }; };
+  per("#gde", "de"); per("#gate", "ate");
+  // atividades: escolher várias
+  const gaD = $("#gaD");
+  const marcadas = () => [...gaD.querySelectorAll(".msel-l2 input:checked")].map((c) => c.value);
+  const aplicar = () => { g.ativs = marcadas(); g.ativ = ""; g._mselAberto = false; render(); };
+  gaD.ontoggle = () => { g._mselAberto = gaD.open; if (!gaD.open) { const m = marcadas(); if (m.join("|") !== g.ativs.join("|")) aplicar(); } else { const q = $("#gaQ"); if (q && window.innerWidth > 640) q.focus(); } };
+  $("#gaOk").onclick = () => { gaD.open = false; aplicar(); };
+  $("#gaT").onclick = () => gaD.querySelectorAll(".msel-l2 label:not([hidden]) input").forEach((c) => (c.checked = true));
+  $("#gaN").onclick = () => gaD.querySelectorAll(".msel-l2 input").forEach((c) => (c.checked = false));
+  $("#gaQ").oninput = (e) => { const t = semAcentos(e.target.value.trim()).split(/\s+/).filter(Boolean); gaD.querySelectorAll("[data-gan]").forEach((l) => (l.hidden = !t.every((x) => l.dataset.gan.includes(x)))); };
+  if (!ui._gaFora) { ui._gaFora = true; document.addEventListener("click", (e) => { const d = document.querySelector("#gaD"); if (d && d.open && !d.contains(e.target)) d.open = false; }); }
   $("#gc").onchange = (e) => { g.abertas = e.target.checked; render(); };
   $("#gl").onchange = (e) => { g.ligacoes = e.target.checked; drawGantt(); };
   const todosB = () => [...new Set(S.unidades.map((u) => u.bloco))];
@@ -2595,6 +2623,57 @@ function bindGantt() {
   $("#gnU").onclick = () => { todosB().forEach((b) => g.abertosB.add(b)); g.abertos.clear(); render(); };
   $("#gnA").onclick = () => { todosB().forEach((b) => g.abertosB.add(b)); S.unidades.forEach((u) => g.abertos.add(u.id)); render(); };
   drawGantt();
+}
+const GANTT_EST = [["", "Todas"], ["proximas", "Próximas 2 semanas"], ["em_curso", "Em curso"], ["atrasada", "Atrasadas"], ["nao_iniciada", "Não iniciadas"], ["bloqueada", "Bloqueadas"], ["porconfirmar", "Datas por confirmar"], ["concluida", "Concluídas"]];
+const semAcentos = (t) => String(t).toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+/** Nomes das atividades pela ordem da sequência da obra. */
+function ganttNomesAtiv(bloco) {
+  const espOrd = Object.fromEntries((S.cfg.especialidades || []).map((e) => [e.key, e.ordem]));
+  const ord = new Map();
+  for (const a of Object.values(S.acts)) {
+    if (bloco && (S.uMap[a.unidade] || {}).bloco !== bloco) continue;
+    const n = nomeAtiv(a), o = a.esp && espOrd[a.esp] != null ? espOrd[a.esp] : 999;
+    if (!ord.has(n) || o < ord.get(n)) ord.set(n, o);
+  }
+  return [...ord.keys()].sort((x, y) => ord.get(x) - ord.get(y) || x.localeCompare(y, "pt"));
+}
+function ganttFiltrado() {
+  const g = ui.gantt || {};
+  return !!((g.ativs && g.ativs.length) || g.estado || g.equipa || g.tipo || g.unidade || (g.q || "").trim() || g.de || g.ate);
+}
+function ganttResumoFiltros() {
+  const g = ui.gantt, r = [];
+  if (g.tipo) r.push({ Apartamento: "Apartamentos", Loja: "Lojas", "Zona comum": "Zonas comuns", Geral: "Geral" }[g.tipo] || g.tipo);
+  if (g.unidade) r.push(g.unidade);
+  if (g.ativs && g.ativs.length) r.push(g.ativs.length <= 3 ? g.ativs.join(", ") : g.ativs.length + " atividades");
+  if (g.estado) r.push((GANTT_EST.find(([k]) => k === g.estado) || [, ""])[1]);
+  if (g.equipa) r.push(g.equipa === "_sem" ? "Sem equipa" : g.equipa);
+  if ((g.q || "").trim()) r.push(`procura "${g.q.trim()}"`);
+  if (g.de || g.ate) r.push(`${g.de ? "de " + fd(g.de) : ""}${g.de && g.ate ? " " : ""}${g.ate ? "até " + fd(g.ate) : ""}`);
+  return r.length ? " · " + r.join(" · ") : "";
+}
+/** A atividade passa nos filtros do Gantt? */
+function ganttPassa(a, r) {
+  const g = ui.gantt;
+  if (g.ativs.length && !g.ativs.includes(nomeAtiv(a))) return false;
+  if (g.equipa === "_sem" ? !!a.equipa : g.equipa && a.equipa !== g.equipa) return false;
+  const conc = r.estado === "concluida";
+  if (g.estado === "concluida") { if (!conc) return false; }
+  else if (g.abertas && conc) return false;
+  switch (g.estado) {
+    case "proximas": if (conc || !(r.estado === "em_curso" || r.inicio <= addDays(S.hoje, 14))) return false; break;
+    case "em_curso": if (r.estado !== "em_curso") return false; break;
+    case "atrasada": if (!r.atrasada) return false; break;
+    case "nao_iniciada": if (r.estado !== "por_iniciar" && r.estado !== "bloqueada") return false; break;
+    case "bloqueada": if (r.estado !== "bloqueada") return false; break;
+    case "porconfirmar": if (!r.semPlano || conc) return false; break;
+  }
+  const fim = maxD(r.fim, r.provFim);
+  if (g.de && fim && fim < g.de) return false;
+  if (g.ate && r.inicio && r.inicio > g.ate) return false;
+  const q = semAcentos((g.q || "").trim()).split(/\s+/).filter(Boolean);
+  if (q.length) { const u = S.uMap[a.unidade] || {}; const txt = semAcentos(nomeAtiv(a) + " " + a.unidade + " " + (a.ref || "") + " " + (a.equipa || "") + " " + (u.nome || "")); if (!q.every((t) => txt.includes(t))) return false; }
+  return true;
 }
 /* ============================================================ caminho crítico
    A cadeia de atividades que decide a data de fim (da obra, ou do bloco): começa na(s) atividade(s) que acabam
@@ -2681,7 +2760,7 @@ function drawGantt() {
   const H = 30, LW = window.innerWidth < 640 ? 150 : g.crit ? 330 : 250, HEAD = 46;
   const k = { dia: 26, semana: 7, mes: 2.2 }[g.zoom];
   // linhas
-  const us = S.unidades.filter((u) => (!g.bloco || u.bloco === g.bloco) && (!g.unidade || u.id === g.unidade));
+  const us = S.unidades.filter((u) => (!g.bloco || u.bloco === g.bloco) && (!g.unidade || u.id === g.unidade) && (!g.tipo || u.tipo === g.tipo));
   const sozinha = us.length === 1;
   const rows = [];
   const ordemB = ["A", "B", "C", "D", "Geral"];
@@ -2690,7 +2769,7 @@ function drawGantt() {
     let bIni = null, bFim = null, bDur = 0, bFeito = 0, bN = 0, bAtr = 0;
     for (const u of us.filter((x) => x.bloco === bl)) {
       // por data de início: a real se já arrancou, senão a prevista; depois pelo fim
-      const acts = u.acts.filter((a) => (!g.ativ || nomeAtiv(a) === g.ativ) && (!g.abertas || S.res.get(a.id).estado !== "concluida"))
+      const acts = u.acts.filter((a) => ganttPassa(a, S.res.get(a.id)))
         .sort((x, y) => { const rx = S.res.get(x.id), ry = S.res.get(y.id); return (rx.inicio || "9").localeCompare(ry.inicio || "9") || (rx.fim || "9").localeCompare(ry.fim || "9") || nomeAtiv(x).localeCompare(nomeAtiv(y), "pt"); });
       if (!acts.length) continue;
       let ini = null, fim = null, atr = 0;
@@ -2700,11 +2779,12 @@ function drawGantt() {
       bDur += u.dur; bFeito += u.feito; bN += acts.length; bAtr += atr;
     }
     if (!grupo.length) continue;
-    const bAberto = sozinha || g.bloco === bl || g.abertosB.has(bl);
+    const filtrado = ganttFiltrado() && !g.unidade ? bN <= 400 : false; // poucas linhas: abre tudo para se verem as barras
+    const bAberto = sozinha || filtrado || g.bloco === bl || g.abertosB.has(bl);
     rows.push({ t: "b", bl, ini: bIni, fim: bFim, n: bN, nu: grupo.length, pct: bDur ? Math.round((100 * bFeito) / bDur) : 0, atr: bAtr, aberto: bAberto });
     if (!bAberto) continue;
     for (const x of grupo) {
-      const aberto = sozinha || g.abertos.has(x.u.id);
+      const aberto = sozinha || (filtrado && bN <= 150) || g.abertos.has(x.u.id);
       rows.push({ t: "u", u: x.u, ini: x.ini, fim: x.fim, n: x.acts.length, atr: x.atr, aberto });
       if (aberto) for (const a of x.acts) rows.push({ t: "a", a, r: S.res.get(a.id) });
     }
@@ -2728,8 +2808,11 @@ function drawGantt() {
   if (S.hoje < t0) t0 = S.hoje;
   if (S.hoje > t1) t1 = S.hoje;
   t0 = addDays(t0, -4); t1 = addDays(t1, 10);
+  if (!g.crit && g.de) t0 = g.de;
+  if (!g.crit && g.ate) t1 = g.ate;
+  if (t1 <= t0) t1 = addDays(t0, 7);
   const W = Math.max(400, Math.round(diffDays(t0, t1) * k));
-  const X = (d) => Math.round(diffDays(t0, d) * k);
+  const X = (d) => Math.min(W, Math.max(0, Math.round(diffDays(t0, d) * k))); // com um período escolhido, as barras são cortadas nas pontas
   // cabeçalho: meses + marcas
   let head = "";
   const [y0, m0] = t0.split("-").map(Number);
@@ -2818,7 +2901,7 @@ function drawGantt() {
   box.innerHTML = `<div class="gin" style="width:${LW + W}px;height:${HEAD + rows.length * H}px">
     <div class="ghead" style="width:${LW + W}px"><div class="gcorner">${cc ? `Caminho crítico · ${rows.length} atividade${rows.length === 1 ? "" : "s"}` : `${rows.filter((x) => x.t === "b").length} bloco${rows.filter((x) => x.t === "b").length === 1 ? "" : "s"} · ${rows.filter((x) => x.t === "b").reduce((s, x) => s + x.n, 0)} atividades`}</div><div class="gscale" style="left:${LW}px;width:${W}px">${head}${ticks}</div></div>
     <div class="gbody" style="top:${HEAD}px;height:${rows.length * H}px">
-      <div class="gtoday" style="left:${LW + tx}px"></div>
+      ${S.hoje >= t0 && S.hoje <= t1 ? `<div class="gtoday" style="left:${LW + tx}px"></div>` : ""}
       ${body}
       <svg class="garrows" style="left:${LW}px" width="${W}" height="${rows.length * H}" viewBox="0 0 ${W} ${rows.length * H}" aria-hidden="true">
         <defs><marker id="ah" viewBox="0 0 6 6" refX="5" refY="3" markerWidth="6" markerHeight="6" orient="auto"><path d="M0 0L6 3L0 6z" class="ahf"/></marker>
@@ -2897,7 +2980,7 @@ function drawGantt() {
     drawGantt();
   }));
   // ao mudar filtros ou escala, pôr hoje à vista; nos restantes redesenhos manter a posição
-  const chave = [g.bloco, g.unidade, g.ativ, g.zoom, g.abertas, g.crit].join("|");
+  const chave = [g.bloco, g.unidade, (g.ativs || []).join(","), g.zoom, g.abertas, g.crit, g.estado, g.equipa, g.tipo, g.q, g.de, g.ate].join("|");
   if (g._chave !== chave) { g._chave = chave; box.scrollLeft = Math.max(0, tx - 160); g._sl = box.scrollLeft; g._st = 0; }
   else { box.scrollLeft = (g._sl || 0) + (g._t0 ? diffDays(t0, g._t0) * k : 0); box.scrollTop = g._st || 0; }
   g._t0 = t0; g._sl = box.scrollLeft;
