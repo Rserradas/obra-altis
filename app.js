@@ -1726,11 +1726,12 @@ function planoView() {
       <button class="btn pri" id="atrOk" ${p.selec.size ? "" : "disabled"}>Atribuir</button></span>
       <span class="atr-g"><label class="f">Data<input class="inp" type="date" id="atrData" value="${p.atrData || S.hoje}" max="${S.hoje}"></label>
       <button class="btn" id="atrIni" ${p.selec.size ? "" : "disabled"}>Iniciar</button>
-      <button class="btn ok" id="atrConc" ${p.selec.size ? "" : "disabled"}>Concluir</button></span>
+      <button class="btn ok" id="atrConc" ${p.selec.size ? "" : "disabled"}>Concluir</button>
+      <button class="btn" id="atrAnIni" ${p.selec.size ? "" : "disabled"} title="Apaga o início real das escolhidas que estão em curso: voltam a estar por iniciar">Anular início</button></span>
       <span class="atr-g"><label class="f">Previsão de início<input class="inp" type="date" id="prvIni" value="${p.prvIni || ""}"></label>
       <label class="f">Previsão de fim<input class="inp" type="date" id="prvFim" value="${p.prvFim || ""}"></label>
       <button class="btn" id="prvOk" ${p.selec.size ? "" : "disabled"} title="Muda a previsão das escolhidas. Se só indicar o início, o fim recalcula-se com a duração normal. Se só indicar o fim, o início fica como está.">Mudar previsão</button></span>
-      <span class="note">Use os filtros (por exemplo Apartamento, Atividade ou Equipa) para chegar aos trabalhos certos e escolha-os. Depois atribua uma equipa, mude a previsão, ou inicie ou conclua todos na data indicada.</span></div>` : ""}
+      <span class="note">Use os filtros (por exemplo Apartamento, Atividade ou Equipa) para chegar aos trabalhos certos e escolha-os. Depois atribua uma equipa, mude a previsão, inicie ou conclua todos na data indicada, ou anule o início.</span></div>` : ""}
     <div class="note num">${list.length} atividade${list.length === 1 ? "" : "s"}${esconde ? ` · concluídas escondidas <button class="btn sm ghost" id="pmostra" style="min-height:24px;padding:0 6px;text-decoration:underline">mostrar</button>` : ""}</div>
     ${shown.length ? `<div class="tbl-wrap"><table class="tbl ${ed ? "editing" : ""}"><thead><tr>${atr ? `<th class="ck"><input type="checkbox" id="atrCkAll" ${shown.length && shown.every(({ a }) => p.selec.has(a.id)) ? "checked" : ""} aria-label="Escolher todas"></th>` : ""}${[["unidade", "Fração"], ["atividade", "Atividade"], ["estado", "Estado"], ["inicio", ed ? "Início" : "Início previsto"], ["fim", ed ? "Fim" : "Fim previsto"], ["desvio", "Atraso"], ["pct", "% · F"]].map(([k, l]) => {
       const on = p.sort && p.sort.col === k;
@@ -1805,6 +1806,7 @@ function planoView() {
         dt.onchange = () => { p.atrData = dt.value; };
         $("#atrConc").onclick = async () => { if (await concluirVarias([...p.selec], dt.value || S.hoje)) p.selec = new Set(), render(); };
         $("#atrIni").onclick = async () => { if (await iniciarVarias([...p.selec], dt.value || S.hoje)) p.selec = new Set(), render(); };
+        $("#atrAnIni").onclick = async () => { if (await anularInicioVarias([...p.selec])) p.selec = new Set(), render(); };
         const pi = $("#prvIni"), pf = $("#prvFim");
         pi.onchange = () => { p.prvIni = pi.value; };
         pf.onchange = () => { p.prvFim = pf.value; };
@@ -1923,6 +1925,25 @@ async function iniciarVarias(ids, v) {
   const em = new Date().toISOString();
   await store.updateMuitas(alvo.map((a) => ({ id: a.id, patch: { realInicio: v, pctEmp: Math.max(Number(a.pctEmp) || 0, 5), empEm: em } })), { tipo: "inicio", texto: `${alvo.length} atividades iniciadas a ${fd(v)}` });
   toast(`${alvo.length} atividade${alvo.length === 1 ? "" : "s"} iniciada${alvo.length === 1 ? "" : "s"} a ${fd(v)}`);
+  return true;
+}
+async function anularInicioVarias(ids) {
+  const todas = ids.map((id) => S.acts[id]).filter(Boolean);
+  const conc = todas.filter((a) => S.res.get(a.id).estado === "concluida");
+  const alvo = todas.filter((a) => a.realInicio && !conc.includes(a));
+  if (!alvo.length) { toast(conc.length ? "As escolhidas estão concluídas. Para anular o início, apague primeiro o fim real." : "Nenhuma das escolhidas tem início real.", { anular: false }); return false; }
+  const outras = todas.length - alvo.length - conc.length;
+  const k = await perguntar({
+    titulo: `Anular o início de ${alvo.length} atividade${alvo.length === 1 ? "" : "s"}?`,
+    texto: `<p>${alvo.length === 1 ? "Perde" : "Perdem"} o início real e ${alvo.length === 1 ? "volta" : "voltam"} a estar por iniciar:</p>${listaNomes(alvo)}
+      ${conc.length ? `<p class="note">${conc.length} ${conc.length === 1 ? "está concluída e fica" : "estão concluídas e ficam"} como ${conc.length === 1 ? "estava" : "estavam"}. Para essas, apague primeiro o fim real.</p>` : ""}
+      ${outras ? `<p class="note">${outras} ainda não ${outras === 1 ? "tinha" : "tinham"} começado.</p>` : ""}
+      <p class="note">As datas previstas e as atividades seguintes acertam-se sozinhas. Se se enganar, carregue em Anular na mensagem que aparece a seguir.</p>`,
+    opcoes: [{ k: "sim", l: `Sim, anular ${alvo.length}`, estilo: "pri" }, { k: "nao", l: "Cancelar" }],
+  });
+  if (k !== "sim") return false;
+  await store.updateMuitas(alvo.map((a) => ({ id: a.id, patch: { realInicio: null } })), { tipo: "correcao", texto: `Anulou o início de ${alvo.length} atividades: ${alvo.slice(0, 3).map((a) => nomeAtiv(a) + " em " + a.unidade).join(", ")}${alvo.length > 3 ? "..." : ""}` });
+  toast(`Início anulado em ${alvo.length} atividade${alvo.length === 1 ? "" : "s"}`);
   return true;
 }
 async function previsaoVarias(ids, ini, fim) {
