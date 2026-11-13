@@ -1727,7 +1727,10 @@ function planoView() {
       <span class="atr-g"><label class="f">Data<input class="inp" type="date" id="atrData" value="${p.atrData || S.hoje}" max="${S.hoje}"></label>
       <button class="btn" id="atrIni" ${p.selec.size ? "" : "disabled"}>Iniciar</button>
       <button class="btn ok" id="atrConc" ${p.selec.size ? "" : "disabled"}>Concluir</button></span>
-      <span class="note">Use os filtros (por exemplo Apartamento, Atividade ou Equipa) para chegar aos trabalhos certos e escolha-os. Depois atribua uma equipa, ou inicie ou conclua todos na data indicada.</span></div>` : ""}
+      <span class="atr-g"><label class="f">Previsão de início<input class="inp" type="date" id="prvIni" value="${p.prvIni || ""}"></label>
+      <label class="f">Previsão de fim<input class="inp" type="date" id="prvFim" value="${p.prvFim || ""}"></label>
+      <button class="btn" id="prvOk" ${p.selec.size ? "" : "disabled"} title="Muda a previsão das escolhidas. Se só indicar o início, o fim recalcula-se com a duração normal. Se só indicar o fim, o início fica como está.">Mudar previsão</button></span>
+      <span class="note">Use os filtros (por exemplo Apartamento, Atividade ou Equipa) para chegar aos trabalhos certos e escolha-os. Depois atribua uma equipa, mude a previsão, ou inicie ou conclua todos na data indicada.</span></div>` : ""}
     <div class="note num">${list.length} atividade${list.length === 1 ? "" : "s"}${esconde ? ` · concluídas escondidas <button class="btn sm ghost" id="pmostra" style="min-height:24px;padding:0 6px;text-decoration:underline">mostrar</button>` : ""}</div>
     ${shown.length ? `<div class="tbl-wrap"><table class="tbl ${ed ? "editing" : ""}"><thead><tr>${atr ? `<th class="ck"><input type="checkbox" id="atrCkAll" ${shown.length && shown.every(({ a }) => p.selec.has(a.id)) ? "checked" : ""} aria-label="Escolher todas"></th>` : ""}${[["unidade", "Fração"], ["atividade", "Atividade"], ["estado", "Estado"], ["inicio", ed ? "Início" : "Início previsto"], ["fim", ed ? "Fim" : "Fim previsto"], ["desvio", "Atraso"], ["pct", "% · F"]].map(([k, l]) => {
       const on = p.sort && p.sort.col === k;
@@ -1802,6 +1805,10 @@ function planoView() {
         dt.onchange = () => { p.atrData = dt.value; };
         $("#atrConc").onclick = async () => { if (await concluirVarias([...p.selec], dt.value || S.hoje)) p.selec = new Set(), render(); };
         $("#atrIni").onclick = async () => { if (await iniciarVarias([...p.selec], dt.value || S.hoje)) p.selec = new Set(), render(); };
+        const pi = $("#prvIni"), pf = $("#prvFim");
+        pi.onchange = () => { p.prvIni = pi.value; };
+        pf.onchange = () => { p.prvFim = pf.value; };
+        $("#prvOk").onclick = async () => { if (await previsaoVarias([...p.selec], pi.value, pf.value)) { p.selec = new Set(); p.prvIni = ""; p.prvFim = ""; render(); } };
       }
       let tm; $("#pq").oninput = (e) => { clearTimeout(tm); tm = setTimeout(() => { p.q = e.target.value; render(); const i = $("#pq"); i.focus(); i.setSelectionRange(i.value.length, i.value.length); }, 300); };
       bindDateInputs(document);
@@ -1916,6 +1923,51 @@ async function iniciarVarias(ids, v) {
   const em = new Date().toISOString();
   await store.updateMuitas(alvo.map((a) => ({ id: a.id, patch: { realInicio: v, pctEmp: Math.max(Number(a.pctEmp) || 0, 5), empEm: em } })), { tipo: "inicio", texto: `${alvo.length} atividades iniciadas a ${fd(v)}` });
   toast(`${alvo.length} atividade${alvo.length === 1 ? "" : "s"} iniciada${alvo.length === 1 ? "" : "s"} a ${fd(v)}`);
+  return true;
+}
+async function previsaoVarias(ids, ini, fim) {
+  if (!ini && !fim) { toast("Indique a previsão de início, a de fim, ou as duas.", { anular: false }); return false; }
+  if ((ini && !dataCompleta(ini)) || (fim && !dataCompleta(fim))) { toast("Escolha datas completas.", { anular: false }); return false; }
+  if (ini && fim && fim < ini) { toast("A previsão de fim não pode ser antes da de início.", { anular: false }); return false; }
+  const todas = ids.map((id) => S.acts[id]).filter(Boolean);
+  const alvo = [], fora = [], cedo = [];
+  for (const a of todas) {
+    const r = S.res.get(a.id);
+    if (!r || r.estado === "concluida") { fora.push(a); continue; }
+    const arrancou = !!a.realInicio;
+    const novoIni = ini && !arrancou ? ini : null;
+    const iniEf = novoIni || r.prevIni;
+    if (fim && iniEf && fim < iniEf) { fora.push(a); continue; }
+    if (novoIni) { const { es } = primeiraPossivel(r); if (es && novoIni < es) cedo.push(a); }
+    alvo.push({ a, r, arrancou, novoIni });
+  }
+  if (!alvo.length) { toast("Nenhuma das escolhidas pode ficar com essa previsão.", { anular: false }); return false; }
+  const quero = [ini ? `início a <b>${fd(ini, true)}</b>` : "", fim ? `fim a <b>${fd(fim, true)}</b>` : ""].filter(Boolean).join(" e ");
+  const k = await perguntar({
+    titulo: `Mudar a previsão de ${alvo.length} atividade${alvo.length === 1 ? "" : "s"}?`,
+    texto: `<p>Ficam com ${quero}:</p>${listaNomes(alvo.map((x) => x.a))}
+      ${ini && !fim ? `<p class="note">O fim recalcula-se com a duração normal de cada uma.</p>` : ""}
+      ${fim && !ini ? `<p class="note">O início previsto fica como está.</p>` : ""}
+      ${cedo.length ? `<div class="dlg-av">Atenção: ${cedo.length} ${cedo.length === 1 ? "só pode" : "só podem"} começar mais tarde, porque ${cedo.length === 1 ? "espera" : "esperam"} por outras atividades. Nestas, a aplicação não deixa começar antes da primeira data possível.</div>` : ""}
+      ${fora.length ? `<p class="note">${fora.length} ${fora.length === 1 ? "não é alterada" : "não são alteradas"} (já concluídas, ou o fim ficaria antes do início).</p>` : ""}
+      <p class="note">As atividades seguintes acertam-se sozinhas. Se se enganar, carregue em Anular na mensagem que aparece a seguir.</p>`,
+    opcoes: [{ k: "sim", l: `Sim, mudar ${alvo.length}`, estilo: "pri" }, { k: "nao", l: "Cancelar" }],
+  });
+  if (k !== "sim") return false;
+  const em = new Date().toISOString();
+  const lista = alvo.map(({ a, r, arrancou, novoIni }) => {
+    const patch = { dataOk: true };
+    if (arrancou) {
+      if (ini) patch.inicioPrevisto = ini;
+      if (fim) patch.fimPrevisto = fim;
+    } else {
+      if (novoIni) { patch.inicioPrevisto = novoIni; patch.fimPrevisto = null; patch.duracaoManual = null; }
+      if (fim) { patch.duracaoManual = diffDays(novoIni || r.prevIni, fim); patch.fimPrevisto = null; }
+    }
+    return { id: a.id, patch };
+  });
+  await store.updateMuitas(lista, { tipo: "previsao", texto: `Previsão de ${alvo.length} atividades mudada${ini ? ": início " + fd(ini) : ""}${fim ? (ini ? "," : ":") + " fim " + fd(fim) : ""}` });
+  toast(`Previsão mudada em ${alvo.length} atividade${alvo.length === 1 ? "" : "s"}`);
   return true;
 }
 async function concluirHoje(id) {
