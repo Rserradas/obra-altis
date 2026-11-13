@@ -1685,7 +1685,7 @@ function planoView() {
   };
   const html = `
     <div class="card-h"><h1>Trabalhos</h1><div class="row">
-      ${can("executar") ? `<button class="btn ${atr ? "warn" : ""}" id="pAtr" title="Escolher várias atividades para atribuir equipa, iniciar ou concluir de uma vez">${atr ? "Terminar escolha" : "Concluir ou atribuir várias"}</button>` : ""}
+      ${can("executar") ? `<button class="btn ${atr ? "warn" : ""}" id="pAtr" title="Escolher várias atividades para atribuir equipa, mudar a previsão, iniciar, concluir ou anular o início de uma vez">${atr ? "Terminar escolha" : "Concluir ou atribuir várias"}</button>` : ""}
       ${can("executar") ? `<button class="btn ${ed ? "warn" : ""}" id="pEdit">${ed ? "Terminar edição" : "Editar datas"}</button>` : ""}
       ${can("criar") ? `<button class="btn pri" data-nova="">+ Nova atividade</button>` : ""}</div></div>
     ${ed ? `<div class="banner">Altere as datas e a percentagem diretamente na tabela, ou toque no estado para iniciar ou concluir hoje. Cada alteração fica guardada logo e as atividades que dependem desta acertam-se sozinhas.
@@ -1723,7 +1723,7 @@ function planoView() {
     ${atr ? `<div class="atrbar" id="atrbar">
       <label class="f atr-q">Procurar para escolher<input class="inp" id="atrQ" type="search" value="${esc(p.q)}" placeholder="Ex.: louças B-F503"></label>
       <span class="num"><b>${p.selec.size}</b> escolhida${p.selec.size === 1 ? "" : "s"}</span>
-      <button class="btn sm" id="atrTodas">Escolher as ${shown.length} da lista</button>${p.selec.size ? `<button class="btn sm ghost" id="atrLimpa">Limpar escolha</button>` : ""}
+      <button class="btn sm" id="atrTodas">Escolher as ${shown.length} da lista</button>${p.selec.size ? `<button class="btn sm ghost" id="atrLimpa">Limpar escolha</button>` : ""}<button class="btn sm warn" id="atrFim" title="Fecha esta caixa e volta à lista normal">Terminar escolha</button>
       <span class="atr-g"><label class="f">Equipa<select class="inp" id="atrEq"><option value="">Escolha...</option>${S.equipas.map((e) => `<option ${p.atrEq === e ? "selected" : ""}>${esc(e)}</option>`).join("")}<option value="_sem">Retirar a equipa</option><option value="_nova">+ Nova equipa...</option></select></label>
       <button class="btn pri" id="atrOk" ${p.selec.size ? "" : "disabled"}>Atribuir</button></span>
       <span class="atr-g"><label class="f">Data<input class="inp" type="date" id="atrData" value="${p.atrData || S.hoje}" max="${S.hoje}"></label>
@@ -1790,6 +1790,7 @@ function planoView() {
         const all = $("#atrCkAll"); if (all) all.onclick = () => { const on = all.checked; shown.forEach(({ a }) => marca(a.id, on)); render(); };
         $("#atrTodas").onclick = () => { shown.forEach(({ a }) => p.selec.add(a.id)); render(); };
         const lp = $("#atrLimpa"); if (lp) lp.onclick = () => { p.selec = new Set(); render(); };
+        $("#atrFim").onclick = () => { p.atribuir = false; p.selec = new Set(); render(); };
         const sel = $("#atrEq");
         sel.onchange = () => {
           if (sel.value === "_nova") { sel.value = p.atrEq || ""; openEquipa(null, { aoGravar: (nome) => { p.atrEq = nome; render(); } }); return; }
