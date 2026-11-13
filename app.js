@@ -1605,7 +1605,8 @@ function planoView() {
       default: return true;
     }
   };
-  const q = p.q.trim().toLowerCase();
+  const semAc = (t) => String(t).toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+  const qt = semAc(p.q.trim()).split(/\s+/).filter(Boolean); // várias palavras: todas têm de aparecer, sem ligar a acentos
   // filtros de "onde" e "o quê" (os estados contam-se sobre este conjunto)
   const base = Object.values(S.acts).map((a) => ({ a, r: S.res.get(a.id) })).filter(({ a, r }) => {
     const u = S.uMap[a.unidade];
@@ -1618,7 +1619,7 @@ function planoView() {
     if (p.equipa === "_sem" ? !!a.equipa : p.equipa && a.equipa !== p.equipa) return false;
     if (p.soAtr && !r.atrasada) return false;
     if (esconde && concluida(a, r)) return false;
-    if (q && !(nomeAtiv(a) + " " + a.unidade + " " + a.ref + " " + (a.equipa || "")).toLowerCase().includes(q)) return false;
+    if (qt.length) { const txt = semAc(nomeAtiv(a) + " " + a.unidade + " " + a.ref + " " + (a.equipa || "") + " " + (u.nome || "")); if (!qt.every((t) => txt.includes(t))) return false; }
     return true;
   });
   const conta = Object.fromEntries(ESTADOS.map(([k]) => [k, base.filter(({ r }) => testa(k, r)).length]));
@@ -1720,6 +1721,7 @@ function planoView() {
     </div>
     ${p.f === "porconfirmar" ? `<div class="banner warn"><span>Estas atividades nunca tiveram data. A aplicação deu-lhes a primeira data possível: hoje, ou logo a seguir às anteriores. Corra a lista e, em cada uma, corrija a data (com Editar datas) ou confirme que está certa. Ao mudar uma data, a atividade sai desta lista.</span>${can("executar") && shown.length ? `<button class="btn sm" id="confTodas">Confirmar as ${shown.length} mostradas</button>` : ""}</div>` : ""}
     ${atr ? `<div class="atrbar" id="atrbar">
+      <label class="f atr-q">Procurar para escolher<input class="inp" id="atrQ" type="search" value="${esc(p.q)}" placeholder="Ex.: louças B-F503"></label>
       <span class="num"><b>${p.selec.size}</b> escolhida${p.selec.size === 1 ? "" : "s"}</span>
       <button class="btn sm" id="atrTodas">Escolher as ${shown.length} da lista</button>${p.selec.size ? `<button class="btn sm ghost" id="atrLimpa">Limpar escolha</button>` : ""}
       <span class="atr-g"><label class="f">Equipa<select class="inp" id="atrEq"><option value="">Escolha...</option>${S.equipas.map((e) => `<option ${p.atrEq === e ? "selected" : ""}>${esc(e)}</option>`).join("")}<option value="_sem">Retirar a equipa</option><option value="_nova">+ Nova equipa...</option></select></label>
@@ -1812,7 +1814,8 @@ function planoView() {
         pf.onchange = () => { p.prvFim = pf.value; };
         $("#prvOk").onclick = async () => { if (await previsaoVarias([...p.selec], pi.value, pf.value)) { p.selec = new Set(); p.prvIni = ""; p.prvFim = ""; render(); } };
       }
-      let tm; $("#pq").oninput = (e) => { clearTimeout(tm); tm = setTimeout(() => { p.q = e.target.value; render(); const i = $("#pq"); i.focus(); i.setSelectionRange(i.value.length, i.value.length); }, 300); };
+      let tm; const procura = (sel) => { const el = $(sel); if (el) el.oninput = (e) => { clearTimeout(tm); tm = setTimeout(() => { p.q = e.target.value; render(); const i = $(sel); if (i) { i.focus(); const n = i.value.length; try { i.setSelectionRange(n, n); } catch {} } }, 300); }; };
+      procura("#pq"); procura("#atrQ");
       bindDateInputs(document);
       bindEstadoPct(document);
     },

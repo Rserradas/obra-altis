@@ -1314,3 +1314,4 @@ body.gfull .tabbar, body.gfull .nova-versao { display: none; }
   body.imprimir-gantt .ghead { position: static; }
   body.imprimir-gantt .gantt, body.imprimir-gantt .gantt * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
 }
+.atrbar label.f.atr-q { flex: 1 1 100%; max-width: 420px; }
