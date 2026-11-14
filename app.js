@@ -691,14 +691,14 @@ const pendPasso = (acao, nota) => ({ em: new Date().toISOString(), por: store.us
 const pendRegVivo = (r) => (!r.pend || !r.pid || !!((store.data && store.data.pendentes) || {})[r.pid]) && !r.relApagado; // um relatório eliminado também sai
 const pendReg = (texto) => (store.user.papel === "fiscal" ? { tipo: "vistoria", pend: true, texto } : { tipo: "pendente", texto });
 const PEND_ACAO = { criado: "criou", feito: "marcou como resolvido", fechado: "fechou", confirmado: "confirmou (fiscal)", reaberto: "reabriu", editado: "editou" };
-async function pendCriar(unidade, ativ, texto) {
+async function pendCriar(unidade, ativ, texto, { calado = false } = {}) {
   texto = String(texto || "").trim();
   if (!texto) { toast("Escreva o que está pendente.", { anular: false }); return false; }
   const a = ativ ? S.acts[ativ] : null;
   const doc = { unidade, ativ: ativ || null, texto, estado: "aberto", fiscalOk: false, criadoPor: store.user.email, criadoNome: store.user.nome,
     criadoPapel: store.user.papel, criadoEm: new Date().toISOString(), historico: [pendPasso("criado")] };
   await store.addPendente(doc, pendReg(`${unidade}${a ? ", " + nomeAtiv(a) : ""}: novo pendente "${texto}"`));
-  toast("Pendente registado", { anular: false });
+  if (!calado) toast("Pendente registado", { anular: false });
   return true;
 }
 async function pendAcao(id, acao) {
@@ -743,7 +743,7 @@ function pendItemHTML(x, { mostrarAtiv = true } = {}) {
   const fiscal = store.user.papel === "fiscal";
   const h = x.historico || [];
   return `<div class="pd-i pd-${e.k}">
-    <div class="pd-t"><div class="pd-l1"><span class="pd-e">${e.l}</span>${mostrarAtiv ? (a ? `<button class="lnk-b chip-u" data-a="${a.id}">${esc(nomeAtiv(a))}</button>` : `<span class="chip-u">Fração em geral</span>`) : ""}</div>
+    <div class="pd-t"><div class="pd-l1"><span class="pd-e">${e.l}</span>${mostrarAtiv ? (a ? `<button class="lnk-b chip-u" data-a="${a.id}">${esc(nomeAtiv(a))}</button>` : `<span class="chip-u">${(() => { const u = S.uMap[x.unidade]; return u && (u.tipo === "Zona comum" || u.tipo === "Geral") ? "Em geral" : "Fração em geral"; })()}</span>`) : ""}</div>
       <b class="pd-txt">${esc(x.texto)}</b>
       ${x.ultimaNota ? `<span class="pd-nota">Última nota: ${esc(x.ultimaNota)}</span>` : ""}
       <small>${linhas.join(", ")}.${x.estado !== "aberto" ? " " + fok : ""}</small></div>
@@ -801,36 +801,123 @@ function bindPendentes(root) {
   });
 }
 /* ============================================================ ecrã Pendentes (todos os pendentes da obra) */
+/* Pendentes: blocos e frações que abrem e fecham, filtros, e um pendente novo para uma ou várias frações, zonas comuns ou geral. */
+const PEND_BLOCOS = ["A", "B", "C", "D", "Geral"];
+const rotuloU = (u) => (u.tipo === "Zona comum" ? "Zonas comuns" : u.tipo === "Geral" ? u.nome || "Geral" : /LOJAS$/.test(u.id) ? "Lojas (geral)" : u.id);
+const tipoPend = (u) => (u.tipo === "Apartamento" ? "ap" : u.tipo === "Loja" ? "loja" : u.tipo === "Zona comum" ? "zc" : "geral");
 function pendentesView() {
-  const st = (ui.pendF = ui.pendF || { e: store.user.papel === "empreiteiro" ? "por" : "abertos", bloco: "", q: "" });
+  const st = (ui.pendF = ui.pendF || { e: store.user.papel === "empreiteiro" ? "por" : "abertos", bloco: "", q: "", tipo: "", ativ: "", quem: "" });
+  const ab = (ui.pendAb = ui.pendAb || new Set(PEND_BLOCOS.map((b) => "b:" + b)));
   const todos = pendTodos().filter((x) => S.uMap[x.unidade] && !S.idsTeste.has(x.unidade));
   const EST = [["abertos", "Por fechar", (x) => x.estado !== "fechado"], ["por", "Por resolver", (x) => x.estado === "aberto"], ["esp", "Resolvidos, por verificar", (x) => x.estado === "feito"],
     ["semok", "Fechados sem ok do fiscal", (x) => x.estado === "fechado" && !x.fiscalOk], ["fech", "Fechados", (x) => x.estado === "fechado"], ["todos", "Todos", () => true]];
   const fE = (EST.find(([k]) => k === st.e) || EST[0])[2];
-  const q = st.q.trim().toLowerCase();
-  const lista = todos.filter((x) => fE(x) && (!st.bloco || S.uMap[x.unidade].bloco === st.bloco)
-    && (!q || [x.texto, x.unidade, x.ativ && S.acts[x.ativ] ? nomeAtiv(S.acts[x.ativ]) : ""].join(" ").toLowerCase().includes(q)));
+  const q = semAcento(st.q || "").trim();
+  const nomeA = (x) => (x.ativ && S.acts[x.ativ] ? nomeAtiv(S.acts[x.ativ]) : "");
+  const passaSemEstado = (x) => { const u = S.uMap[x.unidade];
+    return (!st.bloco || u.bloco === st.bloco) && (!st.tipo || tipoPend(u) === st.tipo) && (!st.ativ || (st.ativ === "_fr" ? !nomeA(x) : nomeA(x) === st.ativ))
+      && (!st.quem || x.criadoPapel === st.quem) && (!q || semAcento([x.texto, x.unidade, u.nome || "", nomeA(x), x.ultimaNota || ""].join(" ")).includes(q)); };
+  const lista = todos.filter((x) => fE(x) && passaSemEstado(x));
   const porU = new Map();
   for (const x of lista) (porU.get(x.unidade) || porU.set(x.unidade, []).get(x.unidade)).push(x);
-  const us = ordenaUnidades([...porU.keys()].map((id) => S.uMap[id]));
-  const n = (f) => todos.filter(f).length;
+  const n = (f) => todos.filter((x) => f(x) && passaSemEstado(x)).length;
+  const nomesAtiv = [...new Set(todos.map(nomeA).filter(Boolean))].sort((a, b) => a.localeCompare(b, "pt"));
+  const filtrosOn = st.e !== (store.user.papel === "empreiteiro" ? "por" : "abertos") || st.bloco || st.q || st.tipo || st.ativ || st.quem;
+  const abreTudo = !!q || lista.length <= 6; // com uma procura ou poucos resultados, abre tudo
+  const contaEst = (xs) => { const c = { por: 0, esp: 0, f: 0 }; for (const x of xs) x.estado === "aberto" ? c.por++ : x.estado === "feito" ? c.esp++ : c.f++; return [c.por ? `<span class="pdc por">${c.por} por resolver</span>` : "", c.esp ? `<span class="pdc esp">${c.esp} por verificar</span>` : "", c.f ? `<span class="pdc f">${c.f} fechado${c.f === 1 ? "" : "s"}</span>` : ""].join(""); };
+  const blocos = PEND_BLOCOS.map((b) => ({ b, us: ordenaUnidades([...porU.keys()].map((id) => S.uMap[id]).filter((u) => u.bloco === b)) })).filter((x) => x.us.length);
+  const fracHTML = (u) => { const xs = porU.get(u.id).sort((a, b) => (b.criadoEm || "").localeCompare(a.criadoEm || "")); const k = "u:" + u.id;
+    return `<details class="pd-fr" data-pdab="${esc(k)}" ${abreTudo || ab.has(k) ? "open" : ""}><summary><span class="pd-fr-t">${rotuloU(u) === u.id ? `<b class="mono">${esc(u.id)}</b> <span class="note">${esc(u.tipo)}</span>` : `<b>${esc(rotuloU(u))}</b> <span class="note mono">${esc(u.id)}</span>`}</span><span class="pd-cs">${contaEst(xs)}</span>
+      <span class="pd-fr-ac"><a class="btn sm ghost" href="#u-${esc(u.id)}" data-irpend="${esc(u.id)}">Abrir fração</a><button class="btn sm ghost" data-pdnaqui="${esc(u.id)}">+ Pendente aqui</button></span></summary>
+      <div class="pd-lista">${xs.map((x) => pendItemHTML(x)).join("")}</div></details>`; };
   const html = `
-    <div class="card-h"><h1>Pendentes</h1><span class="note num">${n((x) => x.estado === "aberto")} por resolver · ${n((x) => x.estado === "feito")} resolvidos, por verificar</span></div>
-    <div class="filters">
+    <div class="card-h"><h1>Pendentes</h1><div class="row"><span class="note num">${todos.filter((x) => x.estado === "aberto").length} por resolver · ${todos.filter((x) => x.estado === "feito").length} resolvidos, por verificar</span><button class="btn ${ui.pdNovo && ui.pdNovo.aberto ? "" : "pri"}" id="pdNovoBt">${ui.pdNovo && ui.pdNovo.aberto ? "Fechar" : "+ Novo pendente"}</button></div></div>
+    ${ui.pdNovo && ui.pdNovo.aberto ? pendNovoHTML() : ""}
+    <div class="filters pd-filtros">
       <div class="chips rolar" role="group" aria-label="Estado">${EST.map(([k, l, f]) => `<button class="chip ${st.e === k ? "on" : ""}" data-pe="${k}">${l} <span class="num">${n(f)}</span></button>`).join("")}</div>
-      <div class="chips rolar" role="group" aria-label="Bloco">${["", "A", "B", "C", "D", "Geral"].map((b) => `<button class="chip ${st.bloco === b ? "on" : ""}" data-pbl="${b}">${b === "" ? "Todos os blocos" : b === "Geral" ? "Geral" : "Bloco " + b}</button>`).join("")}</div>
-      <label class="f" style="max-width:420px">Procurar<input class="inp" id="pdq" value="${esc(st.q)}" placeholder="Texto, fração ou atividade"></label>
+      <div class="chips rolar" role="group" aria-label="Bloco">${["", ...PEND_BLOCOS].map((b) => `<button class="chip ${st.bloco === b ? "on" : ""}" data-pbl="${b}">${b === "" ? "Todos os blocos" : b === "Geral" ? "Geral" : "Bloco " + b}</button>`).join("")}</div>
+      <label class="f">Onde<select class="inp" id="pdTipo">${[["", "Todos"], ["ap", "Apartamentos"], ["loja", "Lojas"], ["zc", "Zonas comuns"], ["geral", "Geral"]].map(([k, l]) => `<option value="${k}" ${st.tipo === k ? "selected" : ""}>${l}</option>`).join("")}</select></label>
+      <label class="f">Atividade<select class="inp" id="pdAtiv"><option value="">Todas</option><option value="_fr" ${st.ativ === "_fr" ? "selected" : ""}>Fração em geral</option>${nomesAtiv.map((a) => `<option ${st.ativ === a ? "selected" : ""}>${esc(a)}</option>`).join("")}</select></label>
+      <label class="f">Registado por<select class="inp" id="pdQuem">${[["", "Todos"], ["fiscal", "Fiscal"], ["empreiteiro", "Empreiteiro"], ["dono", "Dono de obra"]].map(([k, l]) => `<option value="${k}" ${st.quem === k ? "selected" : ""}>${l}</option>`).join("")}</select></label>
+      <label class="f pd-q">Procurar<input class="inp" id="pdq" type="search" value="${esc(st.q)}" placeholder="Texto, fração ou atividade"></label>
     </div>
-    ${us.length ? us.map((u) => `<section class="pd-fr"><div class="card-h"><h2><a href="#u-${esc(u.id)}" data-irpend="${esc(u.id)}" class="mono">${esc(u.id)}</a> <span class="note">${esc(u.tipo)}${u.bloco !== "Geral" ? " · " + blocoLabel(u.bloco) : ""}</span></h2><span class="note num">${porU.get(u.id).length}</span></div>
-      <div class="pd-lista">${porU.get(u.id).sort((a, b) => (b.criadoEm || "").localeCompare(a.criadoEm || "")).map((x) => pendItemHTML(x)).join("")}</div></section>`).join("")
-      : `<div class="empty">${todos.length ? `Nenhum pendente com estes filtros. ${st.e !== "abertos" || st.bloco || q ? `<button class="btn sm" id="pdclr">Limpar filtros</button>` : ""}` : "Ainda não há pendentes. Registe-os na página de cada fração, no separador Pendentes, ou na vistoria."}</div>`}`;
+    <div class="pd-barra"><span class="note num">${lista.length} pendente${lista.length === 1 ? "" : "s"} em ${porU.size} ${porU.size === 1 ? "sítio" : "sítios"}</span>
+      ${lista.length ? `<button class="btn sm" data-pdtudo="1">Abrir tudo</button><button class="btn sm" data-pdtudo="0">Fechar tudo</button>` : ""}${filtrosOn ? `<button class="btn sm repor-on" id="pdclr">Limpar filtros</button>` : ""}</div>
+    ${blocos.length ? blocos.map(({ b, us }) => { const xs = us.flatMap((u) => porU.get(u.id)); const k = "b:" + b;
+      return `<details class="pd-bl" data-pdab="${k}" ${abreTudo || ab.has(k) ? "open" : ""}><summary><h2>${b === "Geral" ? "Geral" : "Bloco " + b}</h2><span class="note num">${pl(xs.length, "pendente", "pendentes")} em ${pl(us.length, "sítio", "sítios")}</span><span class="pd-cs">${contaEst(xs)}</span></summary>
+        <div class="pd-bl-in">${us.map(fracHTML).join("")}</div></details>`; }).join("")
+      : `<div class="empty">${todos.length ? `Nenhum pendente com estes filtros. ${filtrosOn ? `<button class="btn sm" id="pdclr2">Limpar filtros</button>` : ""}` : "Ainda não há pendentes. Carregue em + Novo pendente para registar o primeiro."}</div>`}`;
   return { html, bind: () => {
-    bindCommon(); bindPendentes(document.querySelector("#view"));
+    bindCommon(); bindPendentes(document.querySelector("#view")); bindPendNovo();
     document.querySelectorAll("[data-pe]").forEach((b) => (b.onclick = () => { st.e = b.dataset.pe; render(); }));
     document.querySelectorAll("[data-pbl]").forEach((b) => (b.onclick = () => { st.bloco = b.dataset.pbl; render(); }));
-    const qi = $("#pdq"); let t; if (qi) qi.oninput = () => { clearTimeout(t); t = setTimeout(() => { st.q = qi.value; render(); const n2 = $("#pdq"); if (n2) { n2.focus(); n2.setSelectionRange(n2.value.length, n2.value.length); } }, 300); };
-    const c = $("#pdclr"); if (c) c.onclick = () => { ui.pendF = null; render(); };
+    [["#pdTipo", "tipo"], ["#pdAtiv", "ativ"], ["#pdQuem", "quem"]].forEach(([sel, k]) => { const el = $(sel); if (el) el.onchange = () => { st[k] = el.value; render(); }; });
+    const qi = $("#pdq"); let tm; if (qi) qi.oninput = () => { clearTimeout(tm); tm = setTimeout(() => { st.q = qi.value; render(); const n2 = $("#pdq"); if (n2) { n2.focus(); n2.setSelectionRange(n2.value.length, n2.value.length); } }, 300); };
+    ["#pdclr", "#pdclr2"].forEach((s) => { const c = $(s); if (c) c.onclick = () => { ui.pendF = null; render(); }; });
+    // abrir e fechar: fica lembrado enquanto a aplicação está aberta
+    document.querySelectorAll("details[data-pdab]").forEach((d) => (d.ontoggle = () => { if (d.open) ab.add(d.dataset.pdab); else ab.delete(d.dataset.pdab); }));
+    document.querySelectorAll("[data-pdtudo]").forEach((b) => (b.onclick = () => {
+      const abrir = b.dataset.pdtudo === "1";
+      document.querySelectorAll("details[data-pdab]").forEach((d) => { d.open = abrir; if (abrir) ab.add(d.dataset.pdab); else ab.delete(d.dataset.pdab); });
+    }));
+    document.querySelectorAll("[data-pdnaqui]").forEach((b) => (b.onclick = (e) => { e.preventDefault(); e.stopPropagation(); ui.pdNovo = { ...(ui.pdNovo || { t: "", esp: "" }), aberto: true, us: new Set([b.dataset.pdnaqui]) }; render(); window.scrollTo(0, 0); const i = $("#pdnT"); if (i) i.focus(); }));
+    const nb = $("#pdNovoBt"); if (nb) nb.onclick = () => { ui.pdNovo = { t: "", esp: "", us: new Set(), ...(ui.pdNovo || {}), aberto: !(ui.pdNovo && ui.pdNovo.aberto) }; render(); const i = $("#pdnT"); if (i) i.focus(); };
   } };
+}
+/** Formulário de um pendente novo para uma ou várias frações, zonas comuns ou geral. */
+function pendNovoHTML() {
+  const d = ui.pdNovo;
+  d.us = d.us || new Set();
+  const porB = PEND_BLOCOS.map((b) => ({ b, us: ordenaUnidades(S.unidades.filter((u) => u.bloco === b)) })).filter((x) => x.us.length);
+  const escolhidas = [...d.us].map((id) => S.uMap[id]).filter(Boolean);
+  const nomes = [...new Set(escolhidas.flatMap((u) => u.acts.map(nomeAtiv)))].sort((a, b) => a.localeCompare(b, "pt"));
+  if (d.esp && !nomes.includes(d.esp)) d.esp = "";
+  const semAtiv = d.esp ? escolhidas.filter((u) => !u.acts.some((a) => nomeAtiv(a) === d.esp)).length : 0;
+  ui.pdnAb = ui.pdnAb || new Set();
+  return `<section class="card pdn" id="pdNovo">
+    <div class="card-h"><h2>Novo pendente</h2></div>
+    <label class="f">O que está pendente<textarea class="inp" id="pdnT" rows="2" maxlength="300" placeholder="Ex.: falta silicone nas janelas dos quartos">${esc(d.t || "")}</textarea></label>
+    <div class="pdn-onde"><div class="pdn-h"><b>Onde</b> <span class="note">escolha uma ou várias frações, as zonas comuns ou o geral</span>
+      <span class="pdn-atalhos"><button type="button" class="btn sm" data-pdnzc>Todas as zonas comuns</button>${d.us.size ? `<button type="button" class="btn sm ghost" data-pdnlimpa>Tirar todas</button>` : ""}</span></div>
+      ${porB.map(({ b, us }) => { const nSel = us.filter((u) => d.us.has(u.id)).length; const fr = us.filter((u) => u.tipo === "Apartamento" || u.tipo === "Loja");
+        return `<details class="pdn-b" data-pdnab="${b}" ${ui.pdnAb.has(b) || (nSel && nSel < 12) ? "open" : ""}><summary><b>${b === "Geral" ? "Geral" : "Bloco " + b}</b>${nSel ? ` <span class="pdn-n">${nSel} escolhida${nSel === 1 ? "" : "s"}</span>` : ""}
+          ${fr.length ? `<button type="button" class="btn sm ghost" data-pdnbl="${b}">${fr.every((u) => d.us.has(u.id)) ? "Tirar as frações" : `Todas as frações (${fr.length})`}</button>` : ""}</summary>
+          <div class="chips">${us.map((u) => `<button type="button" class="chip ${d.us.has(u.id) ? "on" : ""} ${u.tipo === "Zona comum" || u.tipo === "Geral" ? "zc" : ""}" data-pdnu="${esc(u.id)}" aria-pressed="${d.us.has(u.id)}">${esc(rotuloU(u))}</button>`).join("")}</div></details>`; }).join("")}
+    </div>
+    <div class="pdn-fim">
+      <label class="f">Atividade <span class="note">(opcional)</span><select class="inp" id="pdnA" ${escolhidas.length ? "" : "disabled"}><option value="">${escolhidas.length === 1 ? "Fração em geral" : "Em geral, em cada sítio"}</option>${nomes.map((a) => `<option ${d.esp === a ? "selected" : ""}>${esc(a)}</option>`).join("")}</select></label>
+      <button class="btn pri" id="pdnOk" ${escolhidas.length ? "" : "disabled"}>${escolhidas.length > 1 ? `Registar em ${escolhidas.length} sítios` : "Registar pendente"}</button>
+    </div>
+    ${semAtiv ? `<p class="note" style="margin:0">Em ${pl(semAtiv, "sítio escolhido não há", "sítios escolhidos não há")} ${esc(d.esp)}: aí o pendente fica em geral.</p>` : ""}
+    ${escolhidas.length > 1 ? `<p class="note" style="margin:0">Fica um pendente em cada sítio, para cada um ser resolvido e fechado à parte.</p>` : ""}
+  </section>`;
+}
+function bindPendNovo() {
+  const d = ui.pdNovo; const box = $("#pdNovo");
+  if (!d || !box) return;
+  const t = $("#pdnT"); t.oninput = () => (d.t = t.value);
+  const re = () => { const y = window.scrollY; render(); window.scrollTo(0, y); };
+  box.querySelectorAll("[data-pdnu]").forEach((b) => (b.onclick = () => { const id = b.dataset.pdnu; d.us.has(id) ? d.us.delete(id) : d.us.add(id); re(); }));
+  box.querySelectorAll("[data-pdnbl]").forEach((b) => (b.onclick = (e) => { e.preventDefault(); const bl = b.dataset.pdnbl; const fr = S.unidades.filter((u) => u.bloco === bl && (u.tipo === "Apartamento" || u.tipo === "Loja")); const tudo = fr.every((u) => d.us.has(u.id)); fr.forEach((u) => (tudo ? d.us.delete(u.id) : d.us.add(u.id))); ui.pdnAb.add(bl); re(); }));
+  const zc = box.querySelector("[data-pdnzc]"); if (zc) zc.onclick = () => { S.unidades.filter((u) => u.tipo === "Zona comum").forEach((u) => d.us.add(u.id)); re(); };
+  const lp = box.querySelector("[data-pdnlimpa]"); if (lp) lp.onclick = () => { d.us.clear(); re(); };
+  box.querySelectorAll("details[data-pdnab]").forEach((x) => (x.ontoggle = () => { if (x.open) ui.pdnAb.add(x.dataset.pdnab); else ui.pdnAb.delete(x.dataset.pdnab); }));
+  const sa = $("#pdnA"); if (sa) sa.onchange = () => { d.esp = sa.value; re(); };
+  const ok = $("#pdnOk"); if (ok) ok.onclick = async () => {
+    const texto = (t.value || "").trim();
+    if (!texto) { toast("Escreva o que está pendente.", { anular: false }); t.focus(); return; }
+    const us = ordenaUnidades([...d.us].map((id) => S.uMap[id]).filter(Boolean));
+    if (!us.length) { toast("Escolha onde fica o pendente.", { anular: false }); return; }
+    ok.disabled = true;
+    for (const u of us) {
+      const a = d.esp ? u.acts.find((x) => nomeAtiv(x) === d.esp && S.res.get(x.id).estado !== "concluida") || u.acts.find((x) => nomeAtiv(x) === d.esp) : null;
+      await pendCriar(u.id, a ? a.id : null, texto, { calado: true });
+    }
+    toast(us.length === 1 ? `Pendente registado em ${rotuloU(us[0]) === us[0].id ? us[0].id : rotuloU(us[0]) + " (" + us[0].id + ")"}` : `Pendente registado em ${us.length} sítios`, { anular: false });
+    for (const u of us) { (ui.pendAb = ui.pendAb || new Set()).add("u:" + u.id); ui.pendAb.add("b:" + u.bloco); }
+    ui.pdNovo = { aberto: false, t: "", esp: "", us: new Set() };
+    render();
+  };
 }
 /* ============================================================ precisa de atenção (painel e semana) */
 /** Quantas atividades por concluir dependem desta, direta ou indiretamente. */
@@ -3476,7 +3563,7 @@ const AJUDA_ECRA = {
   equipa: "As contas de quem usa a aplicação e o perfil de cada uma. O perfil define o que cada pessoa pode ver e fazer.",
   vistorias: "As vistorias guardadas pelo fiscal, dia a dia. Escolha os dias para ver o relatório, imprimi-lo ou guardá-lo em PDF. O fiscal pode eliminar os seus relatórios e o dono de obra qualquer um; as percentagens das atividades ficam como estão.",
   relatorio: "Um resumo da obra para levar à reunião. Pode imprimir ou guardar em PDF.",
-  pendentes: "Todos os pendentes da obra, por fração. O empreiteiro marca aqui o que já resolveu; o fiscal verifica na vistoria e carrega em Concluído?. Para registar um pendente novo, abra a fração.",
+  pendentes: "Todos os pendentes da obra, por bloco e por fração. Toque num bloco ou numa fração para abrir ou fechar. Em + Novo pendente escreve o pendente e escolhe onde fica: uma ou várias frações, as zonas comuns ou o geral, e se quiser a atividade. O empreiteiro marca aqui o que já resolveu; o fiscal verifica na vistoria e carrega em Concluído?.",
 };
 function ajudaEcra() {
   let h = location.hash.replace("#", "").split("?")[0];
