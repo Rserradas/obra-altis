@@ -1422,3 +1422,9 @@ body.gfull .tabbar, body.gfull .nova-versao { display: none; }
 .fq-fr .inp { width: auto; min-height: 34px; padding-top: 4px; padding-bottom: 4px; }
 .fq-frn { margin: 0 0 4px; }
 @media (max-width: 640px) { .fq-fr { width: 100%; } .fq-fr .inp { flex: 1; } }
+
+/* Relatórios de vistoria: eliminar */
+.vd-ac { display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
+.vd-del { color: var(--crit); }
+.vd-del:hover { border-color: var(--crit); }
+@media (max-width: 760px) { .vdia .vd-ac { grid-column: 2; justify-self: start; } }

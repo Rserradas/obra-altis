@@ -201,6 +201,14 @@ export class DemoStore extends Emitter {
     this.emit("fotos", foto.unidade);
   }
   async getRegistos(ativ) { return this.state.registos.filter((r) => r.ativ === ativ).sort((a, b) => b.em.localeCompare(a.em)); }
+  /** Muda campos de vários registos (ex.: marcar um relatório de vistoria como eliminado). */
+  async marcarRegistos(ids, patch, registo) {
+    const set = new Set(ids);
+    for (const r of this.state.registos) if (set.has(r.id)) Object.assign(r, patch);
+    if (registo) this._reg(null, null, registo);
+    this._save();
+    this.emit("data");
+  }
   async getRegistosDesde(iso) { return this.state.registos.filter((r) => r.em >= iso).sort((a, b) => b.em.localeCompare(a.em)); }
   async getRegistosTipo(tipo) { return this.state.registos.filter((r) => r.tipo === tipo).sort((a, b) => b.em.localeCompare(a.em)); }
   async getFotosEntre(ini, fim) { return this.state.fotos.filter((f) => f.em >= ini && f.em < fim); }
@@ -381,6 +389,18 @@ export class CloudStore extends Emitter {
       if (i === 0 && registo) b.set(fb.doc(fb.collection(this.db, "registos")), this._regDoc(lista.length === 1 ? lista[0].id : null, null, registo));
       b.commit().catch((e) => this._erro(e, true));
     }
+    this.emit("data");
+  }
+  /** Muda campos de vários registos (ex.: marcar um relatório de vistoria como eliminado). */
+  async marcarRegistos(ids, patch, registo) {
+    const fb = this.fb;
+    for (let i = 0; i < ids.length; i += 400) {
+      const b = fb.writeBatch(this.db);
+      for (const id of ids.slice(i, i + 400)) b.update(fb.doc(this.db, "registos", id), patch);
+      if (i === 0 && registo) b.set(fb.doc(fb.collection(this.db, "registos")), this._regDoc(null, null, registo));
+      await b.commit().catch((e) => this._erro(e, true));
+    }
+    for (const r of this.state.registos) if (ids.includes(r.id)) Object.assign(r, patch);
     this.emit("data");
   }
   async setConfig(patch, registo) {

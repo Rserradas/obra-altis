@@ -688,7 +688,7 @@ function pedirTexto({ titulo, texto, placeholder = "", sim = "Guardar", obrigato
 const pendPasso = (acao, nota) => ({ em: new Date().toISOString(), por: store.user.email, nome: store.user.nome, papel: store.user.papel, acao, ...(nota ? { nota } : {}) });
 /** O que o fiscal faz num pendente conta como vistoria: fica no registo de vistorias e aparece no relatório desse dia. */
 /** Registos de pendentes de um pendente que entretanto foi apagado deixam de contar. */
-const pendRegVivo = (r) => !r.pend || !r.pid || !!((store.data && store.data.pendentes) || {})[r.pid];
+const pendRegVivo = (r) => (!r.pend || !r.pid || !!((store.data && store.data.pendentes) || {})[r.pid]) && !r.relApagado; // um relatório eliminado também sai
 const pendReg = (texto) => (store.user.papel === "fiscal" ? { tipo: "vistoria", pend: true, texto } : { tipo: "pendente", texto });
 const PEND_ACAO = { criado: "criou", feito: "marcou como resolvido", fechado: "fechou", confirmado: "confirmou (fiscal)", reaberto: "reabriu", editado: "editou" };
 async function pendCriar(unidade, ativ, texto) {
@@ -1340,7 +1340,7 @@ async function resumoSemana() {
   const el = $("#semanaRes"); if (!el) return;
   const desde = new Date(Date.now() - 7 * 86400000).toISOString();
   let regs = [];
-  try { regs = await store.getRegistosDesde(desde); } catch (e) { el.querySelector(".note:last-child").textContent = "Não foi possível carregar."; return; }
+  try { regs = (await store.getRegistosDesde(desde)).filter((r) => !r.relApagado); } catch (e) { el.querySelector(".note:last-child").textContent = "Não foi possível carregar."; return; }
   const c = (t) => regs.filter((r) => r.tipo === t).length;
   const concl = regs.filter((r) => r.tipo === "conclusao");
   const h = S.cfg.historico || [];
@@ -1695,7 +1695,7 @@ const vistCorrDia = () => (ui.vistCorr && ui.vistCorr.dia && ui.vistCorr.dia < S
 async function carregarHistVist(forcar) {
   if (ui.vistHist && !forcar && ui.vistHist.por === store.user.email) return ui.vistHist;
   let regs = [];
-  try { regs = (await store.getRegistosTipo("vistoria")).filter((r) => !r.pend && r.em); } catch (e) { regs = ui.vistHist ? ui.vistHist.regs : []; }
+  try { regs = (await store.getRegistosTipo("vistoria")).filter((r) => !r.pend && r.em && !r.relApagado); } catch (e) { regs = ui.vistHist ? ui.vistHist.regs : []; }
   ui.vistHist = { por: store.user.email, regs };
   return ui.vistHist;
 }
@@ -3474,7 +3474,7 @@ const AJUDA_ECRA = {
   equipas: "As equipas de trabalho da obra, com o que cada uma pode fazer. Abra uma equipa para ver os seus trabalhos, editar os dados ou tirá-la da obra.",
   planequipa: "A ordem em que cada equipa vai fazer os seus trabalhos. Por defeito, uma equipa faz um trabalho de cada vez, por isso a ordem mexe nas datas. Em Frentes diz quantos trabalhos a equipa faz ao mesmo tempo, e em cada linha pode marcar Ao mesmo tempo que o de cima (por exemplo, a mesma pintura em vários apartamentos). Os filtros mostram só parte da fila; o resumo de cima é sempre da fila toda.",
   equipa: "As contas de quem usa a aplicação e o perfil de cada uma. O perfil define o que cada pessoa pode ver e fazer.",
-  vistorias: "As vistorias guardadas pelo fiscal, dia a dia. Escolha os dias para ver o relatório, imprimi-lo ou guardá-lo em PDF.",
+  vistorias: "As vistorias guardadas pelo fiscal, dia a dia. Escolha os dias para ver o relatório, imprimi-lo ou guardá-lo em PDF. O fiscal pode eliminar os seus relatórios e o dono de obra qualquer um; as percentagens das atividades ficam como estão.",
   relatorio: "Um resumo da obra para levar à reunião. Pode imprimir ou guardar em PDF.",
   pendentes: "Todos os pendentes da obra, por fração. O empreiteiro marca aqui o que já resolveu; o fiscal verifica na vistoria e carrega em Concluído?. Para registar um pendente novo, abra a fração.",
 };
@@ -4085,6 +4085,35 @@ function resumoVistorias(regs) {
   }
   return [...dias.values()].sort((a, b) => b.dia.localeCompare(a.dia) || a.nome.localeCompare(b.nome));
 }
+/** O dono de obra elimina qualquer relatório; o fiscal, os seus. */
+const podeEliminarRel = (x) => store.user.papel === "dono" || store.admin || (store.user.papel === "fiscal" && x.por === store.user.email);
+/**
+ * Elimina o relatório de vistoria de um dia: os registos desse dia saem da lista e dos relatórios (com Anular).
+ * As percentagens das atividades ficam como estão. As fotografias desse dia só saem se a pessoa o escolher (não dá para anular).
+ */
+async function eliminarRelatorio(x) {
+  const ini = new Date(x.dia + "T00:00:00").toISOString(), fim = new Date(new Date(x.dia + "T00:00:00").getTime() + 86400000).toISOString();
+  let fotos = [];
+  try { fotos = (await store.getFotosEntre(ini, fim)).filter((f) => f.por === x.por && (store.user.papel === "dono" || store.admin || f.por === store.user.email)); } catch (e) { fotos = []; }
+  const ids = x.regs.map((r) => r.id).filter(Boolean);
+  const k = await perguntar({
+    titulo: `Eliminar o relatório de ${diaNome(x.dia)}?`,
+    texto: `<p>A vistoria de <b>${esc(x.nome)}</b> nesse dia sai da lista e deixa de aparecer nos relatórios: ${pl(x.us.size, "fração", "frações")}, ${pl(x.ativs.size, "especialidade", "especialidades")}.</p>
+      <p class="note">As percentagens das atividades ficam como estão: só o relatório é eliminado. Os pendentes também ficam como estão.</p>
+      ${fotos.length ? `<p class="note">Há ${pl(fotos.length, "fotografia", "fotografias")} desse dia. ${fotos.length === 1 ? "Pode mantê-la nas frações ou apagá-la também; apagar a fotografia" : "Pode mantê-las nas frações ou apagá-las também; apagar as fotografias"} não se pode anular.</p>` : ""}`,
+    opcoes: [{ k: "sim", l: "Eliminar o relatório", estilo: "warn" }, ...(fotos.length ? [{ k: "fotos", l: fotos.length === 1 ? "Eliminar o relatório e a fotografia" : `Eliminar o relatório e as ${fotos.length} fotografias` }] : []), { k: "nao", l: "Cancelar" }],
+  });
+  if (k !== "sim" && k !== "fotos") return false;
+  const marca = { relApagado: new Date().toISOString(), relApagadoPor: store.user.email };
+  await store.marcarRegistos(ids, marca, { tipo: "relatorio", texto: `Eliminou o relatório de vistoria de ${fd(x.dia, true)} (${x.nome})` });
+  if (k === "fotos") for (const f of fotos) await store.removeFoto(f, null);
+  toast(`Relatório de ${fd(x.dia, true)} eliminado${k === "fotos" ? `, com ${pl(fotos.length, "fotografia", "fotografias")}` : ""}`, {
+    anular: false,
+    acao: { label: "Anular", fn: async () => { await store.marcarRegistos(ids, { relApagado: null, relApagadoPor: null }, { tipo: "relatorio", texto: `Repôs o relatório de vistoria de ${fd(x.dia, true)} (${x.nome})` }); toast(`Relatório de ${fd(x.dia, true)} reposto${k === "fotos" ? ". As fotografias apagadas não voltam" : ""}`, { anular: false }); if (location.hash === "#vistorias") render(); } },
+  });
+  ui.vistHist = null;
+  return true;
+}
 function vistoriasView() {
   const st = (ui.vistLista = ui.vistLista || { por: store.user.papel === "fiscal" ? store.user.email : "", sel: null });
   const html = `
@@ -4109,13 +4138,18 @@ function vistoriasView() {
               <input type="checkbox" data-vd="${esc(k)}" ${st.sel.has(k) ? "checked" : ""}>
               <span class="vd-t"><b>${diaNome(x.dia)}</b><small>${esc(x.nome)} · ${hora(x.regs[x.regs.length - 1].em)} a ${hora(x.regs[0].em)}</small></span>
               <span class="vd-n num"><span><b>${x.us.size}</b> ${x.us.size === 1 ? "fração" : "frações"}</span><span><b>${x.ativs.size}</b> ${x.ativs.size === 1 ? "especialidade" : "especialidades"}</span><span><b>${x.fotos}</b> ${x.fotos === 1 ? "fotografia" : "fotografias"}</span><span><b>${x.coments}</b> ${x.coments === 1 ? "comentário" : "comentários"}</span>${x.pends ? `<span><b>${x.pends}</b> ${x.pends === 1 ? "pendente" : "pendentes"}</span>` : ""}</span>
-              <button class="btn sm" data-vd1="${esc(k)}">Ver só este dia</button></label>`; }).join("")}</div>
+              <span class="vd-ac"><button class="btn sm" data-vd1="${esc(k)}">Ver só este dia</button>${podeEliminarRel(x) ? `<button class="btn sm ghost vd-del" data-vdel="${esc(k)}" title="Eliminar este relatório">Eliminar</button>` : ""}</span></label>`; }).join("")}</div>
             <div class="vdbar"><span class="num"><b>${n}</b> ${n === 1 ? "dia escolhido" : "dias escolhidos"}</span><button class="btn pri" id="vdVer" ${n ? "" : "disabled"}>Ver relatório</button></div>`
           : `<div class="empty">Ainda não há vistorias guardadas${st.por ? " deste fiscal" : ""}. Quando o fiscal guardar uma vistoria num apartamento, aparece aqui.</div>`}`;
         const fp = $("#vfPor"); if (fp) fp.onchange = () => { st.por = fp.value; st.sel = null; desenha(); };
         box.querySelectorAll("[data-vd]").forEach((c) => (c.onchange = () => { c.checked ? st.sel.add(c.dataset.vd) : st.sel.delete(c.dataset.vd); desenha(); }));
         const abrir = (ks) => { ui.relVist = { chaves: ks }; location.hash = "#relvist"; };
         box.querySelectorAll("[data-vd1]").forEach((b) => (b.onclick = (e) => { e.preventDefault(); e.stopPropagation(); abrir([b.dataset.vd1]); }));
+        box.querySelectorAll("[data-vdel]").forEach((b) => (b.onclick = async (e) => {
+          e.preventDefault(); e.stopPropagation();
+          const x = todos.find((y) => y.dia + "|" + y.por === b.dataset.vdel);
+          if (x && (await eliminarRelatorio(x))) { st.sel = null; render(); }
+        }));
         const vv = $("#vdVer"); if (vv) vv.onclick = () => abrir([...st.sel].filter((k) => lista.some((x) => x.dia + "|" + x.por === k)));
       };
       desenha();
