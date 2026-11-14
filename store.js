@@ -187,9 +187,9 @@ export class DemoStore extends Emitter {
     this._save();
     this.emit("data");
   }
-  async addFoto(ativ, unidade, dataUrl, nota) {
+  async addFoto(ativ, unidade, dataUrl, nota, em) { // em: dia de uma vistoria passada que se está a corrigir
     this.state.fotos.push({ id: "f" + Date.now() + Math.random().toString(36).slice(2, 6), ativ, unidade, data: dataUrl, nota: nota || "",
-      por: this.user.email, nomePor: this.user.nome, em: nowISO() });
+      por: this.user.email, nomePor: this.user.nome, em: em || nowISO() });
     this._save();
     this.emit("fotos", unidade);
   }
@@ -450,9 +450,9 @@ export class CloudStore extends Emitter {
     delete this.state.pendentes[id];
     this.emit("data");
   }
-  async addFoto(ativ, unidade, dataUrl, nota) {
+  async addFoto(ativ, unidade, dataUrl, nota, em) { // em: dia de uma vistoria passada que se está a corrigir
     const fb = this.fb;
-    fb.addDoc(fb.collection(this.db, "fotos"), { ativ, unidade, data: dataUrl, nota: nota || "", por: this.user.email, nomePor: this.user.nome, em: nowISO() })
+    fb.addDoc(fb.collection(this.db, "fotos"), { ativ, unidade, data: dataUrl, nota: nota || "", por: this.user.email, nomePor: this.user.nome, em: em || nowISO() })
       .catch((e) => this._erro(e));
     this.emit("fotos", unidade);
   }

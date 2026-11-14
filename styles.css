@@ -1396,3 +1396,13 @@ body.gfull .tabbar, body.gfull .nova-versao { display: none; }
 }
 @media print { .sg-alvo, .sg-eqs + .note, [data-sgtodos] { display: none !important; } }
 .sg-mais { align-self: flex-start; width: auto; margin-top: 6px; }
+
+/* Corrigir uma vistoria passada */
+.vcorr-sel { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: flex-end; }
+.vcorr-sel .f { flex: 0 1 380px; min-width: 0; }
+.vcorr-sel .note { padding-bottom: 10px; }
+.vcorr-b { margin: 0; }
+.vcorr-n { color: var(--warn); }
+.vcorr-n.nao { color: var(--muted); font-style: italic; }
+.rv-corr { display: inline-block; font-size: .78rem; font-weight: 600; color: var(--warn); background: var(--warn-soft); border-radius: 4px; padding: 0 6px; }
+@media print { .rv-corr { background: none; border: 1px solid currentColor; } }

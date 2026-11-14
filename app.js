@@ -1495,7 +1495,10 @@ function unidadeView(id) {
     <span class="legend" style="margin-left:auto"><span><i class="dot st-concluida"></i>Concluída</span><span><i class="dot st-em_curso"></i>Em curso</span><span><i class="dot st-bloqueada"></i>Bloqueada</span><span><i class="dot st-por_iniciar"></i>Por iniciar</span><span><i class="dot st-por_iniciar atr"></i>Atrasada</span></span></div>`;
   const temMud = (v) => v.pct != null || (v.fotos && v.fotos.length) || (v.coment && v.coment.trim());
   // vista: já mexeu nesta vistoria, ou já foi vistoriada hoje
-  const vista = (a) => { const v = ui.vistoria[a.id]; return !!(v && (temMud(v) || v.confirmado)) || !!(a.fiscalEm && diaLocal(a.fiscalEm) === S.hoje); };
+  // a corrigir uma vistoria passada: "vista" é o que ficou registado nesse dia
+  const corrDia = fiscal ? vistCorrDia() : "";
+  const regsDia = corrDia ? regsDoDia(u.id, corrDia) : {};
+  const vista = (a) => { const v = ui.vistoria[a.id]; return !!(v && (temMud(v) || v.confirmado)) || (corrDia ? !!regsDia[a.id] : !!(a.fiscalEm && diaLocal(a.fiscalEm) === S.hoje)); };
   const nVistas = visiveis.filter(vista).length;
   const rowsVist = visiveis.map((a) => {
     const r = S.res.get(a.id);
@@ -1507,7 +1510,8 @@ function unidadeView(id) {
     return `<div class="vrow ${vista(a) ? "vista" : ""}" id="vr-${a.id}">
       <div class="nm" style="display:flex;flex-direction:column;gap:3px;min-width:0"><b style="overflow-wrap:anywhere">${vista(a) ? `<span class="vok" aria-label="Vista">✓</span> ` : ""}${esc(nomeAtiv(a))}</b>
         <small class="muted">Empreiteiro diz ${Math.round(a.pctEmp ?? 0)}% · <span class="pill st-${r.estado}" style="font-size:.7rem">${ESTADO[r.estado]}</span>${a.fiscalEm ? ` · última vistoria ${fdt(a.fiscalEm)}` : ""}</small>
-        ${a.fiscalNota ? `<small class="vult">Último comentário: ${esc(a.fiscalNota)}</small>` : ""}</div>
+        ${a.fiscalNota ? `<small class="vult">Último comentário: ${esc(a.fiscalNota)}</small>` : ""}
+        ${corrDia ? `<small class="vcorr-n ${regsDia[a.id] ? "" : "nao"}">${regsDia[a.id] ? `A ${fd(corrDia)} ficou ${(() => { const d = regsDia[a.id].dados || {}; return [d.depois != null ? `<b>${d.depois}%</b>` : "sem percentagem", d.nota ? "com comentário" : "", d.nfotos ? pl(d.nfotos, "fotografia", "fotografias") : ""].filter(Boolean).join(", "); })()}` : `A ${fd(corrDia)} não foi registada`}</small>` : ""}</div>
       <div class="ctl">
         <button type="button" class="btn sm ${comAberto ? "on-c" : ""}" data-vc="${a.id}" title="Escrever comentário" aria-label="Comentário">${ICON.coment}</button>
         <button type="button" class="btn sm vpd ${npA ? "tem" : ""}" data-vpd="${a.id}" title="Registar um pendente nesta atividade" aria-label="Pendente">${ICON.pendentes}${npA ? `<span class="num">${npA}</span>` : ""}</button>
@@ -1552,15 +1556,16 @@ function unidadeView(id) {
           <button class="btn sm" data-pdabrir>${(ui.pdFormAberto || {})[u.id] ? "Fechar" : "+ Novo pendente"}</button></div>
         ${pendVist.length ? `<p class="note" style="margin:0">Se já está bem, carregue em «Concluído?»; se não, em «Ainda não está».</p><div class="pd-lista">${pendListaHTML(pendVist, { semFechados: true, resolvidosPrimeiro: true })}</div>` : ""}
         ${(ui.pdFormAberto || {})[u.id] ? pendFormHTML(u.id) : ""}</section>
+      ${vistDiaHTML(u.id, corrDia)}
       <label class="f">Nota da vistoria (opcional)<input class="inp" id="vnota" value="${esc(ui.vnota || "")}" placeholder="Ex.: humidade no teto do WC, falta silicone na base de duche"></label>
       ${barraConc}
       <div class="arows">${rowsVist || `<div class="empty">Tudo concluído nesta fração.</div>`}</div>
       <h3 style="margin-top:6px">Fotografias desta fração</h3>
       <p class="note" style="margin:0">Toque no × para apagar uma fotografia já guardada (só as suas, ou todas se for o dono de obra).</p>
       <div id="vfotos" class="photos"><div class="note">A carregar fotografias...</div></div>
-      <div class="row" style="justify-content:flex-end"><button class="btn sm" data-relhoje>Ver o relatório de hoje</button></div>
+      <div class="row" style="justify-content:flex-end"><button class="btn sm" data-relhoje>${corrDia ? `Ver o relatório de ${fd(corrDia)}` : "Ver o relatório de hoje"}</button></div>
       <div class="vbar"><span class="vb-l"><b class="num" id="vvis">Vistas ${nVistas} de ${visiveis.length}</b>${nVistas < visiveis.length ? `<button class="btn sm ghost vb-seg" id="vseg" title="Ir para a próxima especialidade por ver">Seguinte ›</button>` : ""}</span>
-        <button class="btn pri" id="vsave" ${nChg ? "" : "disabled"}>${nChg ? `Guardar (${nChg})` : "Nada por guardar"}</button></div>`
+        <button class="btn pri" id="vsave" ${nChg ? "" : "disabled"}>${nChg ? `${corrDia ? "Guardar correção" : "Guardar"} (${nChg})` : "Nada por guardar"}</button></div>`
       : tab === "pend" ? `<p class="note" style="margin:0">Pontos por resolver nesta fração, à vista de todos. O empreiteiro marca como resolvido e o fiscal verifica na vistoria seguinte.</p>
         ${pendFormHTML(u.id)}
         <div class="pd-lista">${pendListaHTML(pendDe(u.id))}</div>`
@@ -1598,7 +1603,7 @@ function bindUnidade(u) {
     const contar = () => {
       const n = Object.values(ui.vistoria).filter((v) => v.unidade === u.id && (v.pct != null || (v.fotos && v.fotos.length) || (v.coment && v.coment.trim()))).length;
       const sb = $("#vsave");
-      if (sb) { sb.disabled = !n; sb.textContent = n ? `Guardar (${n})` : "Nada por guardar"; }
+      if (sb) { sb.disabled = !n; sb.textContent = n ? `${vistCorrDia() ? "Guardar correção" : "Guardar"} (${n})` : "Nada por guardar"; }
     };
     view.querySelectorAll("[data-vct]").forEach((i) => (i.oninput = () => { vist(i.dataset.vct).coment = i.value; contar(); }));
     loadFotos(u.id, $("#vfotos"));
@@ -1624,6 +1629,12 @@ function bindUnidade(u) {
   if (sv) sv.onclick = async () => {
     const nota = $("#vnota").value.trim();
     const agora = new Date().toISOString();
+    // corrigir uma vistoria passada: tudo fica nesse dia, depois do que já lá estava
+    const corrDia = vistCorrDia();
+    sv.disabled = true;
+    if (corrDia) await carregarHistVist(true);
+    const emV = corrDia ? emCorrecao(corrDia) : agora;
+    const naoAplic = [];
     let n = 0;
     for (const [id, v] of Object.entries(ui.vistoria)) {
       if (v.unidade !== u.id) continue;
@@ -1632,26 +1643,116 @@ function bindUnidade(u) {
       const a = S.acts[id];
       const texto = [coment, nota].filter(Boolean).join(". ");
       const nf = (v.fotos || []).length;
-      for (const f of v.fotos || []) await store.addFoto(id, u.id, f, texto);
+      for (const f of v.fotos || []) await store.addFoto(id, u.id, f, texto, corrDia ? emV : undefined);
       const patch = {};
-      if (v.pct != null) Object.assign(patch, { pctFiscal: v.pct, fiscalEm: agora, fiscalPor: store.user.email });
-      if (texto) Object.assign(patch, { fiscalNota: texto, fiscalNotaEm: agora });
-      const partes = [v.pct != null ? `${v.pct}% (empreiteiro dizia ${Math.round(a.pctEmp ?? 0)}%)${v.confirmado ? ", confirmado sem alteração" : ""}` : "", nf ? `${nf} fotografia${nf > 1 ? "s" : ""}` : "", texto ? "comentário: " + texto : ""].filter(Boolean);
-      const antes = a.pctFiscal != null ? Math.round(a.pctFiscal) : null;
-      const confirmado = !!v.confirmado && v.pct != null && v.pct === (antes != null ? antes : Math.round(Number(a.pctEmp) || 0));
-      const dados = { esp: nomeAtiv(a), antes, depois: v.pct ?? null, emp: Math.round(Number(a.pctEmp) || 0), nota: texto || null, nfotos: nf, confirmado };
-      await store.updateAtividade(id, patch, { tipo: "vistoria", texto: `Vistoria ${nomeAtiv(a)} em ${a.unidade}: ${partes.join(", ")}`, dados });
+      // numa correção, a atividade só muda se não houver uma vistoria mais recente do que esse dia
+      const maisRecente = (quando) => !!(corrDia && quando && quando > emV);
+      if (v.pct != null && !maisRecente(a.fiscalEm)) Object.assign(patch, { pctFiscal: v.pct, fiscalEm: emV, fiscalPor: store.user.email });
+      else if (v.pct != null) naoAplic.push(nomeAtiv(a));
+      if (texto && !maisRecente(a.fiscalNotaEm)) Object.assign(patch, { fiscalNota: texto, fiscalNotaEm: emV });
+      const ref = corrDia ? refCorrecao(a, corrDia) : null;
+      const emp = ref && ref.emp != null ? ref.emp : Math.round(Number(a.pctEmp) || 0);
+      const partes = [v.pct != null ? `${v.pct}% (empreiteiro dizia ${emp}%)${v.confirmado ? ", confirmado sem alteração" : ""}` : "", nf ? `${nf} fotografia${nf > 1 ? "s" : ""}` : "", texto ? "comentário: " + texto : ""].filter(Boolean);
+      const antes = ref ? ref.antes : a.pctFiscal != null ? Math.round(a.pctFiscal) : null;
+      const confirmado = !!v.confirmado && v.pct != null && v.pct === (antes != null ? antes : emp);
+      const dados = { esp: nomeAtiv(a), antes, depois: v.pct ?? null, emp, nota: texto || null, nfotos: nf, confirmado, ...(corrDia ? { correcao: true } : {}) };
+      await store.updateAtividade(id, patch, corrDia
+        ? { tipo: "vistoria", em: emV, corrigidoEm: agora, texto: `Correção da vistoria de ${fd(corrDia, true)}, ${nomeAtiv(a)} em ${a.unidade}: ${partes.join(", ")}`, dados }
+        : { tipo: "vistoria", texto: `Vistoria ${nomeAtiv(a)} em ${a.unidade}: ${partes.join(", ")}`, dados });
       delete ui.vistoria[id]; n++;
     }
     ui.vnota = "";
     const seg = vizinhas(u.id).seg;
-    toast(`Vistoria guardada (${n} especialidade${n > 1 ? "s" : ""})`, seg ? { acao: { label: `Seguinte: ${seg}`, fn: () => (location.hash = "#u-" + seg) } } : {});
+    if (corrDia) await carregarHistVist(true);
+    const msg = corrDia ? `Correção guardada na vistoria de ${fd(corrDia, true)} (${n} especialidade${n > 1 ? "s" : ""})${naoAplic.length ? `. Em ${naoAplic.join(", ")}, a percentagem atual não mudou porque há uma vistoria mais recente` : ""}`
+      : `Vistoria guardada (${n} especialidade${n > 1 ? "s" : ""})`;
+    toast(msg, seg ? { acao: { label: `Seguinte: ${seg}`, fn: () => (location.hash = "#u-" + seg) } } : {});
     render();
   };
   const rh = document.querySelector("[data-relhoje]");
-  if (rh) rh.onclick = () => { ui.relVist = { dias: [diaLocal(new Date().toISOString())], por: store.user.email }; location.hash = "#relvist"; };
+  if (rh) rh.onclick = () => { ui.relVist = { dias: [vistCorrDia() || diaLocal(new Date().toISOString())], por: store.user.email }; location.hash = "#relvist"; };
+  bindVistDia(u.id);
   if (ui.unidadeTab === "fotos") loadFotos(u.id, $("#fotos"));
   botoesFotosLinhas(u.id, document.querySelector("#view") || document);
+}
+/* ============================================================ corrigir uma vistoria passada
+   Por defeito, o que o fiscal guarda é a vistoria de hoje. Se escolher um dia anterior, o que guardar fica nesse dia
+   (no relatório desse dia, marcado como correção), um segundo depois do último registo que já lá estava. */
+const vistCorrDia = () => (ui.vistCorr && ui.vistCorr.dia && ui.vistCorr.dia < S.hoje ? ui.vistCorr.dia : "");
+/** Registos de vistoria (sem os dos pendentes), carregados uma vez por sessão para escolher e corrigir dias. */
+async function carregarHistVist(forcar) {
+  if (ui.vistHist && !forcar && ui.vistHist.por === store.user.email) return ui.vistHist;
+  let regs = [];
+  try { regs = (await store.getRegistosTipo("vistoria")).filter((r) => !r.pend && r.em); } catch (e) { regs = ui.vistHist ? ui.vistHist.regs : []; }
+  ui.vistHist = { por: store.user.email, regs };
+  return ui.vistHist;
+}
+const histRegs = () => (ui.vistHist ? ui.vistHist.regs : []);
+/** Dias anteriores em que quem está a usar a aplicação fez vistoria nesta fração (os mais recentes primeiro). */
+function diasVistFracao(uid) {
+  const m = new Map();
+  for (const r of histRegs()) {
+    if (r.por !== store.user.email || r.unidade !== uid) continue;
+    const d = diaLocal(r.em);
+    if (d >= S.hoje) continue;
+    const x = m.get(d) || { dia: d, ativs: new Set() };
+    if (r.ativ) x.ativs.add(r.ativ);
+    m.set(d, x);
+  }
+  return [...m.values()].sort((a, b) => b.dia.localeCompare(a.dia)).slice(0, 15);
+}
+/** O que ficou registado nesse dia em cada atividade da fração (o último registo do dia, de quem corrige). */
+function regsDoDia(uid, dia) {
+  const out = {};
+  for (const r of histRegs()) if (r.unidade === uid && r.ativ && r.por === store.user.email && diaLocal(r.em) === dia && (!out[r.ativ] || r.em > out[r.ativ].em)) out[r.ativ] = r;
+  return out;
+}
+/** Hora a dar à correção: um segundo depois do último registo desse dia (para ser o valor final do dia), ou às 18h. */
+function emCorrecao(dia) {
+  let ult = null;
+  for (const r of histRegs()) if (r.por === store.user.email && diaLocal(r.em) === dia && (!ult || r.em > ult)) ult = r.em;
+  const fimDia = new Date(dia + "T23:59:59").getTime();
+  return new Date(ult ? Math.min(new Date(ult).getTime() + 1000, fimDia) : new Date(dia + "T18:00:00").getTime()).toISOString();
+}
+/** Percentagem do fiscal antes desse dia e a do empreiteiro nesse dia, para o registo da correção. */
+function refCorrecao(a, dia) {
+  const ini = new Date(dia + "T00:00:00").toISOString();
+  const doDia = histRegs().filter((r) => r.ativ === a.id && diaLocal(r.em) === dia).sort((x, y) => x.em.localeCompare(y.em));
+  const d0 = doDia.length && doDia[0].dados ? doDia[0].dados : null;
+  if (d0 && "antes" in d0) return { antes: d0.antes, emp: d0.emp };
+  const ant = histRegs().filter((r) => r.ativ === a.id && r.em < ini).sort((x, y) => y.em.localeCompare(x.em))[0];
+  if (ant) return { antes: ant.dados && ant.dados.depois != null ? ant.dados.depois : null, emp: null };
+  return { antes: a.pctFiscal != null && a.fiscalEm && a.fiscalEm < ini ? Math.round(a.pctFiscal) : null, emp: null };
+}
+const diaCurto = (dia) => `${DIAS_SEM[new Date(dia + "T12:00:00").getDay()]}, ${fd(dia, dia.slice(0, 4) !== S.hoje.slice(0, 4))}`;
+function vistDiaHTML(uid, corrDia) {
+  const dias = diasVistFracao(uid);
+  return `<div class="vcorr-sel"><label class="f">Dia da vistoria<select class="inp" id="vDia">
+      <option value="">Hoje, ${fd(S.hoje)}: vistoria nova</option>
+      ${dias.map((x) => `<option value="${x.dia}" ${corrDia === x.dia ? "selected" : ""}>Corrigir ${diaCurto(x.dia)} · ${pl(x.ativs.size, "especialidade", "especialidades")}</option>`).join("")}
+      ${corrDia && !dias.some((x) => x.dia === corrDia) ? `<option value="${corrDia}" selected>Corrigir ${diaCurto(corrDia)}</option>` : ""}
+      <option value="__outro">Outro dia...</option></select></label>
+    ${ui.vistOutro ? `<label class="f">Que dia?<input class="inp" type="date" id="vDiaOutro" min="${addDays(S.hoje, -120)}" max="${addDays(S.hoje, -1)}"></label>` : ""}
+    ${!ui.vistHist ? `<span class="note">A procurar as vistorias anteriores...</span>` : ""}</div>
+    ${corrDia ? `<div class="banner warn vcorr-b"><span><b>Está a corrigir a vistoria de ${diaNome(corrDia)}.</b> O que guardar agora fica nesse dia e aparece no relatório desse dia, marcado como correção. Se uma especialidade já teve uma vistoria mais recente, a percentagem atual dela não muda.</span><button class="btn sm" data-vhoje>Voltar a hoje</button></div>` : ""}`;
+}
+function bindVistDia(uid) {
+  const sel = $("#vDia");
+  if (!sel) return;
+  sel.onchange = () => {
+    if (sel.value === "__outro") { ui.vistOutro = true; render(); const i = $("#vDiaOutro"); if (i) { i.focus(); try { i.showPicker && i.showPicker(); } catch (e) {} } return; }
+    ui.vistOutro = false;
+    ui.vistCorr = sel.value ? { dia: sel.value } : null;
+    render();
+  };
+  const outro = $("#vDiaOutro");
+  if (outro) outro.onchange = () => {
+    if (!outro.value) return;
+    if (outro.value >= S.hoje) { toast("Escolha um dia anterior a hoje.", { anular: false }); return; }
+    ui.vistCorr = { dia: outro.value }; ui.vistOutro = false; render();
+  };
+  document.querySelectorAll("[data-vhoje]").forEach((b) => (b.onclick = () => { ui.vistCorr = null; ui.vistOutro = false; render(); }));
+  if (!ui.vistHist) carregarHistVist().then(() => { if (location.hash === "#u-" + uid && ui.unidadeTab === "vist") render(); });
 }
 /* ============================================================ percentagem com botões grandes */
 function pctCtlHTML(key, val, mudou) {
@@ -3301,7 +3402,7 @@ const AJUDA_ECRA = {
   segurar: "Os trabalhos atrasados que mais seguram o fim da obra. Para cada um, a aplicação simula que estava em dia e mostra quantos dias o fim da obra, de cada bloco e de cada fração andava para trás. Escolha um bloco para ver o que segura esse bloco, e toque numa equipa para ver só os trabalhos dela. Um trabalho atrasado que não aparece tem folga: o atraso dele não mexe em nenhum fim.",
   previsao: "Quando cada bloco e cada apartamento ficam prontos. As datas recalculam-se todos os dias com o estado real das atividades. Toque num apartamento para ver o que ainda falta.",
   unidades: "Todos os apartamentos, lojas e zonas comuns, com o avanço de cada um. Toque num para ver as atividades, fazer a vistoria ou ver as fotografias.",
-  fracao: "As atividades desta fração, pela ordem da obra. Toque numa atividade para abrir a ficha. Com Editar datas muda as datas e a percentagem na lista. Em Pendentes estão os pontos por resolver: o empreiteiro marca como resolvido e o fiscal verifica.",
+  fracao: "As atividades desta fração, pela ordem da obra. Toque numa atividade para abrir a ficha. Com Editar datas muda as datas e a percentagem na lista. Em Pendentes estão os pontos por resolver: o empreiteiro marca como resolvido e o fiscal verifica. Na Vistoria, em Dia da vistoria, pode corrigir a vistoria de um dia anterior (por exemplo, uma percentagem esquecida): a correção fica nesse dia e no relatório desse dia.",
   plano: "Todas as atividades da obra, com filtros por bloco, fração, atividade e estado. Os filtros ficam guardados até carregar em Limpar filtros. Com Concluir ou atribuir várias trata várias atividades de uma vez.",
   gantt: "As atividades no tempo, em barras. Arraste uma barra para mudar as datas: as atividades seguintes acertam-se sozinhas. O botão Hoje leva-o ao dia de hoje.",
   semana: "O que está em curso, o que deve começar nos próximos 7 dias e o que está à espera de outras atividades. Os botões Iniciar, +10% e Concluir gravam logo.",
@@ -3994,7 +4095,8 @@ function relVistView() {
         const valDe = (r) => (r.dados && r.dados.depois != null ? r.dados.depois : (() => { const m = /: (\d+)% \(empreiteiro/.exec(r.texto || ""); return m ? Number(m[1]) : null; })());
         const prev = ant ? { pct: valDe(ant), em: ant.em } : null;
         const confirmado = x.regs.some((r) => r.dados && r.dados.confirmado);
-        return { ...x, a, nome: (a && nomeAtiv(a)) || d1.esp || "Atividade", antes: d0.antes ?? null, depois: depois ?? null, emp: d1.emp ?? (a ? Math.round(Number(a.pctEmp) || 0) : null), notas, semDados: !prim.dados, texto: ult.texto, prev, confirmado };
+        const corrigido = x.regs.map((r) => r.corrigidoEm).filter(Boolean).sort().pop() || null;
+        return { ...x, a, corrigido, nome: (a && nomeAtiv(a)) || d1.esp || "Atividade", antes: d0.antes ?? null, depois: depois ?? null, emp: d1.emp ?? (a ? Math.round(Number(a.pctEmp) || 0) : null), notas, semDados: !prim.dados, texto: ult.texto, prev, confirmado };
       });
       const atencao = linhas.filter((l) => l.depois != null && l.emp != null && Math.abs(l.depois - l.emp) >= 15);
       const diasEntre = (a, b) => Math.round((new Date(b) - new Date(a)) / 86400000);
@@ -4088,7 +4190,7 @@ function relVistView() {
                 const evTxt = ev == null ? `<span class="rv-vazio">primeira</span>` : ev > 0 ? `<span class="bom">+${ev} pp</span><small>em ${diasEntre(l.prev.em, l.regs[l.regs.length - 1].em)} d</small>` : parado.includes(l) ? `<span class="aviso">sem avanço</span><small>${diasEntre(l.prev.em, l.regs[l.regs.length - 1].em)} d</small>` : ev < 0 ? `<span class="mau">${ev} pp</span>` : `<span>0 pp</span>`;
                 return `<td class="n">${l.prev ? `${pctTxt(l.prev.pct)}<small>${fd(diaLocal(l.prev.em))}</small>` : `<span class="rv-vazio">sem vistoria</span>`}</td><td class="n"><b>${pctTxt(l.depois)}</b></td><td class="n rv-ev">${evTxt}</td><td class="n">${pctTxt(l.emp)}</td>`;
               })()}
-              <td>${l.confirmado ? `<span class="rv-conf">Confirmado sem alteração</span>${l.notas.length ? "<br>" : ""}` : ""}${l.notas.map((t) => esc(t)).join("<br>") || (l.confirmado ? "" : `<span class="rv-vazio">sem observações</span>`)}</td><td class="rv-refs">${refsDe(l.ativ)}</td></tr>`).join("")}
+              <td>${l.corrigido ? `<span class="rv-corr">Corrigido a ${fd(diaLocal(l.corrigido), true)}</span><br>` : ""}${l.confirmado ? `<span class="rv-conf">Confirmado sem alteração</span>${l.notas.length ? "<br>" : ""}` : ""}${l.notas.map((t) => esc(t)).join("<br>") || (l.confirmado ? "" : `<span class="rv-vazio">sem observações</span>`)}</td><td class="rv-refs">${refsDe(l.ativ)}</td></tr>`).join("")}
             </tbody></table></div>`).join("")}
         </section>
 
