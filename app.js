@@ -59,7 +59,7 @@ const ICON = {
 let store, S = null; // S = estado calculado
 const semAcento = (x) => String(x || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
 const PLANO_PADRAO = () => ({ f: "todas", bloco: "", tipo: "", unidade: "", ativ: "", equipa: "", q: "", soAtr: false, semConc: true, sort: null, editar: false, atribuir: false, atrEq: "", selec: null });
-const VERSAO = "2026.11.17"; // mudar também em versao.json e no CACHE de sw.js
+const VERSAO = "14.11.2026 V2"; // dia da publicação e versão do dia; mudar também em versao.json e no CACHE de sw.js
 const ui = { bloco: "todos", plano: PLANO_PADRAO(), unidadeTab: "ativ", vistoria: {}, sheet: null };
 /** Há algum filtro diferente do padrão? */
 function filtrosAlterados() {
@@ -484,15 +484,22 @@ function verChipHTML() {
 }
 function atualizarVerChips() { document.querySelectorAll("[data-ver]").forEach((b) => { b.outerHTML = verChipHTML(); }); document.querySelectorAll("[data-ver]").forEach((b) => (b.onclick = abrirNovidades)); }
 /* O que mudou em cada versão (as mais recentes primeiro). */
+/** Chave para ordenar versões: "14.11.2026 V2" vira "20261114-002"; as antigas (2026.11.17) ficam antes. */
+function chaveVersao(v) {
+  const m = /^(\d{1,2})\.(\d{1,2})\.(\d{4})\s*V(\d+)$/i.exec(String(v || "").trim());
+  if (!m) return "0-" + v;
+  return `${m[3]}${m[2].padStart(2, "0")}${m[1].padStart(2, "0")}-${m[4].padStart(3, "0")}`;
+}
 const NOVIDADES = [
-  ["2026.11.17", ["Definições, Cópia de segurança: todas as pessoas podem descarregar uma cópia com tudo o que está registado e repor a partir dela (os acessos só o dono de obra repõe).", "A versão da aplicação está sempre à vista; ao tocar nela vê o que mudou.", "Ficha da atividade: aparece um botão Guardar no canto sempre que há alguma coisa por guardar, e a aplicação avisa se fechar sem guardar.", "Botão Recalcular o fim: na ficha, ao lado da previsão de fim, e na escolha em massa dos Trabalhos. Repõe o fim com a duração normal.", "Trabalhos: a caixa de escolha em massa está arrumada em três grupos: Equipa, Execução e Previsão."]],
-  ["2026.11.17", ["Gantt: filtros por várias atividades, estado, equipa, tipo de fração, procura e período.", "Trabalhos: a lista vem ordenada pela sequência das atividades e depois por fração.", "Trabalhos: botão Terminar escolha também dentro da caixa de escolha."]],
-  ["2026.11.15", ["Trabalhos: anular o início real de várias atividades de uma vez.", "Trabalhos: procurar dentro da caixa de escolha, com várias palavras e sem ligar a acentos."]],
-  ["2026.11.14", ["Trabalhos: mudar a previsão de início e de fim de várias atividades de uma vez."]],
-  ["2026.11.13", ["Gantt: ecrã inteiro, imprimir só o gráfico e caminho crítico da obra ou do bloco."]],
+  ["14.11.2026 V2", ["O número da versão passa a ser o dia da publicação e a versão desse dia, por exemplo 14.11.2026 V2."]],
+  ["14.11.2026 V1", ["Definições, Cópia de segurança: todas as pessoas podem descarregar uma cópia com tudo o que está registado e repor a partir dela (os acessos só o dono de obra repõe).", "A versão da aplicação está sempre à vista; ao tocar nela vê o que mudou.", "Ficha da atividade: aparece um botão Guardar no canto sempre que há alguma coisa por guardar, e a aplicação avisa se fechar sem guardar.", "Botão Recalcular o fim: na ficha, ao lado da previsão de fim, e na escolha em massa dos Trabalhos. Repõe o fim com a duração normal.", "Trabalhos: a caixa de escolha em massa está arrumada em três grupos: Equipa, Execução e Previsão."]],
+  ["13.11.2026 V4", ["Gantt: filtros por várias atividades, estado, equipa, tipo de fração, procura e período.", "Trabalhos: a lista vem ordenada pela sequência das atividades e depois por fração.", "Trabalhos: botão Terminar escolha também dentro da caixa de escolha."]],
+  ["13.11.2026 V3", ["Trabalhos: anular o início real de várias atividades de uma vez.", "Trabalhos: procurar dentro da caixa de escolha, com várias palavras e sem ligar a acentos."]],
+  ["13.11.2026 V2", ["Trabalhos: mudar a previsão de início e de fim de várias atividades de uma vez."]],
+  ["13.11.2026 V1", ["Gantt: ecrã inteiro, imprimir só o gráfico e caminho crítico da obra ou do bloco."]],
 ];
 async function abrirNovidades() {
-  const lista = NOVIDADES.filter(([v]) => v <= VERSAO).slice(0, 3);
+  const lista = NOVIDADES.filter(([v]) => chaveVersao(v) <= chaveVersao(VERSAO)).slice(0, 3);
   const k = await perguntar({
     titulo: `Versão ${VERSAO}`,
     texto: `${versaoNova ? `<div class="dlg-av">Já existe a versão ${esc(versaoNova)}. Atualize para ter as últimas melhorias. O que já gravou não se perde.</div>` : ""}
