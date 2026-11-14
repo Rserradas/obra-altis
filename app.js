@@ -59,7 +59,7 @@ const ICON = {
 let store, S = null; // S = estado calculado
 const semAcento = (x) => String(x || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
 const PLANO_PADRAO = () => ({ f: "todas", bloco: "", tipo: "", unidade: "", ativ: "", equipa: "", q: "", soAtr: false, semConc: true, sort: null, editar: false, atribuir: false, atrEq: "", selec: null });
-const VERSAO = "2026.11.16"; // mudar também em versao.json e no CACHE de sw.js
+const VERSAO = "2026.11.17"; // mudar também em versao.json e no CACHE de sw.js
 const ui = { bloco: "todos", plano: PLANO_PADRAO(), unidadeTab: "ativ", vistoria: {}, sheet: null };
 /** Há algum filtro diferente do padrão? */
 function filtrosAlterados() {
@@ -486,7 +486,7 @@ function atualizarVerChips() { document.querySelectorAll("[data-ver]").forEach((
 /* O que mudou em cada versão (as mais recentes primeiro). */
 const NOVIDADES = [
   ["2026.11.17", ["Definições, Cópia de segurança: todas as pessoas podem descarregar uma cópia com tudo o que está registado e repor a partir dela (os acessos só o dono de obra repõe).", "A versão da aplicação está sempre à vista; ao tocar nela vê o que mudou.", "Ficha da atividade: aparece um botão Guardar no canto sempre que há alguma coisa por guardar, e a aplicação avisa se fechar sem guardar.", "Botão Recalcular o fim: na ficha, ao lado da previsão de fim, e na escolha em massa dos Trabalhos. Repõe o fim com a duração normal.", "Trabalhos: a caixa de escolha em massa está arrumada em três grupos: Equipa, Execução e Previsão."]],
-  ["2026.11.16", ["Gantt: filtros por várias atividades, estado, equipa, tipo de fração, procura e período.", "Trabalhos: a lista vem ordenada pela sequência das atividades e depois por fração.", "Trabalhos: botão Terminar escolha também dentro da caixa de escolha."]],
+  ["2026.11.17", ["Gantt: filtros por várias atividades, estado, equipa, tipo de fração, procura e período.", "Trabalhos: a lista vem ordenada pela sequência das atividades e depois por fração.", "Trabalhos: botão Terminar escolha também dentro da caixa de escolha."]],
   ["2026.11.15", ["Trabalhos: anular o início real de várias atividades de uma vez.", "Trabalhos: procurar dentro da caixa de escolha, com várias palavras e sem ligar a acentos."]],
   ["2026.11.14", ["Trabalhos: mudar a previsão de início e de fim de várias atividades de uma vez."]],
   ["2026.11.13", ["Gantt: ecrã inteiro, imprimir só o gráfico e caminho crítico da obra ou do bloco."]],
