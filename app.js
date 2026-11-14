@@ -664,6 +664,7 @@ function pendPode(x, acao) {
     case "confirmar": return p === "fiscal" && x.estado === "fechado" && !x.fiscalOk;
     case "reabrir": return x.estado !== "aberto" && (p === "dono" || p === "fiscal" || (x.criadoPor === eu && !x.fiscalOk));
     case "apagar": return p === "dono" || (x.criadoPor === eu && x.estado === "aberto");
+    case "editar": return p === "dono" || p === "fiscal" || store.admin || (x.criadoPor === eu && x.estado !== "fechado");
     default: return false;
   }
 }
@@ -732,6 +733,47 @@ async function pendAcao(id, acao) {
   await store.updatePendente(id, patch, pendReg(`${x.unidade}: ${PEND_ACAO[passo.acao]} o pendente "${x.texto}"${nota ? ` (${nota})` : ""}`));
   toast({ feito: "Marcado como resolvido: o fiscal vai verificar", fechar: fiscal ? "Pendente confirmado e fechado" : "Pendente fechado", confirmar: "Confirmado pelo fiscal", reabrir: "Pendente reaberto" }[acao], { anular: false });
 }
+/** Editar um pendente: texto, fração ou zona, e atividade. Fica no histórico do pendente. */
+function pendAtivOps(uid, sel) {
+  const u = S.uMap[uid]; if (!u) return "";
+  const vivas = u.acts.filter((a) => S.res.get(a.id).estado !== "concluida" || a.id === sel), conc = u.acts.filter((a) => S.res.get(a.id).estado === "concluida" && a.id !== sel);
+  return `<option value="">${u.tipo === "Zona comum" || u.tipo === "Geral" ? "Em geral" : "Fração em geral"}</option>${[...vivas, ...conc].map((a) => `<option value="${a.id}" ${a.id === sel ? "selected" : ""}>${esc(nomeAtiv(a))}${S.res.get(a.id).estado === "concluida" ? " (concluída)" : ""}</option>`).join("")}`;
+}
+function pendEditHTML(x) {
+  const grupos = PEND_BLOCOS.map((b) => ({ b, us: ordenaUnidades(S.unidades.filter((u) => u.bloco === b)) })).filter((g) => g.us.length);
+  return `<div class="pd-ed" data-pde="${esc(x.id)}">
+    <label class="f">Pendente<textarea class="inp" rows="2" maxlength="300" data-pdet>${esc(x.texto)}</textarea></label>
+    <div class="pd-ed-r">
+      <label class="f">Onde<select class="inp" data-pdeu>${grupos.map(({ b, us }) => `<optgroup label="${b === "Geral" ? "Geral" : "Bloco " + b}">${us.map((u) => `<option value="${esc(u.id)}" ${u.id === x.unidade ? "selected" : ""}>${esc(rotuloU(u) === u.id ? u.id : rotuloU(u) + " (" + u.id + ")")}</option>`).join("")}</optgroup>`).join("")}</select></label>
+      <label class="f">Atividade<select class="inp" data-pdea>${pendAtivOps(x.unidade, x.ativ)}</select></label>
+    </div>
+    <div class="row"><button class="btn sm pri" data-pdeok>Guardar</button><button class="btn sm" data-pdeno>Cancelar</button></div>
+  </div>`;
+}
+function bindPendEdit(f) {
+  const id = f.dataset.pde, x = (store.data.pendentes || {})[id]; if (!x) return;
+  const t = f.querySelector("[data-pdet]"), su = f.querySelector("[data-pdeu]"), sa = f.querySelector("[data-pdea]");
+  su.onchange = () => { sa.innerHTML = pendAtivOps(su.value, null); };
+  const sair = () => { ui.pdEdit = null; const y = window.scrollY; render(); window.scrollTo(0, y); };
+  f.querySelector("[data-pdeno]").onclick = (e) => { e.stopPropagation(); sair(); };
+  t.onkeydown = (e) => { if (e.key === "Escape") sair(); };
+  f.querySelector("[data-pdeok]").onclick = async (e) => {
+    e.stopPropagation();
+    const texto = t.value.trim().replace(/\s+/g, " ");
+    if (!texto) { toast("Escreva o que está pendente.", { anular: false }); t.focus(); return; }
+    const unidade = su.value, ativ = sa.value || null;
+    const mud = [];
+    if (texto !== x.texto) mud.push(`texto era "${x.texto}"`);
+    if (unidade !== x.unidade) mud.push(`estava em ${x.unidade}`);
+    if (ativ !== (x.ativ || null)) mud.push(ativ ? `atividade passou a ${nomeAtiv(S.acts[ativ])}` : "passou a ser em geral");
+    if (!mud.length) { sair(); return; }
+    const patch = { texto, unidade, ativ, editadoEm: new Date().toISOString(), historico: [...(x.historico || []), pendPasso("editado", mud.join("; "))] };
+    ui.pdEdit = null;
+    const mudouSitio = unidade !== x.unidade;
+    await store.updatePendente(id, patch, pendReg(`${unidade}: editou o pendente "${texto}" (${mud.join("; ")})`));
+    toast(mudouSitio ? `Pendente editado e passado para ${unidade}` : "Pendente editado", { anular: false });
+  };
+}
 function pendItemHTML(x, { mostrarAtiv = true } = {}) {
   const e = pendEstado(x), a = x.ativ ? S.acts[x.ativ] : null;
   const quem = (nome, papel) => `${esc(nome || "")}${papel && String(nome || "").toLowerCase() !== (QUEM[papel] || papel).toLowerCase() ? ` (${esc((QUEM[papel] || papel).toLowerCase())})` : ""}`;
@@ -747,7 +789,8 @@ function pendItemHTML(x, { mostrarAtiv = true } = {}) {
       <b class="pd-txt">${esc(x.texto)}</b>
       ${x.ultimaNota ? `<span class="pd-nota">Última nota: ${esc(x.ultimaNota)}</span>` : ""}
       <small>${linhas.join(", ")}.${x.estado !== "aberto" ? " " + fok : ""}</small></div>
-    <div class="pd-b">${bt("feito", "Já está resolvido", "ok")}${bt("fechar", fiscal ? "Concluído?" : "Fechar", "ok")}${bt("confirmar", "Dar o ok de fiscal", "ok")}${bt("reabrir", fiscal && x.estado !== "aberto" ? "Ainda não está" : "Reabrir")}${bt("apagar", "Apagar", "ghost")}</div>
+    ${ui.pdEdit === x.id ? pendEditHTML(x) : ""}
+    <div class="pd-b" ${ui.pdEdit === x.id ? "hidden" : ""}>${bt("editar", "Editar", "ghost")}${bt("feito", "Já está resolvido", "ok")}${bt("fechar", fiscal ? "Concluído?" : "Fechar", "ok")}${bt("confirmar", "Dar o ok de fiscal", "ok")}${bt("reabrir", fiscal && x.estado !== "aberto" ? "Ainda não está" : "Reabrir")}${bt("apagar", "Apagar", "ghost")}</div>
     ${h.length > 1 ? `<details class="pd-h"><summary>Histórico (${h.length})</summary><ul>${h.map((p) => `<li><span class="num">${fdt(p.em)}</span> ${esc(p.nome || p.por)} ${PEND_ACAO[p.acao] || p.acao}${p.nota ? `: <i>${esc(p.nota)}</i>` : ""}</li>`).join("")}</ul></details>` : ""}
   </div>`;
 }
@@ -787,7 +830,10 @@ function pendListaHTML(lista, opts = {}) {
 }
 function bindPendentes(root) {
   if (!root) return;
-  root.querySelectorAll("[data-pd]").forEach((b) => (b.onclick = (e) => { e.stopPropagation(); const [acao, id] = b.dataset.pd.split("|"); pendAcao(id, acao); }));
+  root.querySelectorAll("[data-pd]").forEach((b) => (b.onclick = (e) => { e.stopPropagation(); const [acao, id] = b.dataset.pd.split("|");
+    if (acao === "editar") { ui.pdEdit = id; const y = window.scrollY; render(); window.scrollTo(0, y); const i = document.querySelector(`[data-pde="${id}"] textarea`); if (i) { i.focus(); i.setSelectionRange(i.value.length, i.value.length); } return; }
+    pendAcao(id, acao); }));
+  root.querySelectorAll("[data-pde]").forEach((f) => bindPendEdit(f));
   root.querySelectorAll("[data-pdform]").forEach((f) => {
     const k = f.dataset.pdform, [unidade, ativFixa] = k.split("|");
     ui.pdDraft = ui.pdDraft || {};

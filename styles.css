@@ -1465,3 +1465,9 @@ details.pd-fr { display: block; border-top: 1px solid var(--line); }
 .pdn-fim { display: flex; flex-wrap: wrap; gap: 10px; align-items: flex-end; }
 .pdn-fim .f { flex: 1 1 260px; }
 @media (max-width: 640px) { .pd-fr-ac { margin-left: 16px; width: 100%; } .pdn-atalhos { margin-left: 0; } }
+
+/* Editar um pendente */
+.pd-ed { flex: 1 1 100%; display: flex; flex-direction: column; gap: 8px; background: var(--bg); border: 1px solid var(--accent); border-radius: 8px; padding: 10px; margin-top: 6px; }
+.pd-ed textarea { resize: vertical; }
+.pd-ed-r { display: flex; flex-wrap: wrap; gap: 8px; }
+.pd-ed-r .f { flex: 1 1 200px; min-width: 0; }
