@@ -224,7 +224,7 @@ export class DemoStore extends Emitter {
     });
   }
   /** Substitui tudo pelo que está na cópia (os acessos nunca se apagam, só se acrescentam). */
-  async repor(C, onProgress) {
+  async repor(C, opts = {}, onProgress) {
     const seedActs = Object.fromEntries(this.seed.atividades.map((a) => [a.id, a]));
     const acts = C.atividades || {};
     this.removidas = Object.keys(seedActs).filter((id) => !(id in acts));
@@ -242,7 +242,7 @@ export class DemoStore extends Emitter {
     this.state.registos = Object.entries(C.registos || {}).map(([id, x]) => ({ id, ...x }));
     this.state.fotos = Object.entries(C.fotos || {}).map(([id, x]) => ({ id, ...x }));
     const us = new Map(this.state.utilizadores.map((u) => [u.email, u]));
-    for (const [email, u] of Object.entries(C.utilizadores || {})) us.set(email, { ...u, email });
+    if (opts.acessos) for (const [email, u] of Object.entries(C.utilizadores || {})) us.set(email, { ...u, email });
     this.state.utilizadores = [...us.values()];
     this._save();
     this._load();
@@ -524,7 +524,7 @@ export class CloudStore extends Emitter {
   }
   /** Substitui tudo pelo que está na cópia: escreve os documentos da cópia e apaga os que não estavam lá.
       Os acessos (utilizadores) nunca se apagam, só se repõem ou acrescentam. */
-  async repor(C, onProgress) {
+  async repor(C, opts = {}, onProgress) {
     if (!navigator.onLine) throw new Error("Sem rede: ligue-se à internet para repor a cópia.");
     const fb = this.fb, db = this.db, ops = [];
     // antes de mexer em nada: confirmar que as regras da base de dados deixam o dono repor tudo
@@ -536,7 +536,7 @@ export class CloudStore extends Emitter {
       for (const c of ["registos", "fotos"]) b1.delete(fb.doc(db, c, "_teste_copia"));
       await b1.commit();
     } catch (e) {
-      throw new Error("as regras de acesso da base de dados ainda não deixam repor cópias (é preciso atualizá-las na consola do Firebase). Nada foi alterado");
+      throw new Error("as regras de acesso da base de dados ainda não deixam repor cópias a este utilizador (é preciso atualizá-las na consola do Firebase). Nada foi alterado");
     }
     for (const c of ["config", "atividades", "pendentes", "registos", "fotos"]) {
       const novo = C[c] || {};
@@ -544,7 +544,7 @@ export class CloudStore extends Emitter {
       atual.forEach((d) => { if (!(d.id in novo)) ops.push({ c, id: d.id, del: true }); });
       for (const [id, data] of Object.entries(novo)) ops.push({ c, id, data });
     }
-    for (const [id, data] of Object.entries(C.utilizadores || {})) ops.push({ c: "utilizadores", id, data });
+    if (opts.acessos) for (const [id, data] of Object.entries(C.utilizadores || {})) ops.push({ c: "utilizadores", id, data }); // os acessos só o dono repõe
     let b = fb.writeBatch(db), n = 0, peso = 0, feitos = 0;
     const avisa = () => { try { onProgress && onProgress(feitos, ops.length); } catch (e) {} };
     avisa();

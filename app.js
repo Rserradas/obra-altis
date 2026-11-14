@@ -489,7 +489,7 @@ function navItems() {
   const pend = { id: "pendentes", label: "Pendentes", short: "Pendentes" };
   const prev = { id: "previsao", label: "Fim da obra", short: "Fim" };
   if (p === "empreiteiro") return [{ id: "semana", label: "A minha semana", short: "Semana" }, pend, items[2], items[4], items[1], { ...items[0], soLado: true }, { ...prev, soLado: true }, { ...vist, soLado: true }, { ...items[3], soLado: true }];
-  if (p === "fiscal") return [items[1], pend, vist, items[0], items[2], { ...prev, soLado: true }, { ...items[4], soLado: true }];
+  if (p === "fiscal") return [items[1], pend, vist, items[0], items[2], { ...prev, soLado: true }, { ...items[4], soLado: true }, { ...items[3], soLado: true }];
   return [items[0], prev, items[1], items[2], { ...pend, soLado: true }, { ...items[4], soLado: true }, { ...vist, soLado: true }, items[3]];
 }
 function routeView() {
@@ -501,7 +501,7 @@ function routeView() {
     if (ui.lastUnit !== uid) { ui.lastUnit = uid; ui.unidadeTab = store.user.papel === "fiscal" ? "vist" : "ativ"; }
     return { nav: "unidades", ...unidadeView(uid) };
   }
-  if ((h === "equipa" || h === "copia") && store.user.papel !== "dono") h = "painel";
+  if (h === "equipa" && store.user.papel !== "dono") h = "painel";
   if (h === "equipas" && !can("executar")) h = "painel";
   const v = { pendentes: pendentesView, painel: painelView, unidades: unidadesView, plano: planoView, regras: regrasView, equipa: equipaView, copia: copiaView, equipas: equipasView, gantt: ganttView, semana: semanaView, relatorio: relatorioView, vistorias: vistoriasView, relvist: relVistView, previsao: previsaoView, planequipa: planEquipaView }[h] || painelView;
   if (h === "planequipa" && !can("executar")) h = "painel";
@@ -3092,7 +3092,8 @@ function abrirGuia(forcar) {
 function defTabs(atual) {
   const t = [["regras", "Sequência e durações"]];
   if (can("executar")) t.push(["equipas", "Equipas de trabalho"], ["planequipa", "Plano das equipas"]);
-  if (store.user.papel === "dono") t.push(["equipa", "Acessos"], ["copia", "Cópia de segurança"]);
+  if (store.user.papel === "dono") t.push(["equipa", "Acessos"]);
+  t.push(["copia", "Cópia de segurança"]); // todos fazem e repõem cópias
   return `<div class="eyebrow">Definições</div><div class="tabs">${t.map(([h, l]) => `<a href="#${h}" class="deftab ${atual === h ? "on" : ""}">${l}</a>`).join("")}</div>`;
 }
 /* ============================================================ simulação do tempo mínimo
@@ -3385,7 +3386,7 @@ function equipaView() {
 }
 
 /* ============================================================ cópia de segurança
-   Só o dono de obra. Descarrega um ficheiro com tudo o que está registado (trabalhos, datas, pendentes,
+   Todos os papéis. Descarrega um ficheiro com tudo o que está registado (trabalhos, datas, pendentes,
    histórico, fotografias, notas, equipas, sequência e acessos) e pode repor tudo a partir desse ficheiro. */
 const COPIA_NOMES = { config: "definições da obra", atividades: "atividades", pendentes: "pendentes", registos: "registos do histórico", fotos: "fotografias", utilizadores: "acessos" };
 const COPIA_ULT = "obra-ultima-copia";
@@ -3433,7 +3434,7 @@ function copiaView() {
       <p class="note">Sugestão: faça uma cópia por semana, por exemplo antes da reunião de obra. Com muitas fotografias o ficheiro pode ter vários MB.</p>
     </section>
     <section class="card"><h2>Repor a partir de uma cópia</h2>
-      <p style="max-width:70ch">Volta a pôr tudo exatamente como estava quando a cópia foi feita. <b>O que foi registado depois disso perde-se.</b> Antes de repor, a aplicação descarrega automaticamente uma cópia do estado atual, para poder voltar atrás. Os acessos das pessoas nunca são apagados.</p>
+      <p style="max-width:70ch">Volta a pôr tudo exatamente como estava quando a cópia foi feita. <b>O que foi registado depois disso perde-se.</b> Antes de repor, a aplicação descarrega automaticamente uma cópia do estado atual, para poder voltar atrás. ${store.user.papel === "dono" ? "Os acessos das pessoas nunca são apagados." : "Os acessos das pessoas não mudam: só o dono de obra mexe nos acessos."}</p>
       <label class="btn" style="cursor:pointer;display:inline-flex;width:auto">Escolher ficheiro da cópia<input type="file" id="cpFich" accept=".json,application/json" hidden></label>
       ${st.erro ? `<div class="err" style="margin-top:10px">${esc(st.erro)}</div>` : ""}
       ${L ? `<div class="copia-lida">
@@ -3489,7 +3490,7 @@ function copiaView() {
         if (k2 !== "sim") return;
         cr.disabled = true;
         try {
-          await store.repor(L.colecoes, (i, tot) => { if (est) est.textContent = tot > 1 ? `A repor... ${Math.round((100 * i) / tot)}%` : "A repor..."; });
+          await store.repor(L.colecoes, { acessos: store.user.papel === "dono" }, (i, tot) => { if (est) est.textContent = tot > 1 ? `A repor... ${Math.round((100 * i) / tot)}%` : "A repor..."; });
           st.lida = null;
           toast("Cópia reposta. Os dados são agora os da cópia.", { anular: false });
           render();

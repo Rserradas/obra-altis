@@ -1,6 +1,7 @@
 rules_version = '2';
 // Regras de acesso à base de dados da obra.
 // Dono de obra e administrador: tudo. Empreiteiro: execução, previsões e ligações. Fiscal: vistorias. Todos: ver e juntar fotografias.
+// Repor cópias de segurança: todas as pessoas com acesso podem (decisão do dono de obra), por isso todas podem escrever em tudo menos nos acessos.
 service cloud.firestore {
   match /databases/{database}/documents {
     function email() { return request.auth.token.email.lower(); }
@@ -20,6 +21,7 @@ service cloud.firestore {
       allow write: if isDono();
       // o empreiteiro gere as equipas e as especialidades (sequência, ordem, nomes, dias por fração)
       allow update: if papel() == "empreiteiro" && soMuda(["equipas", "regras", "especialidades", "duracoes"]);
+      allow write: if membro(); // repor uma cópia de segurança
     }
     match /atividades/{id} {
       allow read: if membro();
@@ -29,12 +31,13 @@ service cloud.firestore {
         || (papel() == "empreiteiro" && soMuda(["realInicio", "realFim", "concluido", "pctEmp", "empEm", "inicioPrevisto", "fimPrevisto",
               "motivo", "duracaoManual", "equipa", "eqOrdem", "unidade", "depsExtra", "depsIgnorar", "dataOk", "atualizadoEm", "atualizadoPor"]))
         || (papel() == "fiscal" && soMuda(["pctFiscal", "fiscalEm", "fiscalPor", "fiscalNota", "fiscalNotaEm", "atualizadoEm", "atualizadoPor"]));
+      allow write: if membro(); // repor uma cópia de segurança
     }
     match /fotos/{id} {
       allow read: if membro();
       allow create: if membro() && request.resource.data.por == email();
       allow delete: if isDono() || (membro() && resource.data.por == email());
-      allow create, update: if isDono(); // repor uma cópia de segurança
+      allow write: if membro(); // repor uma cópia de segurança
     }
     // Pendentes: todos criam. O dono e o fiscal fecham qualquer um; só o fiscal dá o ok de fiscal.
     // O empreiteiro marca como feito e só fecha os que ele próprio criou.
@@ -48,11 +51,12 @@ service cloud.firestore {
             && request.resource.data.criadoPapel == resource.data.criadoPapel
             && (request.resource.data.estado != "fechado" || resource.data.estado == "fechado" || resource.data.criadoPapel == papel()));
       allow delete: if isDono() || (membro() && resource.data.criadoPor == email());
+      allow write: if membro(); // repor uma cópia de segurança
     }
     match /registos/{id} {
       allow read: if membro();
       allow create: if membro() && request.resource.data.por == email();
-      allow write: if isDono(); // só para repor uma cópia de segurança
+      allow write: if membro(); // repor uma cópia de segurança
     }
   }
 }
