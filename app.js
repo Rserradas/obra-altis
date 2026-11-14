@@ -4782,6 +4782,24 @@ function patchPorLigacao(sid, id, tipo) {
 }
 const rotulo = (x) => `${nomeAtiv(x)}${x.unidade ? " · " + x.unidade : ""}`;
 function closeSheet() { ui.sheet = null; document.querySelectorAll('[data-dw="ativ"]').forEach((e) => e.remove()); }
+/** Fechar a ficha pelo × ou pelo fundo: se há alterações por guardar, pergunta primeiro. */
+async function fecharFicha() {
+  const sh = ui.sheet;
+  const n = sh && sh.sujos ? sh.sujos().length : 0;
+  if (!n) return closeSheet();
+  const k = await perguntar({
+    titulo: "Tem alterações por guardar",
+    texto: `<p>Mexeu nesta ficha e ainda não guardou. Quer guardar antes de fechar?</p>`,
+    opcoes: [{ k: "sim", l: "Guardar e fechar", estilo: "pri" }, { k: "nao", l: "Fechar sem guardar", estilo: "warn" }, { k: "ficar", l: "Continuar a editar" }],
+  });
+  if (k === "sim") { if (ui.sheet && ui.sheet.guardarTudo && (await ui.sheet.guardarTudo())) closeSheet(); }
+  else if (k === "nao") {
+    const x = ui.sheet && S.acts[ui.sheet.id];
+    if (x && ui.pdDraft) delete ui.pdDraft[x.unidade + "|" + x.id];
+    if (ui.sheet) ui.sheet.pctTmp = null;
+    closeSheet();
+  }
+}
 function renderSheet() {
   document.querySelectorAll('[data-dw="ativ"]').forEach((e) => e.remove());
   const id = ui.sheet.id, a = S.acts[id], r = S.res.get(id);
@@ -4816,7 +4834,7 @@ function renderSheet() {
           <div class="fmenu navmenu" hidden data-snm="seg">${r.succ.map((sid) => { const x = S.acts[sid], xr = S.res.get(sid); return x ? `<button class="fopt" data-snavgo="${sid}"><span><b>${esc(nomeAtiv(x))}</b><small>${esc(x.unidade)} · ${ESTADO[xr.estado]} · começa ${fd(xr.inicio)}</small></span></button>` : ""; }).join("")}</div></div>
       </div>
       <div class="row" style="gap:6px"><span class="pill st-${r.estado}">${ESTADO[r.estado]}</span>${r.atrasada ? '<span class="pill late">Atrasada</span>' : ""}${deltaHTML(r.atraso)}</div></div>
-      <button class="x" aria-label="Fechar">×</button></div>
+      <div class="sh-acoes"><button class="btn sm pri" id="sGuardar" hidden title="Guardar o que mudou nesta ficha">Guardar</button><button class="x" aria-label="Fechar">×</button></div></div>
     <div class="stabs" role="tablist">${[["estado", "Estado"], ["lig", `Ligações <span class="num">${r.preds.length + r.succ.length}</span>`], ["pend", `Pendentes${pendDe(a.unidade, a.id).filter(pendAberto).length ? ` <span class="num">${pendDe(a.unidade, a.id).filter(pendAberto).length}</span>` : ""}`], ["fotos", "Fotografias"], ["hist", "Histórico"]].map(([k, l]) => `<button role="tab" data-stab="${k}" class="${(ui.sheetTab || "estado") === k ? "on" : ""}" aria-selected="${(ui.sheetTab || "estado") === k}">${l}</button>`).join("")}</div>
     <div class="sheet-b papel-${store.user.papel}">
       <div class="spane" data-pane="estado" ${(ui.sheetTab || "estado") === "estado" ? "" : "hidden"}>
@@ -4930,8 +4948,8 @@ function renderSheet() {
   }));
   bindPendentes(sh);
   sh.querySelectorAll("[data-irpend]").forEach((b) => (b.onclick = () => { ui.lastUnit = b.dataset.irpend; ui.unidadeTab = store.user.papel === "fiscal" ? "vist" : "pend"; closeSheet(); }));
-  $('.scrim[data-dw="ativ"]').onclick = closeSheet;
-  $(".x", sh).onclick = closeSheet;
+  $('.scrim[data-dw="ativ"]').onclick = () => fecharFicha();
+  $(".x", sh).onclick = () => fecharFicha();
   sh.querySelectorAll("[data-close]").forEach((x) => (x.onclick = closeSheet));
   sh.querySelectorAll("[data-go]").forEach((b) => (b.onclick = () => openSheet(b.dataset.go, { empilhar: true, tab: ui.sheetTab })));
   sh.querySelectorAll("[data-snav]").forEach((b) => (b.onclick = (e) => {
@@ -4975,7 +4993,7 @@ function renderSheet() {
     toast(`Acrescentada: ${nomeAtiv(y)} em ${y.unidade}`);
   } });
   bindDateInputs(sh);
-  document.onkeydown = (e) => { if (e.key === "Escape") { if (ui.nova) closeNova(); else if (ui.sheet) closeSheet(); } };
+  document.onkeydown = (e) => { if (e.key === "Escape") { if (document.querySelector(".dlg")) return; if (ui.nova) closeNova(); else if (ui.sheet) fecharFicha(); } };
   const N = nomeAtiv(a) + " em " + a.unidade;
   const upd = async (patch, texto, tipo) => { await store.updateAtividade(id, patch, { tipo, texto }); toast("Guardado"); };
   const on = (sel, fn) => { const el = $(sel, sh); if (el) el.onclick = fn; };
@@ -5009,33 +5027,37 @@ function renderSheet() {
   on("#bReabrir", () => upd({ concluido: false, realFim: null, pctEmp: 90 }, `Reabriu ${N}`, "reabrir"));
   on("#bUndo", () => upd({ realInicio: null, realFim: null, concluido: false }, `Anulou início de ${N}`, "correcao"));
   const rp = $("#rPct", sh); if (rp) rp.oninput = () => { $("#oPct", sh).textContent = rp.value + "%"; ui.sheet.pctTmp = { id, v: Number(rp.value) }; };
-  on("#bPct", () => {
-    const pt = ui.sheet.pctTmp;
-    const v = pt && pt.id === id ? pt.v : Number(rp.value);
+  const guardarPct = (v) => {
     ui.sheet.pctTmp = null;
     const patch = { pctEmp: v, empEm: new Date().toISOString() };
     if (v > 0 && !a.realInicio) patch.realInicio = S.hoje;
-    upd(patch, `${N}: ${v}% feito (empreiteiro)`, "progresso");
+    return upd(patch, `${N}: ${v}% feito (empreiteiro)`, "progresso");
+  };
+  on("#bPct", () => {
+    const pt = ui.sheet.pctTmp;
+    guardarPct(pt && pt.id === id ? pt.v : Number(rp.value));
   });
-  on("#bPrev", () => {
-    const mot = $("#dMot", sh).value.trim(), dur = $("#dDur", sh).value;
+  on("#bPrev", () => guardarPrev($("#dMot", sh).value.trim(), $("#dDur", sh).value));
+  const guardarPrev = (mot, dur) => {
     const patch = { motivo: mot || null, duracaoManual: dur === "" ? null : Math.max(0, Number(dur)) };
     // uma duração escrita passa a mandar no fim (um fim escrito antes deixaria a duração sem efeito)
     if (dur !== "" && S.res.get(id).estado !== "concluida") patch.fimPrevisto = null;
     const partes = [];
     if (dur !== "") partes.push("duração de " + dur + " dias");
     if (mot) partes.push("motivo: " + mot);
-    upd(patch, `${N}: ${partes.join(", ") || "motivo e duração limpos"}`, "previsao");
-  });
-  let pctVist = Math.round(a.pctFiscal ?? a.pctEmp ?? 0);
+    return upd(patch, `${N}: ${partes.join(", ") || "motivo e duração limpos"}`, "previsao");
+  };
+  const pctVist0 = Math.round(a.pctFiscal ?? a.pctEmp ?? 0);
+  let pctVist = pctVist0;
   const fpw = $("#fPctW", sh);
-  const ligaPct = () => bindPctCtl(fpw, () => pctVist, (k, val) => { pctVist = val; fpw.innerHTML = pctCtlHTML("sheet", val, true); ligaPct(); });
+  const ligaPct = () => bindPctCtl(fpw, () => pctVist, (k, val) => { pctVist = val; fpw.innerHTML = pctCtlHTML("sheet", val, true); ligaPct(); marcaSujo(); });
   if (fpw) ligaPct();
   let fotos = [];
   const desenhaPend = () => {
     const el = $("#fPend", sh); if (!el) return;
     el.innerHTML = pendentesHTML("sv", fotos);
     el.querySelectorAll("[data-prm]").forEach((b) => (b.onclick = () => { fotos.splice(+b.dataset.prm.split("|")[1], 1); desenhaPend(); }));
+    marcaSujo();
   };
   bindFotoPickers(sh, async (key, novas) => {
     if (key === "se") { // empreiteiro: guarda logo
@@ -5046,8 +5068,8 @@ function renderSheet() {
     }
     fotos = fotos.concat(novas); desenhaPend();
   });
-  on("#bVist", async () => {
-    const v = pctVist, nota = $("#fNota", sh).value.trim();
+  on("#bVist", () => guardarVist(pctVist, $("#fNota", sh).value.trim(), fotos));
+  const guardarVist = async (v, nota, fotos) => {
     const agora = new Date().toISOString();
     for (const f of fotos) await store.addFoto(id, a.unidade, f, nota);
     const patch = { pctFiscal: v, fiscalEm: agora, fiscalPor: store.user.email };
@@ -5055,8 +5077,40 @@ function renderSheet() {
     const dados = { esp: nomeAtiv(a), antes: a.pctFiscal ?? null, depois: v, emp: pct, nota: nota || null, nfotos: fotos.length };
     await store.updateAtividade(id, patch,
       { tipo: "vistoria", texto: `Vistoria ${N}: ${v}% (empreiteiro dizia ${pct}%)${fotos.length ? `, ${fotos.length} fotografia(s)` : ""}${nota ? ", comentário: " + nota : ""}`, dados });
-    fotos = []; toast("Vistoria guardada");
-  });
+    fotos.length = 0; toast("Vistoria guardada");
+  };
+  /* Botão Guardar no canto: aparece quando há alguma coisa escrita ou mexida que ainda não foi guardada. */
+  const sujos = () => {
+    const out = [];
+    const rpx = $("#rPct", sh); if (rpx && Number(rpx.value) !== Math.round(a.pctEmp ?? 0)) out.push("pct");
+    const dm = $("#dMot", sh), dd = $("#dDur", sh); if (dm && dd && (dm.value.trim() !== (a.motivo || "") || dd.value !== String(a.duracaoManual ?? ""))) out.push("prev");
+    const fn = $("#fNota", sh); if ($("#bVist", sh) && (pctVist !== pctVist0 || (fn && fn.value.trim()) || fotos.length)) out.push("vist");
+    const pt = sh.querySelector('[data-pane="pend"] [data-pdtxt]'); if (pt && pt.value.trim()) out.push("pend");
+    return out;
+  };
+  ui.sheet.sujos = sujos;
+  const bG = $("#sGuardar", sh);
+  function marcaSujo() { if (!bG) return; const n = sujos().length; bG.hidden = !n; bG.textContent = n > 1 ? `Guardar (${n})` : "Guardar"; }
+  sh.addEventListener("input", marcaSujo);
+  sh.addEventListener("change", marcaSujo);
+  const guardarTudo = async () => {
+    const s = sujos(); if (!s.length) return true;
+    // ler tudo antes de gravar: cada gravação volta a desenhar a ficha
+    const rpx = $("#rPct", sh), pt = ui.sheet.pctTmp;
+    const v = { pct: pt && pt.id === id ? pt.v : rpx ? Number(rpx.value) : null, mot: ($("#dMot", sh) || {}).value, dur: ($("#dDur", sh) || {}).value, vv: pctVist, nota: (($("#fNota", sh) || {}).value || "").trim(), fotos: [...fotos] };
+    bG.disabled = true;
+    try {
+      if (s.includes("vist")) await guardarVist(v.vv, v.nota, v.fotos);
+      if (s.includes("pct")) await guardarPct(v.pct);
+      if (s.includes("prev")) await guardarPrev((v.mot || "").trim(), v.dur);
+      if (s.includes("pend")) { const b = document.querySelector('aside[data-dw="ativ"] [data-pane="pend"] [data-pdadd]'); if (b) b.click(); }
+      if (s.length > 1) toast("Tudo guardado");
+      return true;
+    } catch (e) { toast("Não foi possível guardar: " + erroSimples(e), { anular: false }); if (bG.isConnected) bG.disabled = false; return false; }
+  };
+  ui.sheet.guardarTudo = guardarTudo;
+  if (bG) bG.onclick = guardarTudo;
+  marcaSujo();
   if ($("#depBox", sh)) {
     const excl = new Set([id, ...down, ...r.preds.map((x) => x.id)]);
     bindDepPicker(sh, "dp", { excluir: excl, esp: a.esp, self: id, onPick: (pid, tipo) => {
