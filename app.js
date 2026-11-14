@@ -290,6 +290,8 @@ function compute() {
 /** Atividades da obra (sem as das frações de teste). */
 const actsObra = () => Object.values(S.acts).filter((a) => !S.idsTeste.has(a.unidade));
 const nomeAtiv = (a) => (a.esp && S.espIdx[a.esp] ? S.espIdx[a.esp].nome : a.seccao);
+/** Especialidades dos apartamentos e lojas (sem as das zonas comuns e geral), pela ordem da lista. */
+const espAp = () => (S.cfg.especialidades || []).filter((e) => !e.grupo).sort((a, b) => a.ordem - b.ordem);
 const blocoLabel = (b) => (b === "Geral" ? "Geral" : "Bloco " + b);
 
 /* ============================================================ arranque */
@@ -491,7 +493,7 @@ function chaveVersao(v) {
   return `${m[3]}${m[2].padStart(2, "0")}${m[1].padStart(2, "0")}-${m[4].padStart(3, "0")}`;
 }
 const NOVIDADES = [
-  ["14.11.2026 V2", ["O número da versão passa a ser o dia da publicação e a versão desse dia, por exemplo 14.11.2026 V2."]],
+  ["14.11.2026 V2", ["Sequência: secções próprias para as zonas comuns e para os trabalhos gerais, com dias e condições como nos apartamentos.", "Ficha da atividade: botão Recalcular o início, que põe o início logo a seguir às atividades de que depende, mantendo o prazo.", "O número da versão passa a ser o dia da publicação e a versão desse dia, por exemplo 14.11.2026 V2."]],
   ["14.11.2026 V1", ["Definições, Cópia de segurança: todas as pessoas podem descarregar uma cópia com tudo o que está registado e repor a partir dela (os acessos só o dono de obra repõe).", "A versão da aplicação está sempre à vista; ao tocar nela vê o que mudou.", "Ficha da atividade: aparece um botão Guardar no canto sempre que há alguma coisa por guardar, e a aplicação avisa se fechar sem guardar.", "Botão Recalcular o fim: na ficha, ao lado da previsão de fim, e na escolha em massa dos Trabalhos. Repõe o fim com a duração normal.", "Trabalhos: a caixa de escolha em massa está arrumada em três grupos: Equipa, Execução e Previsão."]],
   ["13.11.2026 V4", ["Gantt: filtros por várias atividades, estado, equipa, tipo de fração, procura e período.", "Trabalhos: a lista vem ordenada pela sequência das atividades e depois por fração.", "Trabalhos: botão Terminar escolha também dentro da caixa de escolha."]],
   ["13.11.2026 V3", ["Trabalhos: anular o início real de várias atividades de uma vez.", "Trabalhos: procurar dentro da caixa de escolha, com várias palavras e sem ligar a acentos."]],
@@ -1148,7 +1150,7 @@ async function resumoSemana() {
     ${concl.length ? `<div class="note">Últimas concluídas: ${concl.slice(0, 5).map((r) => esc(r.texto.replace(/^Concluiu /, ""))).join(" · ")}${concl.length > 5 ? " ..." : ""}</div>` : ""}`;
 }
 function heatHTML() {
-  const esp = [...S.cfg.especialidades].sort((a, b) => a.ordem - b.ordem);
+  const esp = espAp();
   const fil = ui.bloco;
   const us = S.unidades.filter((u) => (u.tipo === "Apartamento" || u.tipo === "Loja") && (fil === "todos" || u.bloco === fil));
   let lastB = null;
@@ -1981,6 +1983,32 @@ async function iniciarVarias(ids, v) {
   return true;
 }
 /** Repõe o fim previsto com a duração normal (tira o fim escrito à mão e a duração própria). */
+/**
+ * Início recalculado pelas atividades de que esta depende: o dia a seguir ao fim previsto da última
+ * (ou o arranque dela, numa ligação de início a início); nunca antes de hoje.
+ */
+function inicioRecalc(id) {
+  const a = S.acts[id], r = S.res.get(id);
+  if (!a || !r) return { pode: false, porque: "" };
+  if (r.estado === "concluida") return { pode: false, porque: "Atividade concluída." };
+  if (a.realInicio) return { pode: false, porque: "Já começou: o início real é o que conta." };
+  const { es, quem } = primeiraPossivel(r);
+  if (!es) return { pode: false, porque: "Não depende de nenhuma atividade. Mude a data à mão, se precisar." };
+  const dia = es < S.hoje ? S.hoje : es;
+  if (dia === r.prevIni) return { pode: false, dia, quem, porque: `O início já é o primeiro dia possível (${fd(dia)}), logo a seguir a ${nomeAtiv(quem)} em ${quem.unidade}.` };
+  return { pode: true, dia, quem, es, porque: `Passa o início para ${fd(dia)}${es < S.hoje ? " (hoje)" : ""}, logo a seguir a ${nomeAtiv(quem)} em ${quem.unidade}. Mantém o prazo desta atividade.` };
+}
+async function recalcularInicio(id) {
+  const a = S.acts[id], r = S.res.get(id), ri = inicioRecalc(id);
+  if (!ri.pode) { if (ri.porque) toast(ri.porque, { anular: false }); return false; }
+  const N = `${nomeAtiv(a)} em ${a.unidade}`;
+  const delta = diffDays(r.prevIni, ri.dia);
+  // muda só o início; o prazo desta atividade fica igual (o fim anda com ele)
+  const patch = { inicioPrevisto: ri.dia, dataOk: true, ...prazoDe(id) };
+  await gravarComSeguintes(id, patch, { tipo: "previsao", texto: `${N}: início recalculado pelas atividades de que depende, ${fd(ri.dia)}` }, delta,
+    `Início recalculado: ${fd(ri.dia)} (${delta > 0 ? delta + " dias mais tarde" : -delta + " dias mais cedo"})`);
+  return true;
+}
 async function recalcularFim(ids) {
   const todas = ids.map((id) => S.acts[id]).filter(Boolean);
   const mexida = (a) => !!a.fimPrevisto || (a.duracaoManual != null && a.duracaoManual !== "");
@@ -3242,11 +3270,95 @@ function simGanttHTML(esp, regras, dur, nAp) {
   </section>`;
 }
 /* ============================================================ regras (sequência) */
+/* Secções da Sequência. base: a ordem das especialidades de cada secção começa aí (as dos apartamentos vêm primeiro nos Trabalhos). */
+const SEQ_GRUPOS = [
+  { k: "ap", l: "Apartamentos e lojas", base: 0 },
+  { k: "zc", l: "Zonas comuns", tipo: "Zona comum", pref: "zc_", base: 1000, de: "das zonas comuns" },
+  { k: "geral", l: "Geral", tipo: "Geral", pref: "g_", base: 2000, de: "gerais" },
+];
+/** Trabalhos das zonas comuns ou gerais que ainda não estão na lista da Sequência. */
+function trabFora(G) {
+  const g = SEQ_GRUPOS.find((x) => x.k === G);
+  return Object.values(S.acts).filter((a) => {
+    const u = S.uMap[a.unidade];
+    return u && !u.teste && u.tipo === g.tipo && !(a.esp && S.espIdx[a.esp]) && (a.seccao || "").trim();
+  });
+}
+/**
+ * Junta os trabalhos das zonas comuns (ou gerais) com o mesmo nome numa linha da Sequência.
+ * As ligações do cronograma que todos esses trabalhos já têm entre si passam a regras da lista; as datas não mudam.
+ */
+async function organizarSeq(G) {
+  const g = SEQ_GRUPOS.find((x) => x.k === G);
+  const fora = trabFora(G);
+  if (!fora.length) return;
+  const limpa = (t) => String(t || "").trim().replace(/\s+/g, " ");
+  const chaveNome = (t) => semAcento(limpa(t)).toLowerCase();
+  const doGrupo = (S.cfg.especialidades || []).filter((e) => e.grupo === G);
+  const porNome = new Map(doGrupo.map((e) => [chaveNome(e.nome), e.key]));
+  const usadas = new Set((S.cfg.especialidades || []).map((e) => e.key));
+  const novas = [];
+  // ordem das novas: pela data prevista mais cedo de cada uma
+  const ini = (a) => (S.res.get(a.id) || {}).prevIni || "9999";
+  const grupos = new Map();
+  for (const a of fora) { const n = chaveNome(a.seccao); if (!grupos.has(n)) grupos.set(n, []); grupos.get(n).push(a); }
+  const lista = [...grupos.entries()].sort((x, y) => x[1].map(ini).sort()[0].localeCompare(y[1].map(ini).sort()[0]));
+  let ordem = Math.max(g.base, ...doGrupo.map((e) => e.ordem));
+  const keyDe = new Map(); // id da atividade -> especialidade
+  for (const a of Object.values(S.acts)) if (a.esp && S.espIdx[a.esp] && S.espIdx[a.esp].grupo === G) keyDe.set(a.id, a.esp);
+  for (const [n, acts] of lista) {
+    let k = porNome.get(n);
+    if (!k) {
+      const raiz = g.pref + slugKey(limpa(acts[0].seccao)).slice(2);
+      k = raiz; let i = 2; while (usadas.has(k)) k = raiz + "_" + i++;
+      usadas.add(k); porNome.set(n, k);
+      novas.push({ key: k, nome: limpa(acts[0].seccao), ordem: ++ordem, grupo: G });
+    }
+    for (const a of acts) keyDe.set(a.id, k);
+  }
+  // regras: só as ligações (fim para início) que todos os trabalhos dessa linha já têm, na mesma zona
+  const regras = { ...(S.cfg.regras || {}) };
+  const novasK = new Set(novas.map((e) => e.key));
+  const porUnidK = new Map(); // unidade|esp -> ids
+  for (const [id, k] of keyDe) { const u = S.acts[id].unidade; const c = u + "|" + k; if (!porUnidK.has(c)) porUnidK.set(c, []); porUnidK.get(c).push(id); }
+  for (const k of novasK) {
+    const inst = [...keyDe].filter(([, x]) => x === k).map(([id]) => S.acts[id]);
+    const cand = new Set();
+    for (const a of inst) for (const d of a.deps || []) { const p = keyDe.get(d.id); if (p && p !== k && S.acts[d.id].unidade === a.unidade) cand.add(p); }
+    const ok = [...cand].filter((p) => inst.every((a) => {
+      const alvo = porUnidK.get(a.unidade + "|" + p) || [];
+      if (!alvo.length) return true; // não há esse trabalho nesta zona: a regra não faz nada aqui
+      const ign = new Set(a.depsIgnorar || []);
+      return alvo.every((pid) => ign.has(pid) || (a.deps || []).some((d) => d.id === pid && (d.tipo || "FS") === "FS"));
+    }));
+    if (ok.length) regras[k] = [...new Set([...(regras[k] || []), ...ok])];
+  }
+  // confirma que as datas ficam iguais antes de gravar
+  const antes = S.res;
+  const novoActs = Object.values(S.acts).map((a) => (keyDe.has(a.id) && a.esp !== keyDe.get(a.id) ? { ...a, esp: keyDe.get(a.id) } : a));
+  const depois = schedule(novoActs, regras, S.hoje, S.cfg.duracoes || {});
+  const mudou = novoActs.filter((a) => { const x = antes.get(a.id), y = depois.get(a.id); return x && y && (x.provIni !== y.provIni || x.provFim !== y.provFim); });
+  if (mudou.length) { for (const k of novasK) delete regras[k]; Object.assign(regras, Object.fromEntries(Object.entries(S.cfg.regras || {}).filter(([k]) => novasK.has(k)))); }
+  const patches = fora.map((a) => ({ id: a.id, patch: { esp: keyDe.get(a.id) } }));
+  const n = fora.length, nl = novas.length;
+  await store.setConfig({ especialidades: [...(S.cfg.especialidades || []), ...novas], regras }, { tipo: "regras", texto: `Sequência: ${n} trabalhos ${g.de} organizados${nl ? ` em ${nl} linhas` : ""}` });
+  await store.updateMuitas(patches, null);
+  toast(`${n} ${n === 1 ? "trabalho" : "trabalhos"} ${g.de} na lista. As datas não mudaram.`);
+}
 function regrasView() {
   const dono = store.user.papel === "dono";
   const seq = dono || store.user.papel === "empreiteiro"; // dono e empreiteiro podem mudar tudo neste ecrã
-  const esp = [...S.cfg.especialidades].sort((a, b) => a.ordem - b.ordem);
+  // secções: apartamentos e lojas, zonas comuns, geral (cada uma com a sua lista e as suas regras)
+  const G = SEQ_GRUPOS.some((g) => g.k === ui.seqG) ? ui.seqG : "ap";
+  const gInfo = SEQ_GRUPOS.find((g) => g.k === G);
+  const grupoDe = (e) => e.grupo || "ap";
+  const todas = [...(S.cfg.especialidades || [])].sort((a, b) => a.ordem - b.ordem);
+  const esp = todas.filter((e) => grupoDe(e) === G);
+  const foraSeq = G === "ap" ? [] : trabFora(G);
+  const nG = (k) => todas.filter((e) => grupoDe(e) === k).length;
   const regras = S.cfg.regras || {}, dur = S.cfg.duracoes || {};
+  // dias de cada trabalho quando não há valor na lista (o que cada atividade já tem)
+  const diasHab = (k) => { const c = {}; for (const a of Object.values(S.acts)) if (a.esp === k) { const d = Number(a.duracao) || 0; c[d] = (c[d] || 0) + 1; } const t = Object.entries(c).sort((x, y) => y[1] - x[1])[0]; return t ? t[0] : ""; };
   // ordenação só de visualização (clicar no título da coluna); a ordem guardada não muda
   const vs = ui.regSort || null;
   // seguintes: as especialidades que esperam por esta (o inverso de «Só começa depois de»)
@@ -3261,15 +3373,24 @@ function regrasView() {
   const NOMES_COL = { nome: "ordem alfabética", dias: "dias por fração", cond: "número de condições", seg: "número de atividades que dependem desta" };
   const th = (col, l) => { const on = vs && vs.col === col; return `<button class="th-sort ${on ? "on" : ""}" data-rsort="${col}" title="Ordenar por ${l.toLowerCase()}">${l}<span class="arr">${on ? (vs.dir === "desc" ? "▼" : "▲") : "↕"}</span></button>`; };
   const nAp = S.unidades.filter((u) => u.tipo === "Apartamento").length;
+  const nZc = S.unidades.filter((u) => u.tipo === "Zona comum").length;
+  const colDias = G === "ap" ? "Dias por fração" : G === "zc" ? "Dias por bloco" : "Dias";
+  const textoG = {
+    ap: `Cada especialidade só pode arrancar num apartamento quando as especialidades da coluna «Só começa depois de» estiverem concluídas <b>nesse mesmo apartamento</b>. Uma regra aqui aplica-se de uma vez aos ${nAp} apartamentos. Se uma atividade se atrasar, todas as que dependem dela andam para a frente sozinhas.`,
+    zc: `Cada trabalho só pode arrancar na zona comum de um bloco quando os trabalhos da coluna «Só começa depois de» estiverem concluídos <b>na zona comum desse mesmo bloco</b>. Uma regra aqui aplica-se de uma vez às ${nZc} zonas comuns. Se um trabalho se atrasar, os que dependem dele andam para a frente sozinhos.`,
+    geral: `Trabalhos gerais da obra (estrutura, exteriores, garagens, instalações técnicas). Cada um só pode arrancar quando os trabalhos da coluna «Só começa depois de» estiverem concluídos. Se um trabalho se atrasar, os que dependem dele andam para a frente sozinhos.`,
+  }[G];
   const html = `
     ${defTabs("regras")}
-    <div class="card-h"><h1>Sequência dos trabalhos</h1>${seq ? `<div class="row"><button class="btn" id="ordSeq" title="Põe cada especialidade depois das de que depende">Ordenar pela sequência</button><button class="btn pri" data-nova="esp">+ Nova especialidade</button></div>` : ""}</div>
-    <p style="max-width:70ch">Cada especialidade só pode arrancar num apartamento quando as especialidades da coluna «Só começa depois de» estiverem concluídas <b>nesse mesmo apartamento</b>. Uma regra aqui aplica-se de uma vez aos ${nAp} apartamentos. Se uma atividade se atrasar, todas as que dependem dela andam para a frente sozinhas.</p>
+    <div class="card-h"><h1>Sequência dos trabalhos</h1>${seq && esp.length ? `<div class="row"><button class="btn" id="ordSeq" title="Põe cada trabalho depois dos de que depende">Ordenar pela sequência</button>${G === "ap" ? `<button class="btn pri" data-nova="esp">+ Nova especialidade</button>` : ""}</div>` : ""}</div>
+    <div class="seq-g" role="tablist" aria-label="Secção da sequência">${SEQ_GRUPOS.map((g) => `<button type="button" role="tab" class="${g.k === G ? "on" : ""}" aria-selected="${g.k === G}" data-seqg="${g.k}">${g.l} <span class="num">${nG(g.k)}</span></button>`).join("")}</div>
+    <p style="max-width:70ch">${textoG}</p>
+    ${foraSeq.length ? (seq ? `<div class="banner warn"><span>${esp.length ? `<b>${foraSeq.length} ${foraSeq.length === 1 ? "trabalho" : "trabalhos"} ${gInfo.de} ainda fora desta lista.</b> Acrescente-os para poder dar-lhes sequência.` : `<b>Os ${foraSeq.length} trabalhos ${gInfo.de} ainda não estão organizados.</b> A aplicação junta os que têm o mesmo nome (por exemplo o mesmo trabalho nos 4 blocos) e mostra-os aqui, com as ligações que já vêm do cronograma. As datas não mudam.`}</span><button class="btn pri" id="seqOrg">${esp.length ? "Acrescentar" : "Organizar"}</button></div>` : `<div class="banner">Os trabalhos ${gInfo.de} ainda não foram organizados nesta lista. O dono de obra ou o empreiteiro podem fazê-lo.</div>`) : ""}
     ${seq ? "" : `<div class="banner">Só o dono de obra e o empreiteiro podem alterar esta sequência.</div>`}
     ${vs ? `<div class="banner"><span>A ver por <b>${NOMES_COL[vs.col]}</b>${vs.dir === "desc" ? " (decrescente)" : ""}. A ordem guardada da lista não mudou.</span><span class="row" style="gap:6px">${seq ? `<button class="btn sm" id="rsGuardar">Guardar como ordem da lista</button>` : ""}<button class="btn sm" id="rsVoltar">Voltar à ordem da lista</button></span></div>` : ""}
-    <div class="reg-q"><input class="inp" type="search" id="regQ" placeholder="Procurar especialidade" aria-label="Procurar especialidade" autocomplete="off" value="${esc(ui.regQ || "")}"><span class="note" id="regQn"></span></div>
-    <div class="rules">
-      <div class="rule rule-h ${mexe ? "ordenavel" : ""}">${mexe ? "<span></span>" : ""}<span>${th("nome", "Especialidade")}</span><span>${th("dias", "Dias por fração")}</span><span>${th("cond", "Só começa depois de")}</span><span>${th("seg", "Dependem desta")}</span></div>
+    <div class="reg-q"><input class="inp" type="search" id="regQ" placeholder="${G === "ap" ? "Procurar especialidade" : "Procurar trabalho"}" aria-label="${G === "ap" ? "Procurar especialidade" : "Procurar trabalho"}" autocomplete="off" value="${esc(ui.regQ || "")}"><span class="note" id="regQn"></span></div>
+    ${esp.length ? `<div class="rules">
+      <div class="rule rule-h ${mexe ? "ordenavel" : ""}">${mexe ? "<span></span>" : ""}<span>${th("nome", G === "ap" ? "Especialidade" : "Trabalho")}</span><span>${th("dias", colDias)}</span><span>${th("cond", "Só começa depois de")}</span><span>${th("seg", "Dependem desta")}</span></div>
       ${vista.map((e) => {
         const pre = regras[e.key] || [];
         // não deixa escolher uma especialidade que já espera (direta ou indiretamente) por esta: seria um círculo
@@ -3277,14 +3398,14 @@ function regrasView() {
         const disp = esp.filter((x) => x.key !== e.key && !pre.includes(x.key) && !espera(x.key, e.key)).sort((x, y) => x.nome.localeCompare(y.nome, "pt", { sensitivity: "base", numeric: true }));
         const i = esp.indexOf(e);
         return `<div class="rule ${mexe ? "ordenavel" : ""}" data-rk="${e.key}" data-rq="${esc(semAcento([e.nome, ...pre.map((k) => (S.espIdx[k] ? S.espIdx[k].nome : k))].join(" ")))}" ${mexe ? 'draggable="true"' : ""}>${mexe ? `<div class="ordb"><button class="ord-b" data-ord="${e.key}|-1" ${i === 0 ? "disabled" : ""} title="Subir" aria-label="Subir ${esc(e.nome)}">▲</button><button class="ord-b" data-ord="${e.key}|1" ${i === esp.length - 1 ? "disabled" : ""} title="Descer" aria-label="Descer ${esc(e.nome)}">▼</button></div>` : ""}<div class="rnome" data-rnome="${e.key}"><b>${esc(e.nome)}</b>${seq ? `<button class="ren-b" data-ren="${e.key}" title="Mudar o nome" aria-label="Mudar o nome de ${esc(e.nome)}"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20h4L18.5 9.5a2.1 2.1 0 0 0-3-3L5 17v3z"/><path d="M14 8l3 3"/></svg></button>` : ""}</div>
-          <input class="inp num" type="number" min="0" max="365" value="${dur[e.key] ?? ""}" data-dur="${e.key}" ${seq ? "" : "disabled"} aria-label="Dias por fração de ${esc(e.nome)}">
+          <input class="inp num" type="number" min="0" max="365" value="${dur[e.key] ?? ""}" ${G === "ap" ? "" : `placeholder="${diasHab(e.key)}" title="Vazio: cada trabalho fica com os dias que já tem"`} data-dur="${e.key}" ${seq ? "" : "disabled"} aria-label="${colDias} de ${esc(e.nome)}">
           <div class="tags">${pre.map((k) => `<span class="tag ${seq ? "" : "ro"}">${esc(S.espIdx[k] ? S.espIdx[k].nome : k)}${seq ? `<button data-rm="${e.key}|${k}" aria-label="Retirar">×</button>` : ""}</span>`).join("") || `<span class="note">Sem condições</span>`}
           ${seq ? `<select class="inp" data-add="${e.key}"><option value="">+ acrescentar</option>${disp.map((x) => `<option value="${x.key}">${esc(x.nome)}</option>`).join("")}</select>` : ""}</div>
           <div class="tags segs" title="Especialidades que só começam depois de esta estar concluída">${seguintes(e.key).sort((x, y) => x.ordem - y.ordem).map((x) => `<button type="button" class="tag seg" data-rgo="${x.key}" title="Ir para ${esc(x.nome)}">${esc(x.nome)}</button>`).join("") || `<span class="note">Nenhuma</span>`}</div></div>`;
       }).join("")}
     </div>
-    <p class="note">As outras ligações entre trabalhos (por exemplo a sequência da Equipa 4 de apartamento em apartamento) continuam ativas além destas regras.</p>
-    ${simGanttHTML(esp, regras, dur, nAp)}`;
+    <p class="note">${G === "ap" ? "As outras ligações entre trabalhos (por exemplo a sequência da Equipa 4 de apartamento em apartamento) continuam ativas além destas regras." : "As ligações que cada trabalho tem na sua ficha (com apartamentos ou com outras zonas) continuam ativas além destas regras."}</p>` : G === "ap" ? "" : foraSeq.length ? "" : `<div class="empty">Não há trabalhos ${gInfo.de}.</div>`}
+    ${G === "ap" ? simGanttHTML(esp, regras, dur, nAp) : ""}`;
   return {
     html, bind: () => {
       document.querySelectorAll("[data-rsort]").forEach((b) => (b.onclick = () => {
@@ -3303,9 +3424,12 @@ function regrasView() {
         r.classList.remove("piscar"); void r.offsetWidth; r.classList.add("piscar");
       }));
       document.querySelectorAll("[data-simeq]").forEach((b) => (b.onclick = () => { ui.simEq = b.dataset.simeq; render(); }));
+      document.querySelectorAll("[data-seqg]").forEach((b) => (b.onclick = () => { ui.seqG = b.dataset.seqg; ui.regSort = null; render(); }));
+      const so = $("#seqOrg"); if (so) so.onclick = () => organizarSeq(G);
       document.querySelectorAll("[data-simord]").forEach((b) => (b.onclick = () => { ui.simOrd = b.dataset.simord; render(); }));
       const rq = $("#regQ");
       const filtra = () => {
+        if (!$("#regQn")) return;
         ui.regQ = rq.value;
         const t = semAcento(rq.value.trim()).split(/\s+/).filter(Boolean);
         let n = 0;
@@ -3319,7 +3443,7 @@ function regrasView() {
       if (!seq) return;
       const rg = $("#rsGuardar");
       if (rg) rg.onclick = async () => {
-        const pos = Object.fromEntries(vista.map((e, i) => [e.key, i + 1]));
+        const pos = Object.fromEntries(vista.map((e, i) => [e.key, gInfo.base + i + 1]));
         await store.setConfig({ especialidades: S.cfg.especialidades.map((x) => ({ ...x, ordem: pos[x.key] ?? x.ordem })) }, { tipo: "regras", texto: `Especialidades ordenadas por ${NOMES_COL[vs.col]}` });
         ui.regSort = null;
         toast("Ordem da lista guardada");
@@ -3349,7 +3473,7 @@ function regrasView() {
       }));
       // ordem das especialidades: setas, arrastar (rato) e ordenar pela sequência
       const gravaOrdem = async (keys, texto) => {
-        const pos = Object.fromEntries(keys.map((k, i) => [k, i + 1]));
+        const pos = Object.fromEntries(keys.map((k, i) => [k, gInfo.base + i + 1]));
         const lista = S.cfg.especialidades.map((x) => ({ ...x, ordem: pos[x.key] ?? x.ordem }));
         await store.setConfig({ especialidades: lista }, { tipo: "regras", texto });
         toast("Ordem guardada");
@@ -3408,7 +3532,7 @@ function regrasView() {
       }));
       document.querySelectorAll("[data-dur]").forEach((i) => (i.onchange = () => {
         const k = i.dataset.dur, v = i.value === "" ? null : Math.max(0, Number(i.value));
-        save({ duracoes: { ...dur, [k]: v } }, `Duração de ${S.espIdx[k].nome}: ${v} dias por fração`);
+        save({ duracoes: { ...dur, [k]: v } }, v == null ? `Duração de ${S.espIdx[k].nome}: cada trabalho fica com os dias que já tinha` : `Duração de ${S.espIdx[k].nome}: ${v} ${G === "ap" ? "dias por fração" : G === "zc" ? "dias por bloco" : "dias"}`);
       }));
     },
   };
@@ -4203,7 +4327,7 @@ function openEquipa(nome, opts = {}) {
   const e0 = orig ? { ...orig, esp: [...(orig.esp || [])], blocos: [...(orig.blocos || [])] } : { nome: "", responsavel: "", telefone: "", esp: [], blocos: [], notas: "" };
   const zonas = ["A", "B", "C", "D", "Lojas", "Geral"].filter((k) => S.unidades.some((u) => (u.tipo === "Loja" ? "Lojas" : u.bloco) === k));
   const nTrab = orig ? statsEquipa(orig.nome).total : 0;
-  const esp = [...S.cfg.especialidades].sort((a, b) => a.ordem - b.ordem);
+  const esp = espAp();
   const html = `
   <div class="scrim" data-dw="equipa"></div>
   <aside class="sheet" data-dw="equipa" role="dialog" aria-label="${orig ? "Editar equipa" : "Nova equipa"}">
@@ -4397,7 +4521,7 @@ function sugerirCodigo(tipo, bloco, piso) {
 }
 function openNovaFracao() {
   document.querySelectorAll('[data-dw="fracao"]').forEach((e) => e.remove());
-  const esp = [...S.cfg.especialidades].sort((a, b) => a.ordem - b.ordem);
+  const esp = espAp();
   const st = { tipo: "Apartamento", bloco: ui.bloco && ui.bloco !== "todos" ? ui.bloco : "A", piso: 1, codigoManual: false, ativ: "padrao" };
   const html = `
   <div class="scrim" data-dw="fracao"></div>
@@ -4552,7 +4676,7 @@ function slugKey(s) {
 function atividadesJaCriadas() {
   const m = new Map();
   for (const a of Object.values(S.acts)) {
-    if (a.esp && S.espIdx[a.esp]) continue;
+    if (a.esp && S.espIdx[a.esp] && !S.espIdx[a.esp].grupo) continue; // as das zonas comuns e geral também servem de modelo
     const nome = nomeAtiv(a); if (!nome) continue;
     const x = m.get(nome) || { nome, n: 0, us: new Set(), dias: null, equipa: null };
     x.us.add(a.unidade); x.n = x.us.size;
@@ -4592,7 +4716,7 @@ function renderNova() {
   document.querySelectorAll('[data-dw="nova"]').forEach((e) => e.remove());
   const n = ui.nova;
   const dono = store.user.papel === "dono" || store.user.papel === "empreiteiro"; // podem criar especialidades
-  const esp = [...S.cfg.especialidades].sort((a, b) => a.ordem - b.ordem);
+  const esp = espAp();
   const ONDE = [["apart", "Todos os apartamentos"], ["lojas", "Todas as lojas"], ["zonas", "Zonas comuns"], ["geral", "Geral"], ["escolher", "Escolher frações"]];
   const grupos = ["A", "B", "C", "D", "Geral"];
   const html = `
@@ -4885,7 +5009,9 @@ function renderSheet() {
         const fimMexido = !!a.fimPrevisto || (a.duracaoManual != null && a.duracaoManual !== "");
         const durN = duracaoDe({ ...a, duracaoManual: null }, S.cfg.duracoes || {});
         const recBtn = ed && !conc ? `<button type="button" class="btn sm recfim" id="bRecFim" ${fimMexido ? "" : "disabled"} title="${fimMexido ? `Volta a pôr o fim com a duração normal desta atividade (${durN} dias)` : `O fim já está calculado com a duração normal (${durN} dias)`}">Recalcular o fim</button>` : "";
-        const prev = ed ? `<span class="v">${dateInput(id, "prevIni", r.prevIni)}</span><span class="v">${dateInput(id, "prevFim", r.prevFim)}${recBtn}</span>` : v(fd(r.prevIni, true), true) + v(fd(r.prevFim, true), true);
+        const ri = inicioRecalc(id);
+        const recIni = ed && !conc ? `<button type="button" class="btn sm recfim" id="bRecIni" ${ri.pode ? "" : "disabled"} title="${esc(ri.porque)}">Recalcular o início</button>` : "";
+        const prev = ed ? `<span class="v">${dateInput(id, "prevIni", r.prevIni)}${recIni}</span><span class="v">${dateInput(id, "prevFim", r.prevFim)}${recBtn}</span>` : v(fd(r.prevIni, true), true) + v(fd(r.prevFim, true), true);
         const real = ed ? `<span class="v">${dateInput(id, "realIni", a.realInicio, `max="${S.hoje}"`)}</span><span class="v">${dateInput(id, "realFim", conc ? a.realFim || r.fim : "", `max="${S.hoje}"`)}</span>`
           : v(a.realInicio ? fd(a.realInicio, true) : "-") + v(conc ? fd(r.fim, true) : "-");
         const atrI = r.atrasoInicio > 0 ? `<span class="v note">${a.realInicio ? "começou" : "devia ter começado há"} ${a.realInicio ? r.atrasoInicio + " dias depois do previsto" : r.atrasoInicio + " dias"}</span>` : `<span class="v"></span>`;
@@ -5068,6 +5194,7 @@ function renderSheet() {
   on("#bNovaSeg", () => { const u = a.unidade; closeSheet(); openNova("unit:" + u, { especificas: [{ id, tipo: "FS" }] }); });
   on("#bIni", () => editarData(id, "realIni", S.hoje));
   on("#bRecFim", () => recalcularFim([id]));
+  on("#bRecIni", () => recalcularInicio(id));
   on("#bFim", () => concluirHoje(id));
   on("#bReabrir", () => upd({ concluido: false, realFim: null, pctEmp: 90 }, `Reabriu ${N}`, "reabrir"));
   on("#bUndo", () => upd({ realInicio: null, realFim: null, concluido: false }, `Anulou início de ${N}`, "correcao"));
