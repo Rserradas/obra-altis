@@ -485,7 +485,7 @@ function verChipHTML() {
 function atualizarVerChips() { document.querySelectorAll("[data-ver]").forEach((b) => { b.outerHTML = verChipHTML(); }); document.querySelectorAll("[data-ver]").forEach((b) => (b.onclick = abrirNovidades)); }
 /* O que mudou em cada versão (as mais recentes primeiro). */
 const NOVIDADES = [
-  ["2026.11.17", ["Definições, Cópia de segurança: todas as pessoas podem descarregar uma cópia com tudo o que está registado e repor a partir dela (os acessos só o dono de obra repõe).", "A versão da aplicação está sempre à vista; ao tocar nela vê o que mudou."]],
+  ["2026.11.17", ["Definições, Cópia de segurança: todas as pessoas podem descarregar uma cópia com tudo o que está registado e repor a partir dela (os acessos só o dono de obra repõe).", "A versão da aplicação está sempre à vista; ao tocar nela vê o que mudou.", "Ficha da atividade: aparece um botão Guardar no canto sempre que há alguma coisa por guardar, e a aplicação avisa se fechar sem guardar.", "Botão Recalcular o fim: na ficha, ao lado da previsão de fim, e na escolha em massa dos Trabalhos. Repõe o fim com a duração normal.", "Trabalhos: a caixa de escolha em massa está arrumada em três grupos: Equipa, Execução e Previsão."]],
   ["2026.11.16", ["Gantt: filtros por várias atividades, estado, equipa, tipo de fração, procura e período.", "Trabalhos: a lista vem ordenada pela sequência das atividades e depois por fração.", "Trabalhos: botão Terminar escolha também dentro da caixa de escolha."]],
   ["2026.11.15", ["Trabalhos: anular o início real de várias atividades de uma vez.", "Trabalhos: procurar dentro da caixa de escolha, com várias palavras e sem ligar a acentos."]],
   ["2026.11.14", ["Trabalhos: mudar a previsão de início e de fim de várias atividades de uma vez."]],
@@ -1753,20 +1753,28 @@ function planoView() {
       ${filtrosAlterados() ? `<button class="btn sm repor-on" id="pclr" style="align-self:center">Limpar filtros</button>` : ""}
     </div>
     ${p.f === "porconfirmar" ? `<div class="banner warn"><span>Estas atividades nunca tiveram data. A aplicação deu-lhes a primeira data possível: hoje, ou logo a seguir às anteriores. Corra a lista e, em cada uma, corrija a data (com Editar datas) ou confirme que está certa. Ao mudar uma data, a atividade sai desta lista.</span>${can("executar") && shown.length ? `<button class="btn sm" id="confTodas">Confirmar as ${shown.length} mostradas</button>` : ""}</div>` : ""}
-    ${atr ? `<div class="atrbar" id="atrbar">
+    ${atr ? (() => {
+      const n = p.selec.size, dis = n ? "" : "disabled";
+      return `<div class="atrbar ${n ? "" : "vazia"}" id="atrbar">
+      <div class="atr-top">
+        <div class="atr-tit"><b>Escolha em massa</b><span class="atr-n ${n ? "on" : ""}"><b class="num">${n}</b> escolhida${n === 1 ? "" : "s"}</span></div>
+        <div class="atr-sel"><button class="btn sm" id="atrTodas">Escolher as ${shown.length} da lista</button>${n ? `<button class="btn sm ghost" id="atrLimpa">Limpar escolha</button>` : ""}<button class="btn sm warn" id="atrFim" title="Fecha esta caixa e volta à lista normal">Terminar escolha</button></div>
+      </div>
       <label class="f atr-q">Procurar para escolher<input class="inp" id="atrQ" type="search" value="${esc(p.q)}" placeholder="Ex.: louças B-F503"></label>
-      <span class="num"><b>${p.selec.size}</b> escolhida${p.selec.size === 1 ? "" : "s"}</span>
-      <button class="btn sm" id="atrTodas">Escolher as ${shown.length} da lista</button>${p.selec.size ? `<button class="btn sm ghost" id="atrLimpa">Limpar escolha</button>` : ""}<button class="btn sm warn" id="atrFim" title="Fecha esta caixa e volta à lista normal">Terminar escolha</button>
-      <span class="atr-g"><label class="f">Equipa<select class="inp" id="atrEq"><option value="">Escolha...</option>${S.equipas.map((e) => `<option ${p.atrEq === e ? "selected" : ""}>${esc(e)}</option>`).join("")}<option value="_sem">Retirar a equipa</option><option value="_nova">+ Nova equipa...</option></select></label>
-      <button class="btn pri" id="atrOk" ${p.selec.size ? "" : "disabled"}>Atribuir</button></span>
-      <span class="atr-g"><label class="f">Data<input class="inp" type="date" id="atrData" value="${p.atrData || S.hoje}" max="${S.hoje}"></label>
-      <button class="btn" id="atrIni" ${p.selec.size ? "" : "disabled"}>Iniciar</button>
-      <button class="btn ok" id="atrConc" ${p.selec.size ? "" : "disabled"}>Concluir</button>
-      <button class="btn" id="atrAnIni" ${p.selec.size ? "" : "disabled"} title="Apaga o início real das escolhidas que estão em curso: voltam a estar por iniciar">Anular início</button></span>
-      <span class="atr-g"><label class="f">Previsão de início<input class="inp" type="date" id="prvIni" value="${p.prvIni || ""}"></label>
-      <label class="f">Previsão de fim<input class="inp" type="date" id="prvFim" value="${p.prvFim || ""}"></label>
-      <button class="btn" id="prvOk" ${p.selec.size ? "" : "disabled"} title="Muda a previsão das escolhidas. Se só indicar o início, o fim recalcula-se com a duração normal. Se só indicar o fim, o início fica como está.">Mudar previsão</button></span>
-      <span class="note">Use os filtros (por exemplo Apartamento, Atividade ou Equipa) para chegar aos trabalhos certos e escolha-os. Depois atribua uma equipa, mude a previsão, inicie ou conclua todos na data indicada, ou anule o início.</span></div>` : ""}
+      ${n ? "" : `<p class="atr-dica">Filtre ou procure, e marque as atividades na lista (ou carregue em "Escolher as ${shown.length} da lista"). Depois escolha o que fazer em baixo.</p>`}
+      <div class="atr-grupos">
+        <section class="atr-g"><h4>Equipa</h4>
+          <label class="f">Equipa a atribuir<select class="inp" id="atrEq"><option value="">Escolha...</option>${S.equipas.map((e) => `<option ${p.atrEq === e ? "selected" : ""}>${esc(e)}</option>`).join("")}<option value="_sem">Retirar a equipa</option><option value="_nova">+ Nova equipa...</option></select></label>
+          <div class="atr-bt"><button class="btn pri" id="atrOk" ${dis}>Atribuir</button></div></section>
+        <section class="atr-g"><h4>Execução</h4>
+          <label class="f">Na data<input class="inp" type="date" id="atrData" value="${p.atrData || S.hoje}" max="${S.hoje}"></label>
+          <div class="atr-bt"><button class="btn" id="atrIni" ${dis}>Iniciar</button><button class="btn ok" id="atrConc" ${dis}>Concluir</button><button class="btn ghost" id="atrAnIni" ${dis} title="Apaga o início real das escolhidas que estão em curso: voltam a estar por iniciar">Anular início</button></div></section>
+        <section class="atr-g"><h4>Previsão</h4>
+          <div class="atr-2"><label class="f">Início<input class="inp" type="date" id="prvIni" value="${p.prvIni || ""}"></label>
+          <label class="f">Fim<input class="inp" type="date" id="prvFim" value="${p.prvFim || ""}"></label></div>
+          <div class="atr-bt"><button class="btn pri" id="prvOk" ${dis} title="Muda a previsão das escolhidas. Se só indicar o início, o fim recalcula-se com a duração normal. Se só indicar o fim, o início fica como está.">Mudar previsão</button><button class="btn" id="prvRec" ${dis} title="Volta a pôr o fim de cada escolhida com a duração normal, tirando os fins escritos à mão">Recalcular o fim</button></div></section>
+      </div></div>`;
+    })() : ""}
     <div class="note num">${list.length} atividade${list.length === 1 ? "" : "s"}${esconde ? ` · concluídas escondidas <button class="btn sm ghost" id="pmostra" style="min-height:24px;padding:0 6px;text-decoration:underline">mostrar</button>` : ""}</div>
     ${shown.length ? `<div class="tbl-wrap"><table class="tbl ${ed ? "editing" : ""}"><thead><tr>${atr ? `<th class="ck"><input type="checkbox" id="atrCkAll" ${shown.length && shown.every(({ a }) => p.selec.has(a.id)) ? "checked" : ""} aria-label="Escolher todas"></th>` : ""}${[["unidade", "Fração"], ["atividade", "Atividade"], ["estado", "Estado"], ["inicio", ed ? "Início" : "Início previsto"], ["fim", ed ? "Fim" : "Fim previsto"], ["desvio", "Atraso"], ["pct", "% · F"]].map(([k, l]) => {
       const on = p.sort && p.sort.col === k;
@@ -1843,6 +1851,7 @@ function planoView() {
         $("#atrConc").onclick = async () => { if (await concluirVarias([...p.selec], dt.value || S.hoje)) p.selec = new Set(), render(); };
         $("#atrIni").onclick = async () => { if (await iniciarVarias([...p.selec], dt.value || S.hoje)) p.selec = new Set(), render(); };
         $("#atrAnIni").onclick = async () => { if (await anularInicioVarias([...p.selec])) p.selec = new Set(), render(); };
+        $("#prvRec").onclick = async () => { if (await recalcularFim([...p.selec])) p.selec = new Set(), render(); };
         const pi = $("#prvIni"), pf = $("#prvFim");
         pi.onchange = () => { p.prvIni = pi.value; };
         pf.onchange = () => { p.prvFim = pf.value; };
@@ -1962,6 +1971,31 @@ async function iniciarVarias(ids, v) {
   const em = new Date().toISOString();
   await store.updateMuitas(alvo.map((a) => ({ id: a.id, patch: { realInicio: v, pctEmp: Math.max(Number(a.pctEmp) || 0, 5), empEm: em } })), { tipo: "inicio", texto: `${alvo.length} atividades iniciadas a ${fd(v)}` });
   toast(`${alvo.length} atividade${alvo.length === 1 ? "" : "s"} iniciada${alvo.length === 1 ? "" : "s"} a ${fd(v)}`);
+  return true;
+}
+/** Repõe o fim previsto com a duração normal (tira o fim escrito à mão e a duração própria). */
+async function recalcularFim(ids) {
+  const todas = ids.map((id) => S.acts[id]).filter(Boolean);
+  const mexida = (a) => !!a.fimPrevisto || (a.duracaoManual != null && a.duracaoManual !== "");
+  const conc = todas.filter((a) => S.res.get(a.id).estado === "concluida");
+  const alvo = todas.filter((a) => !conc.includes(a) && mexida(a));
+  if (!alvo.length) { toast(todas.length === 1 ? "O fim desta atividade já está calculado com a duração normal." : "Nenhuma das escolhidas tem o fim mudado à mão: já estão todas com a duração normal.", { anular: false }); return false; }
+  const durN = (a) => duracaoDe({ ...a, duracaoManual: null }, S.cfg.duracoes || {});
+  if (alvo.length > 1 || todas.length > 1) {
+    const iguais = todas.length - alvo.length - conc.length;
+    const k = await perguntar({
+      titulo: `Recalcular o fim de ${alvo.length} atividade${alvo.length === 1 ? "" : "s"}?`,
+      texto: `<p>O fim previsto volta a ser o início mais a duração normal de cada uma. Os fins escritos à mão e as durações próprias deixam de contar:</p>${listaNomes(alvo)}
+        ${iguais ? `<p class="note">${iguais} já ${iguais === 1 ? "estava" : "estavam"} com a duração normal.</p>` : ""}
+        ${conc.length ? `<p class="note">${conc.length} ${conc.length === 1 ? "está concluída e não muda" : "estão concluídas e não mudam"}.</p>` : ""}
+        <p class="note">As atividades seguintes acertam-se sozinhas. Se se enganar, carregue em Anular na mensagem que aparece a seguir.</p>`,
+      opcoes: [{ k: "sim", l: `Sim, recalcular ${alvo.length}`, estilo: "pri" }, { k: "nao", l: "Cancelar" }],
+    });
+    if (k !== "sim") return false;
+  }
+  await store.updateMuitas(alvo.map((a) => ({ id: a.id, patch: { fimPrevisto: null, duracaoManual: null } })),
+    { tipo: "previsao", texto: alvo.length === 1 ? `${nomeAtiv(alvo[0])} em ${alvo[0].unidade}: fim recalculado com a duração normal (${durN(alvo[0])} dias)` : `Fim recalculado com a duração normal em ${alvo.length} atividades` });
+  toast(alvo.length === 1 ? `Fim recalculado com a duração normal (${durN(alvo[0])} dias)` : `Fim recalculado em ${alvo.length} atividades`);
   return true;
 }
 async function anularInicioVarias(ids) {
@@ -4841,7 +4875,10 @@ function renderSheet() {
       ${(() => {
         const ed = can("executar"), dono = store.user.papel === "dono", conc = r.estado === "concluida";
         const v = (txt, b) => `<span class="v">${b ? "<b>" + txt + "</b>" : txt}</span>`;
-        const prev = ed ? `<span class="v">${dateInput(id, "prevIni", r.prevIni)}</span><span class="v">${dateInput(id, "prevFim", r.prevFim)}</span>` : v(fd(r.prevIni, true), true) + v(fd(r.prevFim, true), true);
+        const fimMexido = !!a.fimPrevisto || (a.duracaoManual != null && a.duracaoManual !== "");
+        const durN = duracaoDe({ ...a, duracaoManual: null }, S.cfg.duracoes || {});
+        const recBtn = ed && !conc ? `<button type="button" class="btn sm recfim" id="bRecFim" ${fimMexido ? "" : "disabled"} title="${fimMexido ? `Volta a pôr o fim com a duração normal desta atividade (${durN} dias)` : `O fim já está calculado com a duração normal (${durN} dias)`}">Recalcular o fim</button>` : "";
+        const prev = ed ? `<span class="v">${dateInput(id, "prevIni", r.prevIni)}</span><span class="v">${dateInput(id, "prevFim", r.prevFim)}${recBtn}</span>` : v(fd(r.prevIni, true), true) + v(fd(r.prevFim, true), true);
         const real = ed ? `<span class="v">${dateInput(id, "realIni", a.realInicio, `max="${S.hoje}"`)}</span><span class="v">${dateInput(id, "realFim", conc ? a.realFim || r.fim : "", `max="${S.hoje}"`)}</span>`
           : v(a.realInicio ? fd(a.realInicio, true) : "-") + v(conc ? fd(r.fim, true) : "-");
         const atrI = r.atrasoInicio > 0 ? `<span class="v note">${a.realInicio ? "começou" : "devia ter começado há"} ${a.realInicio ? r.atrasoInicio + " dias depois do previsto" : r.atrasoInicio + " dias"}</span>` : `<span class="v"></span>`;
@@ -5023,6 +5060,7 @@ function renderSheet() {
   on("#bNovaSeg2", () => { const u = a.unidade; closeSheet(); openNova("unit:" + u, { especificas: [{ id, tipo: "FS" }] }); });
   on("#bNovaSeg", () => { const u = a.unidade; closeSheet(); openNova("unit:" + u, { especificas: [{ id, tipo: "FS" }] }); });
   on("#bIni", () => editarData(id, "realIni", S.hoje));
+  on("#bRecFim", () => recalcularFim([id]));
   on("#bFim", () => concluirHoje(id));
   on("#bReabrir", () => upd({ concluido: false, realFim: null, pctEmp: 90 }, `Reabriu ${N}`, "reabrir"));
   on("#bUndo", () => upd({ realInicio: null, realFim: null, concluido: false }, `Anulou início de ${N}`, "correcao"));

@@ -640,9 +640,6 @@ a.li { text-decoration: none; color: inherit; }
 .eqcard-h b { font-size: 16px; overflow-wrap: anywhere; }
 .eqstats { display: flex; flex-wrap: wrap; gap: 4px 12px; font-size: 13px; color: var(--muted); }
 .eqstats b { color: var(--ink); }
-.atrbar { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 8px 12px; padding: 12px; border: 1px solid var(--accent); background: var(--surface); border-radius: var(--r); position: sticky; top: 8px; z-index: 5; }
-.atrbar label.f { flex: 0 1 240px; min-width: 0; }
-.atrbar .note { flex-basis: 100%; }
 .tbl th.ck, .tbl td.ck { width: 34px; padding-right: 0; }
 .tbl td.ck input, .tbl th.ck input { width: 18px; height: 18px; accent-color: var(--accent); cursor: pointer; }
 .tbl tr.sel td { background: var(--accent-soft, var(--surface-2)); }
@@ -948,14 +945,9 @@ input[type="date"]::-webkit-datetime-edit { padding: 0; }
 @media (prefers-reduced-motion: reduce) { .btn.repor-on::before { animation: none; } }
 
 /* escolher várias: grupos de ações */
-.atr-g { display: inline-flex; align-items: flex-end; gap: 8px; flex-wrap: wrap; padding: 6px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); }
 .btn.ok:disabled { opacity: .5; }
 .dlg-l { margin: 6px 0 10px; padding-left: 18px; }
 .dlg-l li { margin: 2px 0; }
-.atrbar { align-items: center; }
-.atr-g { flex-wrap: nowrap; }
-.atr-g label.f { flex: 0 1 190px; }
-@media (max-width: 760px) { .atr-g { width: 100%; flex-wrap: wrap; } .atrbar { position: static; } }
 
 /* ---------- fim da obra */
 .pv-top { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(0, 2fr); gap: 18px; }
@@ -1314,7 +1306,6 @@ body.gfull .tabbar, body.gfull .nova-versao { display: none; }
   body.imprimir-gantt .ghead { position: static; }
   body.imprimir-gantt .gantt, body.imprimir-gantt .gantt * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
 }
-.atrbar label.f.atr-q { flex: 1 1 100%; max-width: 420px; }
 /* Gantt: escolher várias atividades */
 .msel-w { position: relative; display: flex; flex-direction: column; gap: 5px; flex: 1 1 200px; min-width: 0; }
 .msel-l { font-size: .85rem; color: var(--muted); font-weight: 600; }
@@ -1339,3 +1330,25 @@ body.gfull .tabbar, body.gfull .nova-versao { display: none; }
 /* ficha: Guardar no canto */
 .sh-acoes { display: flex; align-items: center; gap: 8px; flex: none; }
 .sh-acoes #sGuardar { height: 36px; }
+/* escolha em massa: arrumada em três grupos */
+.atrbar { display: flex; flex-direction: column; gap: 10px; padding: 14px; border: 1.5px solid var(--accent); background: var(--surface); border-radius: var(--r); box-shadow: 0 4px 16px rgba(0,0,0,.06); }
+.atr-top { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 12px; }
+.atr-tit { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.atr-tit > b { font-size: 1.02rem; }
+.atr-n { padding: 3px 10px; border-radius: 999px; background: var(--surface-2); color: var(--muted); font-size: .85rem; }
+.atr-n.on { background: var(--accent); color: var(--accent-ink); }
+.atr-sel { display: flex; flex-wrap: wrap; gap: 6px; }
+.atrbar label.f.atr-q { max-width: 520px; }
+.atr-dica { margin: 0; font-size: .85rem; color: var(--muted); }
+.atr-grupos { display: grid; grid-template-columns: 1fr 1.3fr 1.5fr; gap: 10px; }
+.atr-g { display: flex; flex-direction: column; gap: 8px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); min-width: 0; }
+.atr-g h4 { margin: 0; font-size: .74rem; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+.atr-g label.f { min-width: 0; }
+.atr-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.atr-bt { display: flex; flex-wrap: wrap; gap: 6px; margin-top: auto; }
+.atrbar.vazia .atr-g { opacity: .7; }
+@media (min-width: 1100px) and (min-height: 820px) { .atrbar { position: sticky; top: 8px; z-index: 5; } }
+@media (max-width: 1000px) { .atr-grupos { grid-template-columns: 1fr 1fr; } .atr-g:last-child { grid-column: 1 / -1; } }
+@media (max-width: 640px) { .atr-grupos { grid-template-columns: 1fr; } .atr-top { align-items: flex-start; } }
+/* ficha: recalcular o fim */
+.dates .v .recfim { display: block; margin-top: 6px; font-family: var(--f-body); font-weight: 600; letter-spacing: 0; }
