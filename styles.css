@@ -1471,3 +1471,11 @@ details.pd-fr { display: block; border-top: 1px solid var(--line); }
 .pd-ed textarea { resize: vertical; }
 .pd-ed-r { display: flex; flex-wrap: wrap; gap: 8px; }
 .pd-ed-r .f { flex: 1 1 200px; min-width: 0; }
+
+/* Andares modelo */
+.mod-b { display: inline-block; vertical-align: middle; margin-left: 6px; font: 700 .68rem/1 var(--f-body); letter-spacing: .04em; text-transform: uppercase; color: #fff; background: #8A5A00; border-radius: 4px; padding: 3px 6px; white-space: nowrap; }
+.mod-b.curto { margin-left: 4px; padding: 2px 4px; font-size: .62rem; }
+:root[data-theme="dark"] .mod-b { background: #E2AA4F; color: #1A1E1C; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .mod-b { background: #E2AA4F; color: #1A1E1C; } }
+h1 .mod-b { font-size: .8rem; padding: 4px 8px; margin-left: 10px; }
+.mod-tg { margin-left: 8px; min-height: 26px; padding: 2px 8px; font-size: .75rem; text-transform: none; letter-spacing: 0; }

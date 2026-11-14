@@ -69,7 +69,7 @@ function filtrosAlterados() {
   const planoMudou = ["bloco", "tipo", "unidade", "ativ", "equipa", "q", "soAtr", "editar", "atribuir"].some((k) => !!p[k] !== !!d[k]) || p.semConc === false || !!p.sort || (p.f || "todas") !== "todas";
   if (ui.regSort || ui.regQ) return true;
   const ganttMudou = g && (g.bloco || g.unidade || g.ativ || (g.ativs && g.ativs.length) || g.estado || g.equipa || g.tipo || g.q || g.de || g.ate || g.abertas === false || g.ligacoes === false || g.zoom !== "semana" || (g.abertosB && g.abertosB.size) || (g.abertos && g.abertos.size) || g.sel);
-  return !!(planoMudou || ganttMudou || eqfAtivo(ui.eqF) || ui.bloco !== "todos" || ui.unitEdit || ui.uSemConc === false || !!ui.porVist || !!ui.comPend);
+  return !!(planoMudou || ganttMudou || eqfAtivo(ui.eqF) || ui.soModelo || ui.bloco !== "todos" || ui.unitEdit || ui.uSemConc === false || !!ui.porVist || !!ui.comPend);
 }
 /* Os filtros de Trabalhos, A minha semana e Apartamentos ficam guardados neste dispositivo, por utilizador. */
 let filtrosDe = null;
@@ -108,6 +108,7 @@ function reporFiltros() {
   ui.regSort = null;
   ui.regQ = "";
   ui.eqF = null;
+  ui.soModelo = false;
   if (ui.semana) ui.semana = { equipa: "", bloco: "", ver: "" };
   ui.semana = null;
   ui.delUnit = null;
@@ -298,6 +299,17 @@ function optsMotor(cfg = S.cfg) {
   return { frentes };
 }
 const frentesDe = (nome) => Math.max(1, Math.floor(Number(((S.cfg.equipas || []).find((e) => e && e.nome === nome) || {}).frentes) || 1));
+/* Andares modelo: guardados na configuração da obra; enquanto ninguém mexer, são estes. */
+const MODELOS_PADRAO = ["B-F103", "B-F104", "B-F105"];
+const modelos = () => new Set(Array.isArray(S.cfg.modelos) ? S.cfg.modelos : MODELOS_PADRAO);
+const eModelo = (uid) => modelos().has(uid);
+const modeloTag = (uid, curto = false) => (eModelo(uid) ? `<span class="mod-b${curto ? " curto" : ""}" title="Andar modelo">${curto ? "M" : "Modelo"}</span>` : "");
+async function mudarModelo(uid, on) {
+  const m = modelos();
+  if (on) m.add(uid); else m.delete(uid);
+  await store.setConfig({ modelos: [...m].sort() }, { tipo: "config", texto: `${uid} ${on ? "passou a ser" : "deixou de ser"} andar modelo` });
+  toast(`${uid} ${on ? "marcado como andar modelo" : "deixou de ser andar modelo"}`, { anular: false });
+}
 /** Atividades da obra (sem as das frações de teste). */
 const actsObra = () => Object.values(S.acts).filter((a) => !S.idsTeste.has(a.unidade));
 const nomeAtiv = (a) => (a.esp && S.espIdx[a.esp] ? S.espIdx[a.esp].nome : a.seccao);
@@ -873,7 +885,7 @@ function pendentesView() {
   const contaEst = (xs) => { const c = { por: 0, esp: 0, f: 0 }; for (const x of xs) x.estado === "aberto" ? c.por++ : x.estado === "feito" ? c.esp++ : c.f++; return [c.por ? `<span class="pdc por">${c.por} por resolver</span>` : "", c.esp ? `<span class="pdc esp">${c.esp} por verificar</span>` : "", c.f ? `<span class="pdc f">${c.f} fechado${c.f === 1 ? "" : "s"}</span>` : ""].join(""); };
   const blocos = PEND_BLOCOS.map((b) => ({ b, us: ordenaUnidades([...porU.keys()].map((id) => S.uMap[id]).filter((u) => u.bloco === b)) })).filter((x) => x.us.length);
   const fracHTML = (u) => { const xs = porU.get(u.id).sort((a, b) => (b.criadoEm || "").localeCompare(a.criadoEm || "")); const k = "u:" + u.id;
-    return `<details class="pd-fr" data-pdab="${esc(k)}" ${abreTudo || ab.has(k) ? "open" : ""}><summary><span class="pd-fr-t">${rotuloU(u) === u.id ? `<b class="mono">${esc(u.id)}</b> <span class="note">${esc(u.tipo)}</span>` : `<b>${esc(rotuloU(u))}</b> <span class="note mono">${esc(u.id)}</span>`}</span><span class="pd-cs">${contaEst(xs)}</span>
+    return `<details class="pd-fr" data-pdab="${esc(k)}" ${abreTudo || ab.has(k) ? "open" : ""}><summary><span class="pd-fr-t">${rotuloU(u) === u.id ? `<b class="mono">${esc(u.id)}</b>${modeloTag(u.id)} <span class="note">${esc(u.tipo)}</span>` : `<b>${esc(rotuloU(u))}</b> <span class="note mono">${esc(u.id)}</span>`}</span><span class="pd-cs">${contaEst(xs)}</span>
       <span class="pd-fr-ac"><a class="btn sm ghost" href="#u-${esc(u.id)}" data-irpend="${esc(u.id)}">Abrir fração</a><button class="btn sm ghost" data-pdnaqui="${esc(u.id)}">+ Pendente aqui</button></span></summary>
       <div class="pd-lista">${xs.map((x) => pendItemHTML(x)).join("")}</div></details>`; };
   const html = `
@@ -1385,7 +1397,7 @@ function previsaoView() {
     : pv.ord === "desvio" ? (a, b) => (b.atraso ?? -999) - (a.atraso ?? -999) : pv.ord === "pct" ? (a, b) => a.u.pct - b.u.pct : () => 0);
   const filtraTipo = (i) => pv.tipo === "todos" || (pv.tipo === "ap" ? i.u.tipo === "Apartamento" || i.u.tipo === "Loja" : !(i.u.tipo === "Apartamento" || i.u.tipo === "Loja"));
   const linhaFr = (i) => `<a class="pv-fr" href="#u-${esc(i.u.id)}">
-      <span class="pv-id"><b class="mono">${esc(i.u.tipo === "Apartamento" || i.u.tipo === "Loja" ? i.u.id : i.u.nome || i.u.id)}</b>${i.u.tipo && i.u.tipo !== "Apartamento" ? `<small>${esc(i.u.tipo)}</small>` : ""}</span>
+      <span class="pv-id"><b class="mono">${esc(i.u.tipo === "Apartamento" || i.u.tipo === "Loja" ? i.u.id : i.u.nome || i.u.id)}</b>${modeloTag(i.u.id)}${i.u.tipo && i.u.tipo !== "Apartamento" ? `<small>${esc(i.u.tipo)}</small>` : ""}</span>
       <span class="pv-est e-${i.est.k}">${i.est.l}</span>
       <span class="pv-pc"><span class="track"><i style="width:${i.u.pct}%"></i></span><span class="num mono">${i.u.pct}%</span></span>
       <span class="pv-f"><b class="num">${i.est.k === "pronto" ? "pronto a " : ""}${fd(i.fim, true)}</b>${atrHTML(i.atraso)}</span>
@@ -1500,7 +1512,7 @@ function heatHTML() {
     if (bk !== lastB) { lastB = bk; pre = `<tr class="blk"><th colspan="${esp.length + 1}">${bk === "Lojas" ? "Lojas" : "Bloco " + bk}</th></tr>`; }
     const byE = {};
     for (const a of u.acts) if (a.esp) (byE[a.esp] = byE[a.esp] || []).push(a);
-    return pre + `<tr><th><a href="#u-${esc(u.id)}">${esc(u.id)}</a></th>${esp.map((e) => {
+    return pre + `<tr><th><a href="#u-${esc(u.id)}">${esc(u.id)}</a>${modeloTag(u.id, true)}</th>${esp.map((e) => {
       const l = byE[e.key];
       if (!l) return `<td><div class="cell c-none"></div></td>`;
       const a = l[0], r = S.res.get(a.id), p = Math.round(pctEfetiva(a));
@@ -1532,6 +1544,7 @@ function bindCommon() {
     Object.assign(ui.gantt, { bloco: bl, unidade: uid, ativ: "", sel: null, _chave: null });
   }));
   document.querySelectorAll("[data-nova]").forEach((b) => (b.onclick = () => openNova(b.dataset.nova)));
+  document.querySelectorAll("[data-modelo]").forEach((b) => (b.onclick = () => mudarModelo(b.dataset.modelo, !eModelo(b.dataset.modelo))));
   document.querySelectorAll("[data-a]").forEach((b) => (b.onclick = (e) => { e.preventDefault(); openSheet(b.dataset.a); }));
   document.querySelectorAll("#view [data-irpend]").forEach((b) => (b.onclick = () => { ui.lastUnit = b.dataset.irpend; ui.unidadeTab = store.user.papel === "fiscal" ? "vist" : "pend"; }));
   document.querySelectorAll("[data-bloco]").forEach((b) => (b.onclick = () => { ui.bloco = b.dataset.bloco; render(); }));
@@ -1564,16 +1577,17 @@ function unidadesView() {
       ${store.user.papel === "dono" ? `<button class="btn pri" id="novaFr">+ Nova fração</button>` : ""}</div></div>
     ${store.user.papel === "fiscal" ? `<div class="banner">Escolha o apartamento onde está. Lá dentro registe a percentagem de cada especialidade e tire as fotografias.</div>` : ""}
     <div class="ubar"><label class="check"><input type="checkbox" id="porVist" ${ui.porVist ? "checked" : ""}><span>Só as por vistoriar há mais de 7 dias</span></label><span class="note num">${nPrecisa} ${nPrecisa === 1 ? "fração" : "frações"} por vistoriar</span>
-      <label class="check"><input type="checkbox" id="comPend" ${ui.comPend ? "checked" : ""}><span>Só as com pendentes por fechar</span></label><span class="note num ${nComPend ? "pd-cnt" : ""}">${nComPend} ${nComPend === 1 ? "fração" : "frações"} com pendentes</span></div>
+      <label class="check"><input type="checkbox" id="comPend" ${ui.comPend ? "checked" : ""}><span>Só as com pendentes por fechar</span></label><span class="note num ${nComPend ? "pd-cnt" : ""}">${nComPend} ${nComPend === 1 ? "fração" : "frações"} com pendentes</span>
+      ${modelos().size ? `<label class="check"><input type="checkbox" id="soModelo" ${ui.soModelo ? "checked" : ""}><span>Só os andares modelo</span></label><span class="note num">${[...modelos()].join(", ")}</span>` : ""}</div>
     ${grupos.filter(([g]) => fil === "todos" || fil === g).map(([g, nome]) => {
-      const us = S.unidades.filter((u) => u.bloco === g && (!ui.porVist || precisaVist(u)) && (!ui.comPend || nPendU(u)));
+      const us = S.unidades.filter((u) => u.bloco === g && (!ui.porVist || precisaVist(u)) && (!ui.comPend || nPendU(u)) && (!ui.soModelo || eModelo(u.id)));
       if (!us.length) return "";
       return `<section class="col" style="display:flex;flex-direction:column;gap:10px"><div class="grp">${nome}</div><div class="ucards">${us.map((u) => {
         const dv = u.atraso;
         const uv = ultimaVistoria(u);
         const np = nPendU(u);
         return `<a class="ucard ${np ? "tem-pend" : ""}" href="#u-${esc(u.id)}">
-          <div class="ucard-h"><b>${esc(u.tipo === "Apartamento" || u.tipo === "Loja" ? u.id : u.nome)}</b><span class="mono num">${u.pct}%</span></div>
+          <div class="ucard-h"><b>${esc(u.tipo === "Apartamento" || u.tipo === "Loja" ? u.id : u.nome)}${modeloTag(u.id)}</b><span class="mono num">${u.pct}%</span></div>
           ${segHTML(u)}
           <div class="ln"><span>Fim previsto</span><span><b>${fd(u.fim)}</b> ${deltaHTML(dv)}</span></div>
           <div class="ln"><span>Última vistoria</span><span class="${!uv || uv < limite ? "vatr" : ""}"><b>${uv ? fdt(uv).split(" ").slice(0, 2).join(" ") : "nunca"}</b></span></div>
@@ -1589,7 +1603,8 @@ function unidadesView() {
         <div class="ln"><span>Fim previsto</span><span><b>${fd(u.fim)}</b></span></div></a>`).join("")}</div></section>` : ""}`;
   return { html, bind: () => { bindCommon(); const nf = $("#novaFr"); if (nf) nf.onclick = openNovaFracao; const pv = $("#porVist"); if (pv) pv.onchange = () => { ui.porVist = pv.checked; render(); };
     const cp = $("#comPend"); if (cp) cp.onchange = () => { ui.comPend = cp.checked; render(); };
-    if (ui.porVist || ui.comPend) {
+    const sm = $("#soModelo"); if (sm) sm.onchange = () => { ui.soModelo = sm.checked; render(); };
+    if (ui.porVist || ui.comPend || ui.soModelo) {
       if (!document.querySelector("#view .ucard")) document.querySelector("#view .ubar").insertAdjacentHTML("afterend", `<div class="empty">Nenhuma fração com estes filtros. <button class="btn sm" data-repor>Limpar filtros</button></div>`);
       document.querySelectorAll("#view .empty [data-repor]").forEach((b) => (b.onclick = reporFiltros));
     } } };
@@ -1681,7 +1696,7 @@ function unidadeView(id) {
       ${(() => { const vz = vizinhas(u.id); return `<span class="unav">${vz.ant ? `<a class="btn sm" href="#u-${esc(vz.ant)}" title="Fração anterior">‹ ${esc(vz.ant)}</a>` : ""}${vz.seg ? `<a class="btn sm" href="#u-${esc(vz.seg)}" title="Fração seguinte">${esc(vz.seg)} ›</a>` : ""}</span>`; })()}</div><div class="row" style="gap:6px"><a class="btn sm" href="#plano" data-verplano="${esc(u.id)}|${esc(u.bloco)}">Ver nos trabalhos</a><a class="btn sm" href="#gantt" data-vergantt="${esc(u.id)}|${esc(u.bloco)}">Ver no Gantt</a>${can("criar") ? `<button class="btn sm" data-nova="unit:${esc(u.id)}">+ Nova atividade nesta fração</button>` : ""}</div></div>
     ${u.teste ? `<div class="banner teste-b"><span><b>Fração de teste.</b> Pode mexer à vontade: não conta para o painel, para o fim da obra nem para as estatísticas, e não mexe nas datas das outras frações. Quando acabar os testes, elimine-a.</span></div>` : ""}
     <div class="uhead">
-      <div><div class="eyebrow">${esc(u.tipo)}${u.bloco !== "Geral" ? " · " + blocoLabel(u.bloco) : ""}${u.tipo === "Apartamento" ? " · piso " + u.piso : ""}</div><h1>${esc(u.tipo === "Apartamento" || u.tipo === "Loja" ? u.id : u.nome)}</h1></div>
+      <div><div class="eyebrow">${esc(u.tipo)}${u.bloco !== "Geral" ? " · " + blocoLabel(u.bloco) : ""}${u.tipo === "Apartamento" ? " · piso " + u.piso : ""}${store.user.papel === "dono" && (u.tipo === "Apartamento" || u.tipo === "Loja") && !u.teste ? ` <button class="btn sm ghost mod-tg" data-modelo="${esc(u.id)}" aria-pressed="${eModelo(u.id)}">${eModelo(u.id) ? "Deixar de ser andar modelo" : "Marcar como andar modelo"}</button>` : ""}</div><h1>${esc(u.tipo === "Apartamento" || u.tipo === "Loja" ? u.id : u.nome)}${modeloTag(u.id)}</h1></div>
       <div class="stats">
         <div class="stat"><b class="num">${u.pct}%</b><span>avanço</span></div>
         <div class="stat"><b>${fd(u.fim)}</b><span>fim previsto ${deltaHTML(dv)}</span></div>
@@ -2162,7 +2177,7 @@ function planoView() {
     const cIni = ed ? dIn(a.id, "ini", ini) : `<span class="mono num">${fd(ini)}</span>`;
     const cFim = ed ? dIn(a.id, "fim", fim) : `<span class="mono num">${fd(fim)}</span>`;
     const ck = atr ? `<td class="ck"><input type="checkbox" data-ck="${a.id}" ${p.selec.has(a.id) ? "checked" : ""} aria-label="Escolher ${esc(nomeAtiv(a) + " " + a.unidade)}"></td>` : "";
-    return `<tr ${ed ? "" : atr ? `data-tck="${a.id}" class="${p.selec.has(a.id) ? "sel" : ""}"` : `data-a="${a.id}"`}>${ck}<td class="mono">${esc(a.unidade)}</td>
+    return `<tr ${ed ? "" : atr ? `data-tck="${a.id}" class="${p.selec.has(a.id) ? "sel" : ""}"` : `data-a="${a.id}"`}>${ck}<td class="mono">${esc(a.unidade)}${modeloTag(a.unidade, true)}</td>
       <td><div class="lig-nm">${ed ? `<button class="lnk-b" data-a="${a.id}"><b>${esc(nomeAtiv(a))}</b></button>` : `<b>${esc(nomeAtiv(a))}</b>`}${nLig && !atr ? bLig : ""}</div>${a.equipa ? `<div class="note">${esc(a.equipa)}</div>` : atr ? `<div class="note semeq">sem equipa</div>` : ""}${espera.length ? `<div class="wait">À espera de: ${esc(espera.slice(0, 2).join(", "))}${espera.length > 2 ? "..." : ""}</div>` : ""}</td>
       <td>${ed || can("executar") ? estadoEdHTML(a, r) : `<span class="pill st-${r.estado}">${ESTADO[r.estado]}</span>`}</td><td>${cIni}</td><td>${cFim}</td><td>${p.f === "porconfirmar" && can("executar") ? `<button class="btn sm" data-conf="${a.id}" title="A data mostrada está certa">Confirmar</button>` : deltaHTML(r.atraso)}</td><td class="mono num pctc2">${ed ? pctEdHTML(a) + pctFiscalHTML(a, true) : pctDuasHTML(a)}</td></tr>${aberta && !atr ? ligHTML(a, r) : ""}`;
   };
@@ -3107,7 +3122,7 @@ function ligarPesquisa(root) {
     const at = Object.values(S.acts).filter((a) => { const s = norm(nomeAtiv(a) + " " + a.unidade + " " + a.ref + " " + (a.equipa || "")); return termos.every((t) => s.includes(t)); })
       .slice(0, 8).map((a) => ({ t: "a", a }));
     res = [...fr, ...nomes, ...at];
-    out.innerHTML = res.length ? res.map((x, i) => x.t === "u" ? `<button data-pr="${i}"><span class="psq-k">Fração</span><b class="mono">${esc(x.u.id)}</b><span class="note">${esc(x.u.tipo)} · ${x.u.pct}%</span></button>`
+    out.innerHTML = res.length ? res.map((x, i) => x.t === "u" ? `<button data-pr="${i}"><span class="psq-k">Fração</span><b class="mono">${esc(x.u.id)}</b>${modeloTag(x.u.id)}<span class="note">${esc(x.u.tipo)} · ${x.u.pct}%</span></button>`
       : x.t === "n" ? `<button data-pr="${i}"><span class="psq-k">Todas</span><b>${esc(x.n)}</b><span class="note">ver nos Trabalhos</span></button>`
       : `<button data-pr="${i}"><span class="psq-k">Atividade</span><b>${esc(nomeAtiv(x.a))}</b><span class="note mono">${esc(x.a.unidade)} · ${ESTADO[S.res.get(x.a.id).estado]}</span></button>`).join("")
       : `<div class="note" style="padding:10px">Sem resultados para "${esc(inp.value)}".</div>`;
@@ -3458,7 +3473,7 @@ function drawGantt() {
     if (x.t === "u") {
       const u = x.u;
       return `<div class="grow gu ${x.aberto ? "open" : ""}" style="top:${y}px">
-        <button class="glab" data-gtog="${esc(u.id)}" title="${x.aberto ? "Fechar" : "Abrir"}"><span class="car">${sozinha ? "" : x.aberto ? "▾" : "▸"}</span><b class="mono">${esc(u.tipo === "Apartamento" || /-L\d+$/.test(u.id) ? u.id : u.nome)}</b><span class="note num">${u.pct}% · ${x.n}</span></button>
+        <button class="glab" data-gtog="${esc(u.id)}" title="${x.aberto ? "Fechar" : "Abrir"}"><span class="car">${sozinha ? "" : x.aberto ? "▾" : "▸"}</span><b class="mono">${esc(u.tipo === "Apartamento" || /-L\d+$/.test(u.id) ? u.id : u.nome)}</b>${modeloTag(u.id, true)}<span class="note num">${u.pct}% · ${x.n}</span></button>
         <div class="gbar gsum" style="left:${LW + X(x.ini)}px;width:${Math.max(3, X(x.fim) - X(x.ini))}px" title="${esc(u.id)}: ${fd(x.ini)} a ${fd(x.fim)}, ${u.pct}% feito"><i style="width:${u.pct}%"></i></div>
         ${g.zoom !== "mes" ? `<span class="gsum-l mono" style="left:${LW + X(x.fim) + 6}px">${fd(x.fim)}${x.atr ? ` · <span class="gatr">${x.atr} atr.</span>` : ""}</span>` : ""}</div>`;
     }
