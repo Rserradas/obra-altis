@@ -65,7 +65,7 @@ export const semAcento = (x) => String(x || "").normalize("NFD").replace(/[\u030
 export const EQF_PADRAO = () => ({ bloco: "", fr: "", esp: "", estado: "", q: "" });
 export const eqfAtivo = (f) => !!(f && (f.bloco || f.fr || f.esp || f.estado || f.q));
 export const PLANO_PADRAO = () => ({ f: "todas", bloco: "", tipo: "", unidade: "", ativ: "", equipa: "", q: "", soAtr: false, semConc: true, sort: null, editar: false, atribuir: false, atrEq: "", selec: null });
-export const VERSAO = "14.11.2026 V3"; // dia da publicação e versão do dia; mudar também em versao.json e no CACHE de sw.js (na raiz)
+export const VERSAO = "14.11.2026 V4"; // dia da publicação e versão do dia; mudar também em versao.json e no CACHE de sw.js (na raiz)
 export const ui = { bloco: "todos", plano: PLANO_PADRAO(), unidadeTab: "ativ", vistoria: {}, sheet: null };
 /** Há algum filtro diferente do padrão? */
 export function filtrosAlterados() {
