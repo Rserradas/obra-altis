@@ -22,8 +22,10 @@ export function todayISO() {
 /**
  * Lista de antecessoras de cada atividade.
  * Fontes: "equipa" (fila da equipa), "excel" (importadas), "manual" (acrescentadas na app), "regra" (regra por especialidade).
+ * Fila da equipa: um trabalho com ordem decimal (ex.: 20.5) faz-se ao mesmo tempo que o anterior (um grupo). Com N frentes, cada grupo
+ * começa quando acaba o grupo N lugares acima (as frentes vão pegando nos grupos à vez). frentes: { equipa: N }.
  */
-export function buildDeps(acts, regras) {
+export function buildDeps(acts, regras, frentes = null) {
   const byUnitEsp = new Map();
   for (const a of acts) {
     if (!a.esp) continue;
@@ -43,7 +45,15 @@ export function buildDeps(acts, regras) {
   }
   for (const f of filas.values()) {
     f.sort((x, y) => Number(x.eqOrdem) - Number(y.eqOrdem) || String(x.id).localeCompare(String(y.id)));
-    for (let i = 1; i < f.length; i++) antNaFila.set(f[i].id, f[i - 1].id);
+    const grupos = [];
+    for (const a of f) {
+      const g = grupos[grupos.length - 1];
+      // ordem com parte decimal (ex.: 20.5): "ao mesmo tempo que o anterior"; as ordens inteiras começam um grupo novo
+      if (g && !Number.isInteger(Number(a.eqOrdem))) g.ids.push(a.id);
+      else grupos.push({ ids: [a.id] });
+    }
+    const n = Math.max(1, Math.floor(Number(frentes && frentes[f[0].equipa]) || 1));
+    for (let i = n; i < grupos.length; i++) for (const id of grupos[i].ids) antNaFila.set(id, grupos[i - n].ids);
   }
   const preds = new Map();
   for (const a of acts) {
@@ -55,7 +65,7 @@ export function buildDeps(acts, regras) {
       seen.add(id);
       list.push({ id, tipo: tipo || "FS", fonte });
     };
-    if (antNaFila.has(a.id)) push(antNaFila.get(a.id), "FS", "equipa");
+    for (const pid of antNaFila.get(a.id) || []) push(pid, "FS", "equipa");
     for (const d of a.deps || []) push(d.id, d.tipo, "excel");
     for (const d of a.depsExtra || []) push(d.id, d.tipo, "manual");
     if (a.esp && regras && regras[a.esp]) {
@@ -80,7 +90,7 @@ export function duracaoDe(a, duracoes) {
 
 export function schedule(acts, regras, hoje = todayISO(), duracoes = null, opts = null) {
   const byId = new Map(acts.map((a) => [a.id, a]));
-  const preds = buildDeps(acts, regras);
+  const preds = buildDeps(acts, regras, opts && opts.frentes);
   const succ = new Map(acts.map((a) => [a.id, []]));
   const indeg = new Map();
   for (const a of acts) {

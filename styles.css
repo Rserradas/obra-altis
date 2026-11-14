@@ -1412,3 +1412,13 @@ body.gfull .tabbar, body.gfull .nova-versao { display: none; }
 .fq-filtros label.f { flex: 1 1 150px; }
 .fq-filtros .fq-q { flex: 2 1 200px; }
 .fq-filtros .btn { align-self: flex-end; min-height: 38px; }
+
+/* Plano das equipas: trabalhos ao mesmo tempo e frentes */
+.fq-row.junto { border-left: 3px solid var(--accent); background: color-mix(in srgb, var(--accent-soft) 45%, transparent); }
+.fq-row.junto .fq-n { color: var(--accent); }
+.fq-junto { font-size: .78rem; color: var(--muted); gap: 6px; margin-top: 2px; }
+.fq-junto input { width: 14px; height: 14px; margin-top: 2px; }
+.fq-fr { flex-direction: row; align-items: center; gap: 6px; font-size: .85rem; }
+.fq-fr .inp { width: auto; min-height: 34px; padding-top: 4px; padding-bottom: 4px; }
+.fq-frn { margin: 0 0 4px; }
+@media (max-width: 640px) { .fq-fr { width: 100%; } .fq-fr .inp { flex: 1; } }

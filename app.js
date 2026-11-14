@@ -247,7 +247,7 @@ function compute() {
   const cfg = d.config;
   const acts = Object.values(d.atividades);
   const hoje = todayISO();
-  const res = schedule(acts, cfg.regras || {}, hoje, cfg.duracoes || {});
+  const res = schedule(acts, cfg.regras || {}, hoje, cfg.duracoes || {}, optsMotor(cfg));
   const espIdx = Object.fromEntries((cfg.especialidades || []).map((e) => [e.key, e]));
   const todasU = (cfg.unidades || []).map((u) => ({ ...u }));
   const uMap = Object.fromEntries(todasU.map((u) => [u.id, u]));
@@ -291,6 +291,13 @@ function compute() {
   // as equipas que saíram da obra deixam de aparecer para atribuir, mas ficam no histórico e nos filtros
   S.equipas = S.eqLista.filter((e) => e.ativa !== false).map((e) => e.nome);
 }
+/** Opções do motor de datas: as frentes de cada equipa (quantos trabalhos faz ao mesmo tempo). */
+function optsMotor(cfg = S.cfg) {
+  const frentes = {};
+  for (const e of (cfg && cfg.equipas) || []) if (e && e.nome && Number(e.frentes) > 1) frentes[e.nome] = Math.floor(Number(e.frentes));
+  return { frentes };
+}
+const frentesDe = (nome) => Math.max(1, Math.floor(Number(((S.cfg.equipas || []).find((e) => e && e.nome === nome) || {}).frentes) || 1));
 /** Atividades da obra (sem as das frações de teste). */
 const actsObra = () => Object.values(S.acts).filter((a) => !S.idsTeste.has(a.unidade));
 const nomeAtiv = (a) => (a.esp && S.espIdx[a.esp] ? S.espIdx[a.esp].nome : a.seccao);
@@ -2337,7 +2344,7 @@ async function recalcularInicioVarias(ids) {
       mudou = true;
     }
     if (!mudou) break;
-    res = schedule(Object.values(S.acts).map((x) => (patches.has(x.id) ? { ...x, ...patches.get(x.id) } : x)), S.cfg.regras || {}, S.hoje, S.cfg.duracoes || {});
+    res = schedule(Object.values(S.acts).map((x) => (patches.has(x.id) ? { ...x, ...patches.get(x.id) } : x)), S.cfg.regras || {}, S.hoje, S.cfg.duracoes || {}, optsMotor());
   }
   const alvo = cand.filter((a) => patches.has(a.id) && patches.get(a.id).inicioPrevisto !== S.res.get(a.id).prevIni)
     .map((a) => ({ a, de: S.res.get(a.id).prevIni, para: patches.get(a.id).inicioPrevisto }));
@@ -2631,7 +2638,7 @@ async function decidirSeguintes(id, patch) {
   const abertas = [...downstream(id, S.res)].filter(porIniciar);
   if (!abertas.length) return null;
   const todasAct = () => Object.values(S.acts);
-  const simul = schedule(todasAct().map((x) => (x.id === id ? { ...x, ...patch } : x)), S.cfg.regras || {}, S.hoje, S.cfg.duracoes || {});
+  const simul = schedule(todasAct().map((x) => (x.id === id ? { ...x, ...patch } : x)), S.cfg.regras || {}, S.hoje, S.cfg.duracoes || {}, optsMotor());
   // o que conta para as seguintes é o fim provável (uma previsão já ultrapassada conta a partir de hoje)
   const delta = diffDays(S.res.get(id).provFim, simul.get(id).provFim);
   if (!delta) return null;
@@ -2641,7 +2648,7 @@ async function decidirSeguintes(id, patch) {
   const desloca = (lista) => lista.map((sid) => { const xr = S.res.get(sid); return { id: sid, patch: { inicioPrevisto: addDays(xr.prevIni, delta), ...prazoDe(sid), dataOk: true } }; });
   // efeito noutras frações se as deste apartamento andarem
   const pAlvo = new Map(desloca(alvo).map((x) => [x.id, x.patch]));
-  const simul2 = schedule(todasAct().map((x) => (x.id === id ? { ...x, ...patch } : pAlvo.has(x.id) ? { ...x, ...pAlvo.get(x.id) } : x)), S.cfg.regras || {}, S.hoje, S.cfg.duracoes || {});
+  const simul2 = schedule(todasAct().map((x) => (x.id === id ? { ...x, ...patch } : pAlvo.has(x.id) ? { ...x, ...pAlvo.get(x.id) } : x)), S.cfg.regras || {}, S.hoje, S.cfg.duracoes || {}, optsMotor());
   const outrasMexem = outras.filter((sid) => simul2.get(sid).prevIni !== S.res.get(sid).prevIni);
   // ligações que saem deste apartamento para outras frações (desta atividade ou das seguintes deste apartamento)
   const cortes = [];
@@ -2782,7 +2789,7 @@ async function editarData(id, campo, v, { manterPrazo = false } = {}) {
       if (k === "tirar") {
         const pt = patchTirarLigacao(id, quem.id);
         if (pt) await store.updateAtividade(id, pt, { tipo: "dependencia", texto: `${N} deixou de esperar por ${nomeAtiv(quem)} em ${quem.unidade}` });
-        const r2 = schedule(Object.values(S.acts), S.cfg.regras || {}, S.hoje, S.cfg.duracoes || {}).get(id);
+        const r2 = schedule(Object.values(S.acts), S.cfg.regras || {}, S.hoje, S.cfg.duracoes || {}, optsMotor()).get(id);
         const out = primeiraPossivel({ preds: r2.preds });
         if (out.es && v < out.es) dia = out.es; // ainda há outra a impor uma data
       } else if (k === "es") dia = es;
@@ -3465,7 +3472,7 @@ const AJUDA_ECRA = {
   semana: "O que está em curso, o que deve começar nos próximos 7 dias e o que está à espera de outras atividades. Os botões Iniciar, +10% e Concluir gravam logo.",
   regras: "A sequência entre especialidades e os dias que cada uma leva por fração. Uma mudança aqui acerta as datas de todas as atividades que ainda não começaram.",
   equipas: "As equipas de trabalho da obra, com o que cada uma pode fazer. Abra uma equipa para ver os seus trabalhos, editar os dados ou tirá-la da obra.",
-  planequipa: "A ordem em que cada equipa vai fazer os seus trabalhos. Uma equipa só faz um trabalho de cada vez, por isso a ordem mexe nas datas.",
+  planequipa: "A ordem em que cada equipa vai fazer os seus trabalhos. Por defeito, uma equipa faz um trabalho de cada vez, por isso a ordem mexe nas datas. Em Frentes diz quantos trabalhos a equipa faz ao mesmo tempo, e em cada linha pode marcar Ao mesmo tempo que o de cima (por exemplo, a mesma pintura em vários apartamentos). Os filtros mostram só parte da fila; o resumo de cima é sempre da fila toda.",
   equipa: "As contas de quem usa a aplicação e o perfil de cada uma. O perfil define o que cada pessoa pode ver e fazer.",
   vistorias: "As vistorias guardadas pelo fiscal, dia a dia. Escolha os dias para ver o relatório, imprimi-lo ou guardá-lo em PDF.",
   relatorio: "Um resumo da obra para levar à reunião. Pode imprimir ou guardar em PDF.",
@@ -3696,7 +3703,7 @@ async function organizarSeq(G) {
   // confirma que as datas ficam iguais antes de gravar
   const antes = S.res;
   const novoActs = Object.values(S.acts).map((a) => (keyDe.has(a.id) && a.esp !== keyDe.get(a.id) ? { ...a, esp: keyDe.get(a.id) } : a));
-  const depois = schedule(novoActs, regras, S.hoje, S.cfg.duracoes || {});
+  const depois = schedule(novoActs, regras, S.hoje, S.cfg.duracoes || {}, optsMotor());
   const mudou = novoActs.filter((a) => { const x = antes.get(a.id), y = depois.get(a.id); return x && y && (x.provIni !== y.provIni || x.provFim !== y.provFim); });
   if (mudou.length) { for (const k of novasK) delete regras[k]; Object.assign(regras, Object.fromEntries(Object.entries(S.cfg.regras || {}).filter(([k]) => novasK.has(k)))); }
   const patches = fora.map((a) => ({ id: a.id, patch: { esp: keyDe.get(a.id) } }));
@@ -3821,7 +3828,7 @@ function regrasView() {
         if (!p) return;
         const r = { ...regras, [k]: [...(regras[k] || []), p] };
         // confirma que a regra nova não cria um círculo com as ligações que já existem nos apartamentos
-        const r2 = schedule(Object.values(S.acts), r, S.hoje, S.cfg.duracoes || {});
+        const r2 = schedule(Object.values(S.acts), r, S.hoje, S.cfg.duracoes || {}, optsMotor());
         const novos = [...r2.values()].filter((x) => x.ciclo && !S.res.get(x.id).ciclo);
         if (novos.length) {
           const a0 = S.acts[novos[0].id];
@@ -4275,6 +4282,25 @@ function relVistView() {
 const telLink = (t) => `<a href="tel:${esc(String(t).replace(/[^\d+]/g, ""))}">${esc(t)}</a>`;
 /** Atribui (ou retira, com nome null) uma equipa a vários trabalhos de uma vez. */
 const temOrdem = (a) => a.eqOrdem != null && a.eqOrdem !== "" && a.eqOrdem !== false;
+/** Na fila, um trabalho com ordem decimal (ex.: 20.5) faz-se ao mesmo tempo que o anterior. */
+const eJunto = (a) => !!a && temOrdem(a) && !Number.isInteger(Number(a.eqOrdem));
+/** Ordens a gravar numa fila: 10, 20, 30...; os que vão ao mesmo tempo que o anterior ficam com a desse mais meio. */
+function ordensFila(ids, { juntar = new Set(), soltar = new Set() } = {}) {
+  const out = new Map();
+  let v = 0;
+  ids.forEach((id, i) => {
+    const junto = i > 0 && !soltar.has(id) && (juntar.has(id) || eJunto(S.acts[id]));
+    if (junto) out.set(id, v + 0.5); else { v += 10; out.set(id, v); }
+  });
+  return out;
+}
+/** Ao mudar um trabalho de lugar, sai do grupo; se era o primeiro de um grupo, o seguinte passa a ser o primeiro. */
+function soltarAoMover(id, ids) {
+  const s = new Set([id]);
+  const i = ids.indexOf(id);
+  if (!eJunto(S.acts[id]) && i >= 0 && ids[i + 1] && eJunto(S.acts[ids[i + 1]])) s.add(ids[i + 1]);
+  return s;
+}
 /** Põe os trabalhos na fila da equipa, cada um na posição da data em que pode começar. Devolve a nova ordem (ids). */
 function ordemComNovos(nome, novos, base = null) {
   const ini = (id) => (S.res.get(id) && S.res.get(id).provIni) || "9";
@@ -4282,6 +4308,7 @@ function ordemComNovos(nome, novos, base = null) {
   for (const id of [...novos].sort((x, y) => ini(x).localeCompare(ini(y)))) {
     let k = ord.findIndex((o) => S.res.get(o) && S.res.get(o).estado !== "concluida" && ini(o) > ini(id));
     if (k < 0) k = ord.length;
+    while (k < ord.length && eJunto(S.acts[ord[k]])) k++; // não parte um grupo
     ord.splice(k, 0, id);
   }
   return ord;
@@ -4290,7 +4317,7 @@ function ordemComNovos(nome, novos, base = null) {
 function efeitoDe(lista) {
   const pm = new Map(lista.map((l) => [l.id, l.patch]));
   const novo = Object.values(S.acts).map((a) => (pm.has(a.id) ? { ...a, ...pm.get(a.id) } : a));
-  const r2 = schedule(novo, S.cfg.regras || {}, S.hoje, S.cfg.duracoes || {});
+  const r2 = schedule(novo, S.cfg.regras || {}, S.hoje, S.cfg.duracoes || {}, optsMotor());
   let mudam = 0, fim = "";
   for (const a of novo) { const x = S.res.get(a.id), y = r2.get(a.id); if (x && y && (x.provIni !== y.provIni || x.provFim !== y.provFim)) mudam++; if (y && y.estado !== "concluida" && y.provFim > fim) fim = y.provFim; }
   return { r2, mudam, fim };
@@ -4302,7 +4329,8 @@ async function atribuirEquipa(ids, nome) {
   const lista = [];
   if (nome) {
     const ord = ordemComNovos(nome, muda.filter((id) => S.res.get(id).estado !== "concluida"));
-    ord.forEach((id, i) => { const v = (i + 1) * 10; const a = S.acts[id]; const p = {}; if (a.eqOrdem !== v) p.eqOrdem = v; if (a.equipa !== nome) p.equipa = nome; if (Object.keys(p).length) lista.push({ id, patch: p }); });
+    const ords = ordensFila(ord);
+    ord.forEach((id) => { const v = ords.get(id); const a = S.acts[id]; const p = {}; if (a.eqOrdem !== v) p.eqOrdem = v; if (a.equipa !== nome) p.equipa = nome; if (Object.keys(p).length) lista.push({ id, patch: p }); });
     for (const id of muda) if (!ord.includes(id)) lista.push({ id, patch: { equipa: nome, eqOrdem: null } }); // concluídas: só o nome
   } else for (const id of muda) lista.push({ id, patch: { equipa: null, eqOrdem: null } });
   const ef = efeitoDe(lista);
@@ -4332,7 +4360,7 @@ async function filarSemPerguntar(ids) {
   const porEq = {};
   for (const id of ids) { const a = S.acts[id]; if (a && a.equipa && S.equipas.includes(a.equipa) && !temOrdem(a) && S.res.get(id) && S.res.get(id).estado !== "concluida") (porEq[a.equipa] = porEq[a.equipa] || []).push(id); }
   const lista = [];
-  for (const [nome, novos] of Object.entries(porEq)) ordemComNovos(nome, novos).forEach((id, i) => { const v = (i + 1) * 10; if (S.acts[id].eqOrdem !== v) lista.push({ id, patch: { eqOrdem: v } }); });
+  for (const [nome, novos] of Object.entries(porEq)) { const ord = ordemComNovos(nome, novos), ords = ordensFila(ord); ord.forEach((id) => { const v = ords.get(id); if (S.acts[id].eqOrdem !== v) lista.push({ id, patch: { eqOrdem: v } }); }); }
   if (lista.length) await store.updateMuitas(lista, null);
 }
 /** Uma vez: pôr nas filas os trabalhos com equipa que nunca lá estiveram (por exemplo os que vieram da importação). */
@@ -4343,7 +4371,8 @@ function planoFilasTodas() {
     const novos = Object.values(S.acts).filter((a) => a.equipa === nome && (a.eqOrdem == null || a.eqOrdem === "") && S.res.get(a.id).estado !== "concluida").map((a) => a.id);
     if (!novos.length) continue;
     const ord = ordemComNovos(nome, novos);
-    ord.forEach((id, i) => { const v = (i + 1) * 10; if (S.acts[id].eqOrdem !== v) lista.push({ id, patch: { eqOrdem: v } }); });
+    const ords = ordensFila(ord);
+    ord.forEach((id) => { const v = ords.get(id); if (S.acts[id].eqOrdem !== v) lista.push({ id, patch: { eqOrdem: v } }); });
     porEq.push({ nome, n: novos.length, ids: ord });
   }
   let ef = efeitoDe(lista);
@@ -4440,18 +4469,19 @@ function filaEquipa(nome) {
     .sort((x, y) => Number(x.eqOrdem) - Number(y.eqOrdem) || String(x.id).localeCompare(String(y.id)));
 }
 /** Grava uma nova ordem da fila (ids pela ordem) e diz o que mudou. */
-async function gravarFila(nome, ids, texto, extra = {}, semEquipa = []) {
+async function gravarFila(nome, ids, texto, extra = {}, semEquipa = [], grupos = {}) {
   const antes = filaEquipa(nome);
   const fimAntes = antes.filter((a) => S.res.get(a.id).estado !== "concluida").reduce((m, a) => (S.res.get(a.id).provFim > m ? S.res.get(a.id).provFim : m), "");
   const lista = [];
-  ids.forEach((id, i) => { const v = (i + 1) * 10; const a = S.acts[id]; const p = { ...(extra[id] || {}) }; if (a.eqOrdem !== v) p.eqOrdem = v; if (a.equipa !== nome) p.equipa = nome; if (Object.keys(p).length) lista.push({ id, patch: p }); });
+  const ords = ordensFila(ids, grupos);
+  ids.forEach((id) => { const v = ords.get(id); const a = S.acts[id]; const p = { ...(extra[id] || {}) }; if (a.eqOrdem !== v) p.eqOrdem = v; if (a.equipa !== nome) p.equipa = nome; if (Object.keys(p).length) lista.push({ id, patch: p }); });
   for (const a of antes) if (!ids.includes(a.id)) lista.push({ id: a.id, patch: semEquipa.includes(a.id) ? { eqOrdem: null, equipa: null } : { eqOrdem: false } });
   for (const id of semEquipa) if (!antes.some((a) => a.id === id)) lista.push({ id, patch: { eqOrdem: null, equipa: null } });
   if (!lista.length) return;
   // simula antes de gravar para dizer quantas datas mudam
   const pm = new Map(lista.map((l) => [l.id, l.patch]));
   const novo = Object.values(S.acts).map((a) => (pm.has(a.id) ? { ...a, ...pm.get(a.id) } : a));
-  const r2 = schedule(novo, S.cfg.regras || {}, S.hoje, S.cfg.duracoes || {});
+  const r2 = schedule(novo, S.cfg.regras || {}, S.hoje, S.cfg.duracoes || {}, optsMotor());
   let mudam = 0; for (const a of novo) { const x = S.res.get(a.id), y = r2.get(a.id); if (x && y && (x.provIni !== y.provIni || x.provFim !== y.provFim)) mudam++; }
   const fimDepois = ids.filter((id) => r2.get(id).estado !== "concluida").reduce((m, id) => (r2.get(id).provFim > m ? r2.get(id).provFim : m), "");
   const ciclo = ids.filter((id) => r2.get(id).ciclo).length;
@@ -4495,8 +4525,10 @@ function planEquipaView() {
     const ini = r.provIni, fim = r.provFim;
     if (r.estado !== "concluida") { if (!iniEq || ini < iniEq) iniEq = ini; if (!fimEq || fim > fimEq) fimEq = fim; }
     let gap = 0, motivo = "";
-    if (ant && r.estado !== "concluida") {
-      gap = Math.max(0, diffDays(S.res.get(ant.id).provFim, ini) - 1);
+    // a equipa fica parada entre o fim do(s) trabalho(s) de que espera na fila e o início deste
+    const antEq = r.estado === "concluida" ? [] : (r.preds || []).filter((d) => d.fonte === "equipa").map((d) => S.res.get(d.id)).filter((p) => p && p.estado !== "concluida");
+    if (antEq.length) {
+      gap = Math.max(0, diffDays(antEq.reduce((m, p) => (p.provFim > m ? p.provFim : m), ""), ini) - 1);
       if (gap > 0) {
         parada += gap;
         const outra = (r.preds || []).filter((d) => d.fonte !== "equipa").map((d) => ({ d, p: S.res.get(d.id) })).filter((x) => x.p).sort((x, y) => y.p.provFim.localeCompare(x.p.provFim))[0];
@@ -4507,18 +4539,22 @@ function planEquipaView() {
     ant = a;
   }
   const visF = vis.filter((a) => passa(a) && (fq.estado !== "parada" || gaps.get(a.id).gap > 0));
+  const numGrupo = new Map();
+  { let g = 0; for (const a of fila) { if (!eJunto(a) || !g) g++; numGrupo.set(a.id, g); } }
+  const nFrentes = frentesDe(nome);
   const filtrado = visF.length !== vis.length;
   const visIds = visF.map((a) => a.id);
   const linhas = visF.map((a) => {
     const r = S.res.get(a.id);
     const ini = r.provIni, fim = r.provFim;
     const { gap, motivo } = gaps.get(a.id);
-    const pi = fila.indexOf(a), k = visIds.indexOf(a.id);
-    return `<div class="fq-row ${r.estado === "concluida" ? "conc" : ""} ${r.ciclo ? "ciclo" : ""}" data-fq="${a.id}" draggable="true">
+    const pi = fila.indexOf(a), k = visIds.indexOf(a.id), junto = eJunto(a);
+    return `<div class="fq-row ${r.estado === "concluida" ? "conc" : ""} ${r.ciclo ? "ciclo" : ""} ${junto ? "junto" : ""}" data-fq="${a.id}" draggable="true">
       <div class="ordb"><button class="ord-b" data-fqm="${a.id}|-1" ${k === 0 ? "disabled" : ""} title="${filtrado ? "Fazer antes do trabalho visível de cima" : "Fazer antes"}" aria-label="Fazer antes">▲</button><button class="ord-b" data-fqm="${a.id}|1" ${k === visIds.length - 1 ? "disabled" : ""} title="${filtrado ? "Fazer depois do trabalho visível de baixo" : "Fazer depois"}" aria-label="Fazer depois">▼</button></div>
-      <span class="fq-n num">${pi + 1}</span>
+      <span class="fq-n num" title="${junto ? "Ao mesmo tempo que o de cima" : "Lugar na fila"}">${numGrupo.get(a.id)}</span>
       <div class="fq-t"><button class="lnk-b" data-a="${a.id}"><b>${esc(nomeAtiv(a))}</b></button><span class="mono">${esc(a.unidade)}</span>
-        ${gap > 0 ? `<span class="fq-gap">equipa parada ${gap} ${gap === 1 ? "dia" : "dias"} antes: ${esc(motivo)}</span>` : ""}${r.ciclo ? `<span class="fq-gap mau-t">esta ordem contradiz a sequência dos trabalhos</span>` : ""}</div>
+        ${gap > 0 ? `<span class="fq-gap">equipa parada ${gap} ${gap === 1 ? "dia" : "dias"} antes: ${esc(motivo)}</span>` : ""}
+        ${pi > 0 && r.estado !== "concluida" ? `<label class="check fq-junto" title="${filtrado ? "Tire os filtros para juntar ou separar" : "A equipa faz este trabalho ao mesmo tempo que o de cima; o seguinte espera que acabem os dois"}"><input type="checkbox" data-fqj="${a.id}" ${junto ? "checked" : ""} ${filtrado ? "disabled" : ""}><span>Ao mesmo tempo que o de cima</span></label>` : ""}${r.ciclo ? `<span class="fq-gap mau-t">esta ordem contradiz a sequência dos trabalhos</span>` : ""}</div>
       <span class="pill st-${r.estado}">${ESTADO[r.estado]}</span>
       <div class="tl fq-tl" aria-hidden="true"><div class="fc st-${r.estado}" style="left:${pos(ini)}%;width:${Math.max(1, pos(fim) - pos(ini))}%"></div>${S.hoje >= t0 && S.hoje <= t1 ? `<div class="today" style="left:${pos(S.hoje)}%"></div>` : ""}</div>
       <span class="fq-d mono num">${fd(ini)} a ${fd(fim)}</span>
@@ -4538,7 +4574,7 @@ function planEquipaView() {
     ${defTabs("planequipa")}
     <div class="card-h"><h1>Plano das equipas</h1>
       <label class="f" ${ep.vista === "todas" ? "hidden" : ""}>Equipa<select class="inp" id="fqEq">${eqs.map((e) => `<option ${e.nome === nome ? "selected" : ""}>${esc(e.nome)}</option>`).join("")}</select></label></div>
-    <p style="max-width:75ch">Ponha os trabalhos da equipa pela ordem em que os vai fazer: por exemplo, primeiro os azulejos do A-F101, depois os do A-F102. Cada trabalho só começa quando a equipa acaba o anterior, e as datas de tudo o que vem a seguir acertam-se sozinhas. Quando atribui uma equipa a um trabalho, ele entra logo na fila dela, pela data em que pode começar.</p>
+    <p style="max-width:75ch">Ponha os trabalhos da equipa pela ordem em que os vai fazer: por exemplo, primeiro os azulejos do A-F101, depois os do A-F102. Cada trabalho só começa quando a equipa acaba o anterior, e as datas de tudo o que vem a seguir acertam-se sozinhas. Se a equipa fizer vários trabalhos ao mesmo tempo, mude as Frentes ou marque Ao mesmo tempo que o de cima. Quando atribui uma equipa a um trabalho, ele entra logo na fila dela, pela data em que pode começar.</p>
     ${(() => { const n = Object.values(S.acts).filter((a) => a.equipa && S.equipas.includes(a.equipa) && (a.eqOrdem == null || a.eqOrdem === "") && S.res.get(a.id).estado !== "concluida").length; return n ? `<div class="banner warn no-print"><span><b>${n} trabalhos com equipa ainda não estão em fila nenhuma.</b> Enquanto não estiverem, a app não sabe que a equipa não pode fazê-los ao mesmo tempo.</span><button class="btn sm pri" id="fqTodasEq">Pôr nas filas</button></div>` : ""; })()}
     <div class="seg-v no-print">${[["lista", "Fila"], ["gantt", "Gantt da equipa"], ["todas", "Gantt de todas as equipas"]].map(([k, l]) => `<button class="${(ep.vista || "lista") === k ? "on" : ""}" data-fqv="${k}">${l}</button>`).join("")}</div>
     ${ep.vista === "todas" ? filtrosEqHTML(fq, Object.values(S.acts).filter((a) => a.equipa && S.res.get(a.id).estado !== "concluida"), false) + ganttEquipasHTML(null, passa) : `
@@ -4550,7 +4586,9 @@ function planEquipaView() {
     </div>
     ${filtrosEqHTML(fq, daPagina, true)}
     ${ep.vista === "gantt" ? ganttEquipasHTML(nome, passa) : `<section class="card">
-      <div class="card-h"><h2>Fila da ${esc(nome)}</h2><div class="row">${nConc ? `<label class="check"><input type="checkbox" id="fqConc" ${ep.conc ? "checked" : ""}><span>Mostrar os já feitos</span></label>` : ""}</div></div>
+      <div class="card-h"><h2>Fila da ${esc(nome)}</h2><div class="row">${nConc ? `<label class="check"><input type="checkbox" id="fqConc" ${ep.conc ? "checked" : ""}><span>Mostrar os já feitos</span></label>` : ""}
+        <label class="f fq-fr" title="Quantos trabalhos esta equipa faz ao mesmo tempo">Frentes<select class="inp" id="fqFrentes">${[1, 2, 3, 4, 5, 6, 8, 10].map((n) => `<option value="${n}" ${n === nFrentes ? "selected" : ""}>${n === 1 ? "1 (um trabalho de cada vez)" : n + " ao mesmo tempo"}</option>`).join("")}</select></label></div></div>
+      ${nFrentes > 1 ? `<p class="note fq-frn">Com ${nFrentes} frentes, a equipa faz ${nFrentes} trabalhos ao mesmo tempo: cada um começa quando acaba o que está ${nFrentes} lugares acima. Os trabalhos juntos com "Ao mesmo tempo que o de cima" contam como um só lugar.</p>` : ""}
       ${visF.length ? `<p class="note" style="margin:0">${filtrado ? `A mostrar ${visF.length} de ${vis.length} trabalhos da fila. O número é a posição na fila completa; as setas trocam com o trabalho visível de cima ou de baixo.` : "Arraste as linhas ou use as setas para mudar a ordem."}</p><div class="fq">${linhas}</div>` : vis.length ? `<div class="empty">Nenhum trabalho da fila corresponde aos filtros.</div>` : `<div class="empty">A fila está vazia. Junte trabalhos em baixo.</div>`}
     </section>`}
     <section class="card">
@@ -4590,8 +4628,13 @@ function planEquipaView() {
       const [id, d] = b.dataset.fqm.split("|"); const k = visIds.indexOf(id);
       const viz = visIds[k + Number(d)]; if (!viz) return;
       const l = ids.filter((x) => x !== id);
-      l.splice(l.indexOf(viz) + (Number(d) > 0 ? 1 : 0), 0, id);
-      gravarFila(nome, l, `${nomeAtiv(S.acts[id])} em ${S.acts[id].unidade} passou para ${l.indexOf(id) + 1}.º`);
+      const soltar = soltarAoMover(id, ids);
+      const preso = (x) => eJunto(S.acts[x]) && !soltar.has(x); // continua junto com o de cima
+      // salta o grupo inteiro do vizinho: para baixo vai para depois do último do grupo; para cima, para antes do primeiro
+      let pos = l.indexOf(viz);
+      if (Number(d) > 0) { while (pos + 1 < l.length && preso(l[pos + 1])) pos++; pos++; } else { while (pos > 0 && preso(l[pos])) pos--; }
+      l.splice(pos, 0, id);
+      gravarFila(nome, l, `${nomeAtiv(S.acts[id])} em ${S.acts[id].unidade} passou para ${l.indexOf(id) + 1}.º`, {}, [], { soltar });
     }));
     // arrastar
     let arr = null;
@@ -4601,8 +4644,13 @@ function planEquipaView() {
       row.ondragover = (e) => { if (!arr) return; e.preventDefault(); document.querySelectorAll(".fq-row.alvo").forEach((x) => x.classList.remove("alvo")); row.classList.add("alvo"); };
       row.ondrop = (e) => { e.preventDefault(); const alvo = row.dataset.fq; if (!arr || arr === alvo) return; const id = arr; arr = null;
         const l = ids.filter((x) => x !== id); l.splice(l.indexOf(alvo) + (ids.indexOf(id) < ids.indexOf(alvo) ? 1 : 0), 0, id);
-        gravarFila(nome, l, `${nomeAtiv(S.acts[id])} em ${S.acts[id].unidade} passou para ${l.indexOf(id) + 1}.º`); };
+        gravarFila(nome, l, `${nomeAtiv(S.acts[id])} em ${S.acts[id].unidade} passou para ${l.indexOf(id) + 1}.º`, {}, [], { soltar: soltarAoMover(id, ids) }); };
     });
+    document.querySelectorAll("[data-fqj]").forEach((c) => (c.onchange = () => {
+      const id = c.dataset.fqj, a = S.acts[id], ant = S.acts[ids[ids.indexOf(id) - 1]];
+      gravarFila(nome, ids, c.checked ? `${nomeAtiv(a)} em ${a.unidade} passa a ser feito ao mesmo tempo que ${nomeAtiv(ant)} em ${ant.unidade}` : `${nomeAtiv(a)} em ${a.unidade} deixa de ser feito ao mesmo tempo que o anterior`, {}, [], c.checked ? { juntar: new Set([id]) } : { soltar: new Set([id]) });
+    }));
+    const fr = $("#fqFrentes"); if (fr) fr.onchange = () => mudarFrentes(nome, Number(fr.value));
     document.querySelectorAll("[data-fqx]").forEach((b) => (b.onclick = async () => {
       const a = S.acts[b.dataset.fqx];
       if (!(await confirmar("Tirar da fila?", `<p>${esc(nomeAtiv(a))} em ${esc(a.unidade)} sai da fila da ${esc(nome)}. Continua atribuído à equipa, mas a app deixa de contar com a disponibilidade dela para este trabalho: deixa de esperar pelo anterior da fila, e o seguinte deixa de esperar por ele.</p>`, "Sim, tirar da fila"))) return;
@@ -4634,6 +4682,18 @@ function planEquipaView() {
       gravarFila(nome, ordemComNovos(nome, [a.id], ids), `${nomeAtiv(a)} em ${a.unidade} entrou na fila`);
     };
   } };
+}
+/** Muda quantas frentes (trabalhos ao mesmo tempo) uma equipa tem; diz o efeito no fim da fila. */
+async function mudarFrentes(nome, n) {
+  n = Math.max(1, Math.floor(n || 1));
+  const reg = (S.cfg.equipas || []).filter((e) => e && e.nome);
+  const i = reg.findIndex((e) => e.nome === nome);
+  const lista = i >= 0 ? reg.map((e, j) => (j === i ? { ...e, frentes: n > 1 ? n : null } : e)) : [...reg, { id: "eq" + Date.now().toString(36), nome, esp: [], blocos: [], frentes: n > 1 ? n : null }];
+  const fimDe = (res) => filaEquipa(nome).filter((a) => res.get(a.id).estado !== "concluida").reduce((m, a) => (res.get(a.id).provFim > m ? res.get(a.id).provFim : m), "");
+  const r2 = schedule(Object.values(S.acts), S.cfg.regras || {}, S.hoje, S.cfg.duracoes || {}, optsMotor({ ...S.cfg, equipas: lista }));
+  const antes = fimDe(S.res), depois = fimDe(r2);
+  await store.setConfig({ equipas: lista }, { tipo: "equipa", texto: `${nome} passou a ter ${n === 1 ? "1 frente (um trabalho de cada vez)" : n + " frentes"}` });
+  toast(`${nome}: ${n === 1 ? "um trabalho de cada vez" : n + " trabalhos ao mesmo tempo"}.${antes && depois && antes !== depois ? ` A fila passa a acabar a ${fd(depois, true)} (era ${fd(antes, true)}).` : ""}`);
 }
 /* ============================================================ filtros do plano das equipas */
 const EQF_ESTADOS = [["", "Todos"], ["atrasada", "Atrasados"], ["em_curso", "Em curso"], ["por_iniciar", "Podem começar"], ["bloqueada", "À espera de outros"], ["parada", "Com a equipa parada antes"]];
@@ -4722,7 +4782,7 @@ function ganttEquipasHTML(nome, passa = () => true) {
         subs[k] = r.provFim;
         (g.sub = g.sub || [])[k] = (g.sub[k] || []).concat(barra(it, false));
       }
-      const parada = (() => { let p = 0, ant = null; for (const it of g.itens.filter((z) => z.fila && S.res.get(z.a.id).estado !== "concluida")) { const r = S.res.get(it.a.id); if (ant) p += Math.max(0, diffDays(ant, r.provIni) - 1); ant = r.provFim; } return p; })();
+      const parada = (() => { let p = 0; for (const it of g.itens.filter((z) => z.fila && S.res.get(z.a.id).estado !== "concluida")) { const r = S.res.get(it.a.id); const ant = (r.preds || []).filter((d) => d.fonte === "equipa").map((d) => S.res.get(d.id)).filter((x) => x && x.estado !== "concluida"); if (ant.length) p += Math.max(0, diffDays(ant.reduce((m, x) => (x.provFim > m ? x.provFim : m), ""), r.provIni) - 1); } return p; })();
       const fimG = g.itens.reduce((m, it) => (S.res.get(it.a.id).provFim > m ? S.res.get(it.a.id).provFim : m), "");
       g.sub.forEach((bs, k) => linhas.push({ rot: k === 0 ? `<button class="lnk-b" data-geq="${esc(g.n)}"><b>${esc(g.n)}</b></button><span class="note">${g.itens.length} trabalhos · acaba ${fd(fimG)}${parada ? ` · <span class="mau-t">${parada} d parada</span>` : ""}</span>` : "", bars: bs, cont: k > 0 }));
     }
@@ -4763,6 +4823,8 @@ function openEquipa(nome, opts = {}) {
           <label class="f">Responsável<input class="inp" id="eqR" value="${esc(e0.responsavel || "")}" placeholder="Nome do encarregado"></label>
           <label class="f">Telefone<input class="inp" id="eqT" type="tel" value="${esc(e0.telefone || "")}"></label>
         </div>
+        <label class="f">Frentes de trabalho<select class="inp" id="eqFr">${[1, 2, 3, 4, 5, 6, 8, 10].map((n) => `<option value="${n}" ${n === Math.max(1, Number(e0.frentes) || 1) ? "selected" : ""}>${n === 1 ? "1: um trabalho de cada vez" : n + ": " + n + " trabalhos ao mesmo tempo"}</option>`).join("")}</select></label>
+        <p class="note" style="margin:0">Quantos trabalhos da fila a equipa faz ao mesmo tempo, por exemplo a pintura em 3 apartamentos. Cada trabalho começa quando acaba o que está esse número de lugares acima.</p>
       </div>
       <div class="formbox">
         <h3>O que esta equipa pode fazer <span class="note">(ajuda a planear)</span></h3>
@@ -4830,7 +4892,7 @@ function openEquipa(nome, opts = {}) {
     const novo = q("#eqN").value.trim().replace(/\s+/g, " ");
     if (!novo) return;
     if (S.equipasTodas.some((n) => n.toLowerCase() === novo.toLowerCase() && (!orig || n !== orig.nome))) { q("#eqErr").textContent = "Já existe uma equipa com esse nome."; return; }
-    const dados = { id: (orig && orig.id) || "eq" + Date.now().toString(36), nome: novo, responsavel: q("#eqR").value.trim() || null, telefone: q("#eqT").value.trim() || null, esp: e0.esp, blocos: e0.blocos, notas: q("#eqNo").value.trim() || null, ...(orig && orig.ativa === false ? { ativa: false, saiuEm: orig.saiuEm || null } : {}) };
+    const dados = { id: (orig && orig.id) || "eq" + Date.now().toString(36), nome: novo, responsavel: q("#eqR").value.trim() || null, telefone: q("#eqT").value.trim() || null, esp: e0.esp, blocos: e0.blocos, notas: q("#eqNo").value.trim() || null, frentes: Number(q("#eqFr").value) > 1 ? Number(q("#eqFr").value) : null, ...(orig && orig.ativa === false ? { ativa: false, saiuEm: orig.saiuEm || null } : {}) };
     const reg = registadas();
     const i = orig ? reg.findIndex((e) => e.nome === orig.nome) : -1;
     const lista = i >= 0 ? reg.map((e, j) => (j === i ? dados : e)) : [...reg, dados];
@@ -4854,7 +4916,7 @@ function openEquipa(nome, opts = {}) {
     const lista = [];
     const ordem = {}; // proxima posição livre em cada fila
     const livre = {}; // dia em que cada equipa fica livre (estimativa para distribuir)
-    const fila = (n) => { if (ordem[n] == null) { const f = filaEquipa(n); ordem[n] = (f.length ? Number(f[f.length - 1].eqOrdem) : 0) + 10; livre[n] = f.reduce((m, a) => (S.res.get(a.id).provFim > m ? S.res.get(a.id).provFim : m), S.hoje); } };
+    const fila = (n) => { if (ordem[n] == null) { const f = filaEquipa(n); ordem[n] = (f.length ? Math.floor(Number(f[f.length - 1].eqOrdem) / 10) * 10 : 0) + 10; livre[n] = f.reduce((m, a) => (S.res.get(a.id).provFim > m ? S.res.get(a.id).provFim : m), S.hoje); } };
     const vai = {};
     for (const a of mover) {
       let n = null;
@@ -4873,7 +4935,7 @@ function openEquipa(nome, opts = {}) {
     const pm = new Map(lista.map((l) => [l.id, l.patch]));
     const novo = Object.values(S.acts).map((a) => (pm.has(a.id) ? { ...a, ...pm.get(a.id) } : a));
     const novoMap = new Map(novo.map((a) => [a.id, a]));
-    const r2 = schedule(novo, S.cfg.regras || {}, S.hoje, S.cfg.duracoes || {});
+    const r2 = schedule(novo, S.cfg.regras || {}, S.hoje, S.cfg.duracoes || {}, optsMotor());
     let mudam = 0, fimObra = "";
     for (const a of novo) { const x = S.res.get(a.id), y = r2.get(a.id); if (x && y && (x.provIni !== y.provIni || x.provFim !== y.provFim)) mudam++; if (y && y.estado !== "concluida" && y.provFim > fimObra) fimObra = y.provFim; }
     const fimEq = (n, res) => Object.values(S.acts).filter((a) => novoMap.get(a.id).equipa === n && res.get(a.id).estado !== "concluida").reduce((m, a) => (res.get(a.id).provFim > m ? res.get(a.id).provFim : m), "");
