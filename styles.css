@@ -1331,3 +1331,8 @@ body.gfull .tabbar, body.gfull .nova-versao { display: none; }
 .copia-n { list-style: none; padding: 0; margin: 6px 0 0; display: flex; flex-wrap: wrap; gap: 6px 18px; }
 .copia-lida { margin-top: 14px; padding: 12px 14px; border: 1px solid var(--line); border-radius: var(--r); background: var(--bg); }
 .copia-lida h3 { margin: 10px 0 0; font-size: 1rem; }
+/* versão sempre à vista */
+.verchip { display: block; margin-top: 2px; padding: 0; border: 0; background: none; font: 500 .72rem var(--f-body, inherit); color: var(--muted); cursor: pointer; text-align: left; text-decoration: underline dotted; text-underline-offset: 2px; white-space: nowrap; }
+.verchip:hover { color: var(--accent); }
+.verchip.nova { color: var(--warn); font-weight: 700; text-decoration: underline; }
+.topbar .brand .verchip { font-size: .68rem; margin-top: 0; }

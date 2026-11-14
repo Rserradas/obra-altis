@@ -343,7 +343,7 @@ async function versaoPublicada() {
 }
 async function verificarVersao() {
   const v = await versaoPublicada();
-  if (v && v !== VERSAO) { versaoNova = v; mostrarAvisoVersao(); }
+  if (v && v !== VERSAO) { versaoNova = v; mostrarAvisoVersao(); atualizarVerChips(); }
   return v;
 }
 function mostrarAvisoVersao() {
@@ -431,7 +431,6 @@ function render() {
         <button class="btn sm" data-ajuda>Ajuda e versão</button>
         <button class="btn sm ${filtrosAlterados() ? "repor-on" : ""}" data-repor title="Voltar todos os ecrãs aos filtros padrão">Limpar filtros</button>
         <button class="btn sm" data-sair>Sair</button>
-        <span class="note versao" title="Versão da aplicação">Versão ${VERSAO}</span>
       </div>
     </aside>
     ${store.admin ? `<div class="vista-band">A ver como <b>${PAPEL[store.user.papel]}</b>${vistaSelHTML("vistaM")}</div>` : ""}
@@ -449,6 +448,7 @@ function render() {
   ["#vistaD", "#vistaM"].forEach((id) => { const sl = $(id); if (sl) sl.onchange = () => mudarVista(sl.value); });
   app.querySelectorAll("[data-repor]").forEach((b) => (b.onclick = reporFiltros));
   app.querySelectorAll("[data-ajuda]").forEach((b) => (b.onclick = abrirAjuda));
+  app.querySelectorAll("[data-ver]").forEach((b) => (b.onclick = abrirNovidades));
   const pd = $("#psqD"); if (pd && S) ligarPesquisa(pd);
   app.querySelectorAll("[data-psqm]").forEach((b) => (b.onclick = abrirPesquisaMovel));
   renderSync();
@@ -474,7 +474,37 @@ function renderSync() {
 }
 function brandHTML(compact) {
   const nome = (S && S.cfg.nome) || "Obra";
-  return `<div class="brand"><div class="brand-mark">${esc(nome.slice(0, 2).toUpperCase())}</div>${compact ? `<b>${esc(nome)}</b>` : `<div><b>${esc(nome)}</b><span>Controlo de obra</span></div>`}</div>`;
+  return `<div class="brand"><div class="brand-mark">${esc(nome.slice(0, 2).toUpperCase())}</div><div><b>${esc(nome)}</b>${compact ? "" : `<span>Controlo de obra</span>`}${verChipHTML()}</div></div>`;
+}
+/** A versão está sempre à vista. Se houver uma mais recente, o botão diz para atualizar. */
+function verChipHTML() {
+  return versaoNova
+    ? `<button type="button" class="verchip nova" data-ver title="Há uma versão nova: ${esc(versaoNova)}">Versão ${esc(VERSAO)} · atualizar</button>`
+    : `<button type="button" class="verchip" data-ver title="Ver o que mudou nesta versão">Versão ${esc(VERSAO)}</button>`;
+}
+function atualizarVerChips() { document.querySelectorAll("[data-ver]").forEach((b) => { b.outerHTML = verChipHTML(); }); document.querySelectorAll("[data-ver]").forEach((b) => (b.onclick = abrirNovidades)); }
+/* O que mudou em cada versão (as mais recentes primeiro). */
+const NOVIDADES = [
+  ["2026.11.17", ["Definições, Cópia de segurança: todas as pessoas podem descarregar uma cópia com tudo o que está registado e repor a partir dela (os acessos só o dono de obra repõe).", "A versão da aplicação está sempre à vista; ao tocar nela vê o que mudou."]],
+  ["2026.11.16", ["Gantt: filtros por várias atividades, estado, equipa, tipo de fração, procura e período.", "Trabalhos: a lista vem ordenada pela sequência das atividades e depois por fração.", "Trabalhos: botão Terminar escolha também dentro da caixa de escolha."]],
+  ["2026.11.15", ["Trabalhos: anular o início real de várias atividades de uma vez.", "Trabalhos: procurar dentro da caixa de escolha, com várias palavras e sem ligar a acentos."]],
+  ["2026.11.14", ["Trabalhos: mudar a previsão de início e de fim de várias atividades de uma vez."]],
+  ["2026.11.13", ["Gantt: ecrã inteiro, imprimir só o gráfico e caminho crítico da obra ou do bloco."]],
+];
+async function abrirNovidades() {
+  const lista = NOVIDADES.filter(([v]) => v <= VERSAO).slice(0, 3);
+  const k = await perguntar({
+    titulo: `Versão ${VERSAO}`,
+    texto: `${versaoNova ? `<div class="dlg-av">Já existe a versão ${esc(versaoNova)}. Atualize para ter as últimas melhorias. O que já gravou não se perde.</div>` : ""}
+      ${lista.length ? lista.map(([v, it], i) => `<h3 style="margin:${i ? "14px" : "4px"} 0 6px;font-size:1rem">${i ? "Versão " + esc(v) : "O que mudou nesta versão"}</h3><ul class="dlg-l">${it.map((x) => `<li>${esc(x)}</li>`).join("")}</ul>`).join("") : `<p>Sem notas para esta versão.</p>`}`,
+    opcoes: [{ k: "ver", l: versaoNova ? "Atualizar agora" : "Procurar atualização", estilo: versaoNova ? "pri" : "" }, { k: "nao", l: "Fechar" }],
+  });
+  if (k === "ver") {
+    if (versaoNova) return atualizarApp();
+    const v = await verificarVersao();
+    if (!v) toast("Não foi possível confirmar a versão. Verifique a ligação à internet.", { anular: false });
+    else if (v === VERSAO) toast(`Já tem a versão mais recente (${VERSAO}).`, { anular: false });
+  }
 }
 function navItems() {
   const p = store.user.papel;
