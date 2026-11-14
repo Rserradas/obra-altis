@@ -59,7 +59,7 @@ const ICON = {
 let store, S = null; // S = estado calculado
 const semAcento = (x) => String(x || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
 const PLANO_PADRAO = () => ({ f: "todas", bloco: "", tipo: "", unidade: "", ativ: "", equipa: "", q: "", soAtr: false, semConc: true, sort: null, editar: false, atribuir: false, atrEq: "", selec: null });
-const VERSAO = "14.11.2026 V2"; // dia da publicação e versão do dia; mudar também em versao.json e no CACHE de sw.js
+const VERSAO = "14.11.2026 V3"; // dia da publicação e versão do dia; mudar também em versao.json e no CACHE de sw.js
 const ui = { bloco: "todos", plano: PLANO_PADRAO(), unidadeTab: "ativ", vistoria: {}, sheet: null };
 /** Há algum filtro diferente do padrão? */
 function filtrosAlterados() {
@@ -493,6 +493,7 @@ function chaveVersao(v) {
   return `${m[3]}${m[2].padStart(2, "0")}${m[1].padStart(2, "0")}-${m[4].padStart(3, "0")}`;
 }
 const NOVIDADES = [
+  ["14.11.2026 V3", ["O que está a segurar a obra: no Painel e num ecrã próprio, os trabalhos atrasados que mais atrasam o fim da obra, de cada bloco e de cada fração, com o efeito de cada um e um resumo por equipa. Também no relatório para reunião.", "Vistoria: o fiscal pode corrigir a vistoria de um dia anterior (por exemplo, uma percentagem esquecida). A correção fica nesse dia e no relatório desse dia, sem criar uma vistoria nova."]],
   ["14.11.2026 V2", ["Sequência: secções próprias para as zonas comuns e para os trabalhos gerais, com dias e condições como nos apartamentos.", "Ficha da atividade: botão Recalcular o início, que põe o início logo a seguir às atividades de que depende, mantendo o prazo.", "O número da versão passa a ser o dia da publicação e a versão desse dia, por exemplo 14.11.2026 V2."]],
   ["14.11.2026 V1", ["Definições, Cópia de segurança: todas as pessoas podem descarregar uma cópia com tudo o que está registado e repor a partir dela (os acessos só o dono de obra repõe).", "A versão da aplicação está sempre à vista; ao tocar nela vê o que mudou.", "Ficha da atividade: aparece um botão Guardar no canto sempre que há alguma coisa por guardar, e a aplicação avisa se fechar sem guardar.", "Botão Recalcular o fim: na ficha, ao lado da previsão de fim, e na escolha em massa dos Trabalhos. Repõe o fim com a duração normal.", "Trabalhos: a caixa de escolha em massa está arrumada em três grupos: Equipa, Execução e Previsão."]],
   ["13.11.2026 V4", ["Gantt: filtros por várias atividades, estado, equipa, tipo de fração, procura e período.", "Trabalhos: a lista vem ordenada pela sequência das atividades e depois por fração.", "Trabalhos: botão Terminar escolha também dentro da caixa de escolha."]],
