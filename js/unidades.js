@@ -1,0 +1,534 @@
+// Apartamentos, página da fração, vistoria e fotografias.
+import { addDays, diffDays, pctEfetiva } from "../engine.js";
+import { $, ESTADO, ICON, can, deltaHTML, erroSimples, esc, fd, fdt, reporFiltros, toast, ui } from "./base.js";
+import { blocoLabel, eModelo, modeloTag, modelos, nomeAtiv } from "./calculo.js";
+import { S, store } from "./estado.js";
+import { bindDelUnidade, delUnidadeHTML, openNovaFracao } from "./nova.js";
+import { render } from "./nucleo.js";
+import { bindPendentes, pedirTexto, pendAberto, pendCriar, pendDe, pendFormHTML, pendListaHTML, pendVivo } from "./pendentes.js";
+import { bindDateInputs, bindEstadoPct, dateInput, estadoEdHTML, pctEdHTML } from "./plano.js";
+import { bindCommon } from "./previsao.js";
+import { pl } from "./segurar.js";
+import { DIAS_SEM, diaLocal, diaNome } from "./vistorias.js";
+
+/* ============================================================ unidades */
+export function segHTML(u) {
+  const t = u.acts.length || 1;
+  return `<div class="seg" title="${u.n.concluida} concluídas, ${u.n.em_curso} em curso, ${u.n.bloqueada} bloqueadas">
+    <i style="width:${(100 * u.n.concluida) / t}%;background:var(--ok)"></i><i style="width:${(100 * u.n.em_curso) / t}%;background:var(--curso)"></i><i style="width:${(100 * u.n.bloqueada) / t}%;background:var(--bloq);opacity:.6"></i></div>`;
+}
+export const ultimaVistoria = (u) => u.acts.reduce((m, a) => [a.fiscalEm, a.fiscalNotaEm].reduce((mm, d) => (d && (!mm || d > mm) ? d : mm), m), null);
+export function vizinhas(id) {
+  const lista = S.unidades.map((u) => u.id);
+  const i = lista.indexOf(id);
+  return { ant: i > 0 ? lista[i - 1] : null, seg: i >= 0 && i < lista.length - 1 ? lista[i + 1] : null };
+}
+export function unidadesView() {
+  const fil = ui.bloco;
+  const limite = new Date(Date.now() - 7 * 86400000).toISOString();
+  const precisaVist = (u) => u.n.concluida < u.acts.length && (!ultimaVistoria(u) || ultimaVistoria(u) < limite);
+  const nPrecisa = S.unidades.filter((u) => (fil === "todos" || u.bloco === fil) && precisaVist(u)).length;
+  const nPendU = (u) => pendDe(u.id).filter(pendAberto).length;
+  const nComPend = S.unidades.filter((u) => (fil === "todos" || u.bloco === fil) && nPendU(u)).length;
+  const grupos = [["A", "Bloco A"], ["B", "Bloco B"], ["C", "Bloco C"], ["D", "Bloco D"], ["Geral", "Geral"]];
+  const html = `
+    <div class="card-h"><h1>Apartamentos</h1>
+      <div class="row"><div class="chips">${["todos", "A", "B", "C", "D", "Geral"].map((b) => `<button class="chip ${fil === b ? "on" : ""}" data-bloco="${b}">${b === "todos" ? "Todos" : b === "Geral" ? "Geral" : "Bloco " + b}</button>`).join("")}</div>
+      ${store.user.papel === "dono" ? `<button class="btn pri" id="novaFr">+ Nova fração</button>` : ""}</div></div>
+    ${store.user.papel === "fiscal" ? `<div class="banner">Escolha o apartamento onde está. Lá dentro registe a percentagem de cada especialidade e tire as fotografias.</div>` : ""}
+    <div class="ubar"><label class="check"><input type="checkbox" id="porVist" ${ui.porVist ? "checked" : ""}><span>Só as por vistoriar há mais de 7 dias</span></label><span class="note num">${nPrecisa} ${nPrecisa === 1 ? "fração" : "frações"} por vistoriar</span>
+      <label class="check"><input type="checkbox" id="comPend" ${ui.comPend ? "checked" : ""}><span>Só as com pendentes por fechar</span></label><span class="note num ${nComPend ? "pd-cnt" : ""}">${nComPend} ${nComPend === 1 ? "fração" : "frações"} com pendentes</span>
+      ${modelos().size ? `<label class="check"><input type="checkbox" id="soModelo" ${ui.soModelo ? "checked" : ""}><span>Só os andares modelo</span></label><span class="note num">${[...modelos()].join(", ")}</span>` : ""}</div>
+    ${grupos.filter(([g]) => fil === "todos" || fil === g).map(([g, nome]) => {
+      const us = S.unidades.filter((u) => u.bloco === g && (!ui.porVist || precisaVist(u)) && (!ui.comPend || nPendU(u)) && (!ui.soModelo || eModelo(u.id)));
+      if (!us.length) return "";
+      return `<section class="col" style="display:flex;flex-direction:column;gap:10px"><div class="grp">${nome}</div><div class="ucards">${us.map((u) => {
+        const dv = u.atraso;
+        const uv = ultimaVistoria(u);
+        const np = nPendU(u);
+        return `<a class="ucard ${np ? "tem-pend" : ""}" href="#u-${esc(u.id)}">
+          <div class="ucard-h"><b>${esc(u.tipo === "Apartamento" || u.tipo === "Loja" ? u.id : u.nome)}${modeloTag(u.id)}</b><span class="mono num">${u.pct}%</span></div>
+          ${segHTML(u)}
+          <div class="ln"><span>Fim previsto</span><span><b>${fd(u.fim)}</b> ${deltaHTML(dv)}</span></div>
+          <div class="ln"><span>Última vistoria</span><span class="${!uv || uv < limite ? "vatr" : ""}"><b>${uv ? fdt(uv).split(" ").slice(0, 2).join(" ") : "nunca"}</b></span></div>
+          ${np ? `<div class="pd-ln"><span>Pendentes por fechar</span><b class="num">${np}</b></div>` : ""}
+          <div class="meta">${u.n.atrasada ? `<span class="pill late">${u.n.atrasada} atrasadas</span>` : ""}${u.n.bloqueada ? `<span class="pill st-bloqueada">${u.n.bloqueada} bloqueadas</span>` : ""}${u.n.em_curso ? `<span class="pill st-em_curso">${u.n.em_curso} em curso</span>` : ""}${!u.n.atrasada && !u.n.bloqueada && !u.n.em_curso ? `<span class="pill st-${u.n.concluida === u.acts.length ? "concluida" : "por_iniciar"}">${u.n.concluida === u.acts.length ? "Tudo concluído" : "Por iniciar"}</span>` : ""}</div>
+        </a>`;
+      }).join("")}</div></section>`;
+    }).join("")}
+    ${S.unidadesTeste.length && fil === "todos" ? `<section class="col" style="display:flex;flex-direction:column;gap:10px"><div class="grp">Frações de teste <span class="note">não contam para a obra</span></div><div class="ucards">${S.unidadesTeste.map((u) => `<a class="ucard teste" href="#u-${esc(u.id)}">
+        <div class="ucard-h"><b>${esc(u.id)}</b><span class="pill teste-p">TESTE</span></div>
+        ${segHTML(u)}
+        <div class="ln"><span>Atividades</span><span><b>${u.acts.length}</b></span></div>
+        <div class="ln"><span>Fim previsto</span><span><b>${fd(u.fim)}</b></span></div></a>`).join("")}</div></section>` : ""}`;
+  return { html, bind: () => { bindCommon(); const nf = $("#novaFr"); if (nf) nf.onclick = openNovaFracao; const pv = $("#porVist"); if (pv) pv.onchange = () => { ui.porVist = pv.checked; render(); };
+    const cp = $("#comPend"); if (cp) cp.onchange = () => { ui.comPend = cp.checked; render(); };
+    const sm = $("#soModelo"); if (sm) sm.onchange = () => { ui.soModelo = sm.checked; render(); };
+    if (ui.porVist || ui.comPend || ui.soModelo) {
+      if (!document.querySelector("#view .ucard")) document.querySelector("#view .ubar").insertAdjacentHTML("afterend", `<div class="empty">Nenhuma fração com estes filtros. <button class="btn sm" data-repor>Limpar filtros</button></div>`);
+      document.querySelectorAll("#view .empty [data-repor]").forEach((b) => (b.onclick = reporFiltros));
+    } } };
+}
+
+export function unidadeView(id) {
+  const u = S.uMap[id];
+  if (!u) return { html: `<div class="empty">Fração não encontrada. <a href="#unidades">Voltar</a></div>` };
+  const dv = u.atraso;
+  const fiscal = can("vistoria");
+  const tab = ui.unidadeTab;
+  if (ui.uSemConc == null) ui.uSemConc = true;
+  const concl = (a) => S.res.get(a.id).estado === "concluida" || pctEfetiva(a) >= 100;
+  const visiveis = ui.uSemConc ? u.acts.filter((a) => !concl(a)) : u.acts;
+  const nConcl = u.acts.filter(concl).length;
+  // janela temporal para as barras
+  let t0 = null, t1 = null;
+  for (const a of visiveis.length ? visiveis : u.acts) {
+    const r = S.res.get(a.id);
+    for (const d of [r.inicio, r.fim]) if (d) { if (!t0 || d < t0) t0 = d; if (!t1 || d > t1) t1 = d; }
+  }
+  const abertas = u.acts.filter((a) => S.res.get(a.id).estado !== "concluida").map((a) => S.res.get(a.id).inicio).sort();
+  const minIni = addDays(S.hoje, -45);
+  if (abertas.length && t0 < minIni) t0 = abertas[0] < minIni ? abertas[0] : minIni;
+  const span = Math.max(1, diffDays(t0, t1));
+  const pos = (d) => Math.max(0, Math.min(100, (100 * diffDays(t0, d)) / span));
+  const edU = !!ui.unitEdit && can("executar");
+  const rowsAtiv = visiveis.map((a) => {
+    const r = S.res.get(a.id);
+    const espera = [...new Set(r.bloqueadaPor.map((pid) => S.acts[pid]).filter(Boolean).map((p) => nomeAtiv(p) + (p.unidade !== a.unidade ? " (" + p.unidade + ")" : "")))];
+    const seguintes = [...new Set(r.succ.map((sid) => S.acts[sid]).filter(Boolean).map((x) => nomeAtiv(x) + (x.unidade !== a.unidade ? " (" + x.unidade + ")" : "")))];
+    const pe = a.pctEmp ?? 0, pf = a.pctFiscal;
+    const dica = [ESTADO[r.estado] + (r.atrasada ? ", atrasada" : ""), a.equipa, espera.length && r.estado === "bloqueada" ? "À espera de: " + espera.join(", ") : "", seguintes.length ? "Segue-se: " + seguintes.join(", ") : ""].filter(Boolean).join(" · ");
+    return `<div class="arow linha ${edU ? "editing" : ""}" ${edU ? "" : `data-a="${a.id}"`} title="${esc(dica)}">
+      <span class="dot st-${r.estado}${r.atrasada ? " atr" : ""}" aria-label="${esc(ESTADO[r.estado] + (r.atrasada ? ", atrasada" : ""))}"></span>
+      <div class="nm1">${edU ? `<button class="lnk-b" data-a="${a.id}"><b>${esc(nomeAtiv(a))}</b></button>` : `<b>${esc(nomeAtiv(a))}</b>`}${espera.length && r.estado === "bloqueada" ? `<span class="wait1">à espera de ${esc(espera[0])}${espera.length > 1 ? " +" + (espera.length - 1) : ""}</span>` : a.equipa ? `<span class="eq1">${esc(a.equipa)}</span>` : ""}${seguintes.length ? `<span class="seg1">segue-se ${esc(seguintes[0])}${seguintes.length > 1 ? " +" + (seguintes.length - 1) : ""}</span>` : ""}</div>
+      <div class="tl" aria-hidden="true">
+        <div class="fc st-${r.estado}" style="left:${pos(r.inicio)}%;width:${Math.max(0.8, pos(r.fim) - pos(r.inicio))}%"></div>
+        ${S.hoje >= t0 && S.hoje <= t1 ? `<div class="today" style="left:${pos(S.hoje)}%"></div>` : ""}
+      </div>
+      <div class="dt1">${edU ? `${dateInput(a.id, "ini", r.estado === "concluida" ? a.realInicio || r.inicio : r.inicio)}${dateInput(a.id, "fim", r.estado === "concluida" ? a.realFim || r.fim : r.fim)}` : `<span class="mono num">${fd(r.inicio)} a ${fd(r.fim)}</span>`}</div>
+      <div class="dv1">${deltaHTML(r.atraso)}</div>
+      ${edU ? `<div class="pcts ed">${estadoEdHTML(a, r)}${pctEdHTML(a)}</div>` : `<div class="pcts" title="Empreiteiro / Fiscal"><span class="vf-slot" data-vfotos="${a.id}"></span>E <b>${Math.round(pe)}%</b> · F <b>${pf == null ? "s/v" : Math.round(pf) + "%"}</b></div>`}
+    </div>`;
+  }).join("");
+  const barraConc = `<div class="ubar"><label class="check"><input type="checkbox" id="uSemConc" ${ui.uSemConc ? "checked" : ""}><span>Esconder concluídas</span></label>
+    <span class="note num">${ui.uSemConc ? `${visiveis.length} por concluir · ${nConcl} concluída${nConcl === 1 ? "" : "s"} escondida${nConcl === 1 ? "" : "s"}` : `${u.acts.length} atividades`}</span>
+    <span class="legend" style="margin-left:auto"><span><i class="dot st-concluida"></i>Concluída</span><span><i class="dot st-em_curso"></i>Em curso</span><span><i class="dot st-bloqueada"></i>Bloqueada</span><span><i class="dot st-por_iniciar"></i>Por iniciar</span><span><i class="dot st-por_iniciar atr"></i>Atrasada</span></span></div>`;
+  const temMud = (v) => v.pct != null || (v.fotos && v.fotos.length) || (v.coment && v.coment.trim());
+  // vista: já mexeu nesta vistoria, ou já foi vistoriada hoje
+  // a corrigir uma vistoria passada: "vista" é o que ficou registado nesse dia
+  const corrDia = fiscal ? vistCorrDia() : "";
+  const regsDia = corrDia ? regsDoDia(u.id, corrDia) : {};
+  const vista = (a) => { const v = ui.vistoria[a.id]; return !!(v && (temMud(v) || v.confirmado)) || (corrDia ? !!regsDia[a.id] : !!(a.fiscalEm && diaLocal(a.fiscalEm) === S.hoje)); };
+  const nVistas = visiveis.filter(vista).length;
+  const rowsVist = visiveis.map((a) => {
+    const r = S.res.get(a.id);
+    const v = ui.vistoria[a.id];
+    const npA = pendDe(u.id, a.id).filter(pendAberto).length;
+    const cur = v && v.pct != null ? v.pct : a.pctFiscal != null ? Math.round(a.pctFiscal) : null;
+    const nf = v && v.fotos ? v.fotos.length : 0;
+    const comAberto = v && (v.abrirC || (v.coment && v.coment.length));
+    return `<div class="vrow ${vista(a) ? "vista" : ""}" id="vr-${a.id}">
+      <div class="nm" style="display:flex;flex-direction:column;gap:3px;min-width:0"><b style="overflow-wrap:anywhere">${vista(a) ? `<span class="vok" aria-label="Vista">✓</span> ` : ""}${esc(nomeAtiv(a))}</b>
+        <small class="muted">Empreiteiro diz ${Math.round(a.pctEmp ?? 0)}% · <span class="pill st-${r.estado}" style="font-size:.7rem">${ESTADO[r.estado]}</span>${a.fiscalEm ? ` · última vistoria ${fdt(a.fiscalEm)}` : ""}</small>
+        ${a.fiscalNota ? `<small class="vult">Último comentário: ${esc(a.fiscalNota)}</small>` : ""}
+        ${corrDia ? `<small class="vcorr-n ${regsDia[a.id] ? "" : "nao"}">${regsDia[a.id] ? `A ${fd(corrDia)} ficou ${(() => { const d = regsDia[a.id].dados || {}; return [d.depois != null ? `<b>${d.depois}%</b>` : "sem percentagem", d.nota ? "com comentário" : "", d.nfotos ? pl(d.nfotos, "fotografia", "fotografias") : ""].filter(Boolean).join(", "); })()}` : `A ${fd(corrDia)} não foi registada`}</small>` : ""}</div>
+      <div class="ctl">
+        <button type="button" class="btn sm ${comAberto ? "on-c" : ""}" data-vc="${a.id}" title="Escrever comentário" aria-label="Comentário">${ICON.coment}</button>
+        <button type="button" class="btn sm vpd ${npA ? "tem" : ""}" data-vpd="${a.id}" title="Registar um pendente nesta atividade" aria-label="Pendente">${ICON.pendentes}${npA ? `<span class="num">${npA}</span>` : ""}</button>
+        <span class="vf-slot" data-vfotos="${a.id}"></span>
+        ${fotoPickerHTML(a.id, nf)}
+      </div>
+      <div class="vpct">${pctCtlHTML(a.id, cur, v && v.pct != null)}${(() => {
+        const ref = a.pctFiscal != null ? Math.round(a.pctFiscal) : Math.round(Number(a.pctEmp) || 0);
+        const on = v && v.confirmado;
+        return `<button type="button" class="btn sm vmant ${on ? "on" : ""}" data-vmant="${a.id}" aria-pressed="${!!on}" title="${a.pctFiscal != null ? "Vi e está igual à última vistoria" : "Vi e confirmo a percentagem do empreiteiro"}: fica registado que esta especialidade foi vistoriada">${on ? "✓ " : ""}${a.pctFiscal != null ? "Mantém" : "Confirma"} ${ref}%</button>`;
+      })()}</div>
+      ${comAberto || nf ? `<div class="vextra">
+        ${comAberto ? `<input class="inp" data-vct="${a.id}" value="${esc((v && v.coment) || "")}" placeholder="Comentário sobre ${esc(nomeAtiv(a).toLowerCase())}: o que viu, não conformidades">` : ""}
+        ${pendentesHTML(a.id, v && v.fotos)}</div>` : ""}
+    </div>`;
+  }).join("");
+  const nChg = Object.values(ui.vistoria).filter((v) => v.unidade === id && temMud(v)).length;
+  const nPend = pendDe(u.id).filter(pendAberto).length;
+  const pendVist = pendDe(u.id).filter(pendVivo);
+  const html = `
+    <div class="row" style="justify-content:space-between"><div class="row" style="gap:6px"><a class="back" href="#unidades">Apartamentos</a>
+      ${(() => { const vz = vizinhas(u.id); return `<span class="unav">${vz.ant ? `<a class="btn sm" href="#u-${esc(vz.ant)}" title="Fração anterior">‹ ${esc(vz.ant)}</a>` : ""}${vz.seg ? `<a class="btn sm" href="#u-${esc(vz.seg)}" title="Fração seguinte">${esc(vz.seg)} ›</a>` : ""}</span>`; })()}</div><div class="row" style="gap:6px"><a class="btn sm" href="#plano" data-verplano="${esc(u.id)}|${esc(u.bloco)}">Ver nos trabalhos</a><a class="btn sm" href="#gantt" data-vergantt="${esc(u.id)}|${esc(u.bloco)}">Ver no Gantt</a>${can("criar") ? `<button class="btn sm" data-nova="unit:${esc(u.id)}">+ Nova atividade nesta fração</button>` : ""}</div></div>
+    ${u.teste ? `<div class="banner teste-b"><span><b>Fração de teste.</b> Pode mexer à vontade: não conta para o painel, para o fim da obra nem para as estatísticas, e não mexe nas datas das outras frações. Quando acabar os testes, elimine-a.</span></div>` : ""}
+    <div class="uhead">
+      <div><div class="eyebrow">${esc(u.tipo)}${u.bloco !== "Geral" ? " · " + blocoLabel(u.bloco) : ""}${u.tipo === "Apartamento" ? " · piso " + u.piso : ""}${store.user.papel === "dono" && (u.tipo === "Apartamento" || u.tipo === "Loja") && !u.teste ? ` <button class="btn sm ghost mod-tg" data-modelo="${esc(u.id)}" aria-pressed="${eModelo(u.id)}">${eModelo(u.id) ? "Deixar de ser andar modelo" : "Marcar como andar modelo"}</button>` : ""}</div><h1>${esc(u.tipo === "Apartamento" || u.tipo === "Loja" ? u.id : u.nome)}${modeloTag(u.id)}</h1></div>
+      <div class="stats">
+        <div class="stat"><b class="num">${u.pct}%</b><span>avanço</span></div>
+        <div class="stat"><b>${fd(u.fim)}</b><span>fim previsto ${deltaHTML(dv)}</span></div>
+        <div class="stat"><b class="num">${u.n.concluida}/${u.acts.length}</b><span>concluídas</span></div>
+      </div>
+    </div>
+    ${segHTML(u)}
+    <div class="tabs">
+      ${fiscal ? `<button data-tab="vist" class="${tab === "vist" ? "on" : ""}">Vistoria</button>` : ""}
+      <button data-tab="ativ" class="${tab === "ativ" || (tab === "vist" && !fiscal) ? "on" : ""}">Atividades</button>
+      <button data-tab="pend" class="${tab === "pend" ? "on" : ""}">Pendentes${nPend ? ` <span class="tab-n">${nPend}</span>` : ""}</button>
+      <button data-tab="fotos" class="${tab === "fotos" ? "on" : ""}">Fotografias</button>
+      ${can("executar") && tab !== "vist" && tab !== "fotos" && tab !== "pend" ? `<button id="uEdit" class="tab-act ${edU ? "on" : ""}">${edU ? "Terminar edição" : "Editar datas"}</button>` : ""}
+    </div>
+    ${edU && tab === "ativ" ? `<div class="banner">Altere as datas e a percentagem de cada atividade, ou toque no estado para a iniciar ou concluir hoje. Cada alteração fica guardada logo e as atividades seguintes acertam-se sozinhas.</div>` : ""}
+    ${tab === "vist" && fiscal ? `<section class="pd-vist ${pendVist.length ? "" : "vazio"}"><div class="card-h"><h2>Pendentes deste apartamento <span class="note num">${pendVist.length}</span></h2>
+          <button class="btn sm" data-pdabrir>${(ui.pdFormAberto || {})[u.id] ? "Fechar" : "+ Novo pendente"}</button></div>
+        ${pendVist.length ? `<p class="note" style="margin:0">Se já está bem, carregue em «Concluído?»; se não, em «Ainda não está».</p><div class="pd-lista">${pendListaHTML(pendVist, { semFechados: true, resolvidosPrimeiro: true })}</div>` : ""}
+        ${(ui.pdFormAberto || {})[u.id] ? pendFormHTML(u.id) : ""}</section>
+      ${vistDiaHTML(u.id, corrDia)}
+      <label class="f">Nota da vistoria (opcional)<input class="inp" id="vnota" value="${esc(ui.vnota || "")}" placeholder="Ex.: humidade no teto do WC, falta silicone na base de duche"></label>
+      ${barraConc}
+      <div class="arows">${rowsVist || `<div class="empty">Tudo concluído nesta fração.</div>`}</div>
+      <h3 style="margin-top:6px">Fotografias desta fração</h3>
+      <p class="note" style="margin:0">Toque no × para apagar uma fotografia já guardada (só as suas, ou todas se for o dono de obra).</p>
+      <div id="vfotos" class="photos"><div class="note">A carregar fotografias...</div></div>
+      <div class="row" style="justify-content:flex-end"><button class="btn sm" data-relhoje>${corrDia ? `Ver o relatório de ${fd(corrDia)}` : "Ver o relatório de hoje"}</button></div>
+      <div class="vbar"><span class="vb-l"><b class="num" id="vvis">Vistas ${nVistas} de ${visiveis.length}</b>${nVistas < visiveis.length ? `<button class="btn sm ghost vb-seg" id="vseg" title="Ir para a próxima especialidade por ver">Seguinte ›</button>` : ""}</span>
+        <button class="btn pri" id="vsave" ${nChg ? "" : "disabled"}>${nChg ? `${corrDia ? "Guardar correção" : "Guardar"} (${nChg})` : "Nada por guardar"}</button></div>`
+      : tab === "pend" ? `<p class="note" style="margin:0">Pontos por resolver nesta fração, à vista de todos. O empreiteiro marca como resolvido e o fiscal verifica na vistoria seguinte.</p>
+        ${pendFormHTML(u.id)}
+        <div class="pd-lista">${pendListaHTML(pendDe(u.id))}</div>`
+      : tab === "fotos" ? `<div id="fotos" class="photos"><div class="note">A carregar fotografias...</div></div>`
+      : `${barraConc}<div class="arows">${rowsAtiv || `<div class="empty">${u.acts.length ? "Tudo concluído nesta fração. Desligue \"Esconder concluídas\" para ver o histórico." : can("criar") ? "Esta fração ainda não tem atividades. Crie a primeira com + Nova atividade nesta fração, lá em cima." : "Esta fração ainda não tem atividades."}</div>`}</div>
+         <p class="note">Barra: previsão. Traço vermelho: hoje. E e F: percentagem declarada pelo empreiteiro e verificada pelo fiscal. Passe o rato por cima de uma linha para ver o detalhe.</p>`}
+    ${store.user.papel === "dono" && tab !== "vist" ? `<div class="perigo">${ui.delUnit && ui.delUnit.id === u.id ? delUnidadeHTML(u) : `<button class="btn sm ghost perigo-b" id="delU">Eliminar esta fração</button><span class="note">Apaga a fração e todas as suas atividades. ${u.teste ? "Pede o código para confirmar." : "Pede confirmação três vezes."}</span>`}</div>` : ""}`;
+  if (tab === "vist" && !fiscal) ui.unidadeTab = "ativ";
+  return { html, bind: () => bindUnidade(u) };
+}
+export function bindUnidade(u) {
+  bindCommon();
+  bindPendentes(document.querySelector("#view"));
+  bindDelUnidade(u);
+  const ue = $("#uEdit"); if (ue) ue.onclick = () => { ui.unitEdit = !ui.unitEdit; render(); };
+  const usc = $("#uSemConc"); if (usc) usc.onchange = () => { ui.uSemConc = usc.checked; render(); };
+  bindDateInputs(document.querySelector("#view") || document);
+  bindEstadoPct(document.querySelector("#view") || document);
+  document.querySelectorAll("[data-tab]").forEach((b) => (b.onclick = () => { ui.unidadeTab = b.dataset.tab; render(); }));
+  bindPctCtl(document.querySelector("#view") || document,
+    (id) => { const v = ui.vistoria[id], a = S.acts[id]; return v && v.pct != null ? v.pct : a.pctFiscal != null ? Math.round(a.pctFiscal) : Math.round(a.pctEmp ?? 0); },
+    (id, val) => { ui.vistoria[id] = { ...(ui.vistoria[id] || { unidade: u.id }), unidade: u.id, pct: val, confirmado: false }; render(); });
+  const vist = (id) => (ui.vistoria[id] = { ...(ui.vistoria[id] || { unidade: u.id }), unidade: u.id });
+  const view = document.querySelector("#view");
+  if (ui.unidadeTab === "vist" && view) {
+    bindFotoPickers(view, (id, fotos) => { const v = vist(id); v.fotos = (v.fotos || []).concat(fotos); render(); });
+    view.querySelectorAll("[data-vmant]").forEach((b) => (b.onclick = () => {
+      const id = b.dataset.vmant, a = S.acts[id], v = vist(id);
+      const ref = a.pctFiscal != null ? Math.round(a.pctFiscal) : Math.round(Number(a.pctEmp) || 0);
+      if (v.confirmado) { v.confirmado = false; v.pct = null; } else { v.confirmado = true; v.pct = ref; }
+      render();
+    }));
+    view.querySelectorAll("[data-prm]").forEach((b) => (b.onclick = () => { const [id, i] = b.dataset.prm.split("|"); ui.vistoria[id].fotos.splice(+i, 1); render(); }));
+    view.querySelectorAll("[data-vc]").forEach((b) => (b.onclick = () => { const v = vist(b.dataset.vc); v.abrirC = !v.abrirC || !!(v.coment && v.coment.length); render(); const i = view.querySelector(`[data-vct="${b.dataset.vc}"]`); if (i) i.focus(); }));
+    const contar = () => {
+      const n = Object.values(ui.vistoria).filter((v) => v.unidade === u.id && (v.pct != null || (v.fotos && v.fotos.length) || (v.coment && v.coment.trim()))).length;
+      const sb = $("#vsave");
+      if (sb) { sb.disabled = !n; sb.textContent = n ? `${vistCorrDia() ? "Guardar correção" : "Guardar"} (${n})` : "Nada por guardar"; }
+    };
+    view.querySelectorAll("[data-vct]").forEach((i) => (i.oninput = () => { vist(i.dataset.vct).coment = i.value; contar(); }));
+    loadFotos(u.id, $("#vfotos"));
+    view.querySelectorAll("[data-vpd]").forEach((b) => (b.onclick = async () => {
+      const a = S.acts[b.dataset.vpd];
+      const t = await pedirTexto({ titulo: "Novo pendente", texto: `<p><b>${esc(nomeAtiv(a))}</b>, ${esc(u.id)}</p>`, placeholder: "Ex.: falta silicone na janela do quarto 2", sim: "Registar pendente", obrigatorio: true });
+      if (t) await pendCriar(u.id, a.id, t);
+    }));
+    const pa = view.querySelector("[data-pdabrir]");
+    if (pa) pa.onclick = () => { ui.pdFormAberto = ui.pdFormAberto || {}; ui.pdFormAberto[u.id] = !ui.pdFormAberto[u.id]; render(); const t = view.querySelector(".pd-vist [data-pdtxt]"); if (t) t.focus(); };
+    const vs = $("#vseg");
+    if (vs) vs.onclick = () => {
+      const rows = [...view.querySelectorAll(".arows .vrow")];
+      const meio = window.scrollY + window.innerHeight * 0.35;
+      const prox = rows.find((r) => !r.classList.contains("vista") && r.getBoundingClientRect().top + window.scrollY > meio - 40) || rows.find((r) => !r.classList.contains("vista"));
+      if (!prox) return;
+      prox.scrollIntoView({ behavior: "smooth", block: "center" });
+      prox.classList.remove("piscar"); void prox.offsetWidth; prox.classList.add("piscar");
+    };
+  }
+  const vn = $("#vnota"); if (vn) vn.oninput = () => (ui.vnota = vn.value);
+  const sv = $("#vsave");
+  if (sv) sv.onclick = async () => {
+    const nota = $("#vnota").value.trim();
+    const agora = new Date().toISOString();
+    // corrigir uma vistoria passada: tudo fica nesse dia, depois do que já lá estava
+    const corrDia = vistCorrDia();
+    sv.disabled = true;
+    if (corrDia) await carregarHistVist(true);
+    const emV = corrDia ? emCorrecao(corrDia) : agora;
+    const naoAplic = [];
+    let n = 0;
+    for (const [id, v] of Object.entries(ui.vistoria)) {
+      if (v.unidade !== u.id) continue;
+      const coment = (v.coment || "").trim();
+      if (v.pct == null && !(v.fotos && v.fotos.length) && !coment) { delete ui.vistoria[id]; continue; }
+      const a = S.acts[id];
+      const texto = [coment, nota].filter(Boolean).join(". ");
+      const nf = (v.fotos || []).length;
+      for (const f of v.fotos || []) await store.addFoto(id, u.id, f, texto, corrDia ? emV : undefined);
+      const patch = {};
+      // numa correção, a atividade só muda se não houver uma vistoria mais recente do que esse dia
+      const maisRecente = (quando) => !!(corrDia && quando && quando > emV);
+      if (v.pct != null && !maisRecente(a.fiscalEm)) Object.assign(patch, { pctFiscal: v.pct, fiscalEm: emV, fiscalPor: store.user.email });
+      else if (v.pct != null) naoAplic.push(nomeAtiv(a));
+      if (texto && !maisRecente(a.fiscalNotaEm)) Object.assign(patch, { fiscalNota: texto, fiscalNotaEm: emV });
+      const ref = corrDia ? refCorrecao(a, corrDia) : null;
+      const emp = ref && ref.emp != null ? ref.emp : Math.round(Number(a.pctEmp) || 0);
+      const partes = [v.pct != null ? `${v.pct}% (empreiteiro dizia ${emp}%)${v.confirmado ? ", confirmado sem alteração" : ""}` : "", nf ? `${nf} fotografia${nf > 1 ? "s" : ""}` : "", texto ? "comentário: " + texto : ""].filter(Boolean);
+      const antes = ref ? ref.antes : a.pctFiscal != null ? Math.round(a.pctFiscal) : null;
+      const confirmado = !!v.confirmado && v.pct != null && v.pct === (antes != null ? antes : emp);
+      const dados = { esp: nomeAtiv(a), antes, depois: v.pct ?? null, emp, nota: texto || null, nfotos: nf, confirmado, ...(corrDia ? { correcao: true } : {}) };
+      await store.updateAtividade(id, patch, corrDia
+        ? { tipo: "vistoria", em: emV, corrigidoEm: agora, texto: `Correção da vistoria de ${fd(corrDia, true)}, ${nomeAtiv(a)} em ${a.unidade}: ${partes.join(", ")}`, dados }
+        : { tipo: "vistoria", texto: `Vistoria ${nomeAtiv(a)} em ${a.unidade}: ${partes.join(", ")}`, dados });
+      delete ui.vistoria[id]; n++;
+    }
+    ui.vnota = "";
+    const seg = vizinhas(u.id).seg;
+    if (corrDia) await carregarHistVist(true);
+    const msg = corrDia ? `Correção guardada na vistoria de ${fd(corrDia, true)} (${n} especialidade${n > 1 ? "s" : ""})${naoAplic.length ? `. Em ${naoAplic.join(", ")}, a percentagem atual não mudou porque há uma vistoria mais recente` : ""}`
+      : `Vistoria guardada (${n} especialidade${n > 1 ? "s" : ""})`;
+    toast(msg, seg ? { acao: { label: `Seguinte: ${seg}`, fn: () => (location.hash = "#u-" + seg) } } : {});
+    render();
+  };
+  const rh = document.querySelector("[data-relhoje]");
+  if (rh) rh.onclick = () => { ui.relVist = { dias: [vistCorrDia() || diaLocal(new Date().toISOString())], por: store.user.email }; location.hash = "#relvist"; };
+  bindVistDia(u.id);
+  if (ui.unidadeTab === "fotos") loadFotos(u.id, $("#fotos"));
+  botoesFotosLinhas(u.id, document.querySelector("#view") || document);
+}
+/* ============================================================ corrigir uma vistoria passada
+   Por defeito, o que o fiscal guarda é a vistoria de hoje. Se escolher um dia anterior, o que guardar fica nesse dia
+   (no relatório desse dia, marcado como correção), um segundo depois do último registo que já lá estava. */
+export const vistCorrDia = () => (ui.vistCorr && ui.vistCorr.dia && ui.vistCorr.dia < S.hoje ? ui.vistCorr.dia : "");
+/** Registos de vistoria (sem os dos pendentes), carregados uma vez por sessão para escolher e corrigir dias. */
+export async function carregarHistVist(forcar) {
+  if (ui.vistHist && !forcar && ui.vistHist.por === store.user.email) return ui.vistHist;
+  let regs = [];
+  try { regs = (await store.getRegistosTipo("vistoria")).filter((r) => !r.pend && r.em && !r.relApagado); } catch (e) { regs = ui.vistHist ? ui.vistHist.regs : []; }
+  ui.vistHist = { por: store.user.email, regs };
+  return ui.vistHist;
+}
+export const histRegs = () => (ui.vistHist ? ui.vistHist.regs : []);
+/** Dias anteriores em que quem está a usar a aplicação fez vistoria nesta fração (os mais recentes primeiro). */
+export function diasVistFracao(uid) {
+  const m = new Map();
+  for (const r of histRegs()) {
+    if (r.por !== store.user.email || r.unidade !== uid) continue;
+    const d = diaLocal(r.em);
+    if (d >= S.hoje) continue;
+    const x = m.get(d) || { dia: d, ativs: new Set() };
+    if (r.ativ) x.ativs.add(r.ativ);
+    m.set(d, x);
+  }
+  return [...m.values()].sort((a, b) => b.dia.localeCompare(a.dia)).slice(0, 15);
+}
+/** O que ficou registado nesse dia em cada atividade da fração (o último registo do dia, de quem corrige). */
+export function regsDoDia(uid, dia) {
+  const out = {};
+  for (const r of histRegs()) if (r.unidade === uid && r.ativ && r.por === store.user.email && diaLocal(r.em) === dia && (!out[r.ativ] || r.em > out[r.ativ].em)) out[r.ativ] = r;
+  return out;
+}
+/** Hora a dar à correção: um segundo depois do último registo desse dia (para ser o valor final do dia), ou às 18h. */
+export function emCorrecao(dia) {
+  let ult = null;
+  for (const r of histRegs()) if (r.por === store.user.email && diaLocal(r.em) === dia && (!ult || r.em > ult)) ult = r.em;
+  const fimDia = new Date(dia + "T23:59:59").getTime();
+  return new Date(ult ? Math.min(new Date(ult).getTime() + 1000, fimDia) : new Date(dia + "T18:00:00").getTime()).toISOString();
+}
+/** Percentagem do fiscal antes desse dia e a do empreiteiro nesse dia, para o registo da correção. */
+export function refCorrecao(a, dia) {
+  const ini = new Date(dia + "T00:00:00").toISOString();
+  const doDia = histRegs().filter((r) => r.ativ === a.id && diaLocal(r.em) === dia).sort((x, y) => x.em.localeCompare(y.em));
+  const d0 = doDia.length && doDia[0].dados ? doDia[0].dados : null;
+  if (d0 && "antes" in d0) return { antes: d0.antes, emp: d0.emp };
+  const ant = histRegs().filter((r) => r.ativ === a.id && r.em < ini).sort((x, y) => y.em.localeCompare(x.em))[0];
+  if (ant) return { antes: ant.dados && ant.dados.depois != null ? ant.dados.depois : null, emp: null };
+  return { antes: a.pctFiscal != null && a.fiscalEm && a.fiscalEm < ini ? Math.round(a.pctFiscal) : null, emp: null };
+}
+export const diaCurto = (dia) => `${DIAS_SEM[new Date(dia + "T12:00:00").getDay()]}, ${fd(dia, dia.slice(0, 4) !== S.hoje.slice(0, 4))}`;
+export function vistDiaHTML(uid, corrDia) {
+  const dias = diasVistFracao(uid);
+  return `<div class="vcorr-sel"><label class="f">Dia da vistoria<select class="inp" id="vDia">
+      <option value="">Hoje, ${fd(S.hoje)}: vistoria nova</option>
+      ${dias.map((x) => `<option value="${x.dia}" ${corrDia === x.dia ? "selected" : ""}>Corrigir ${diaCurto(x.dia)} · ${pl(x.ativs.size, "especialidade", "especialidades")}</option>`).join("")}
+      ${corrDia && !dias.some((x) => x.dia === corrDia) ? `<option value="${corrDia}" selected>Corrigir ${diaCurto(corrDia)}</option>` : ""}
+      <option value="__outro">Outro dia...</option></select></label>
+    ${ui.vistOutro ? `<label class="f">Que dia?<input class="inp" type="date" id="vDiaOutro" min="${addDays(S.hoje, -120)}" max="${addDays(S.hoje, -1)}"></label>` : ""}
+    ${!ui.vistHist ? `<span class="note">A procurar as vistorias anteriores...</span>` : ""}</div>
+    ${corrDia ? `<div class="banner warn vcorr-b"><span><b>Está a corrigir a vistoria de ${diaNome(corrDia)}.</b> O que guardar agora fica nesse dia e aparece no relatório desse dia, marcado como correção. Se uma especialidade já teve uma vistoria mais recente, a percentagem atual dela não muda.</span><button class="btn sm" data-vhoje>Voltar a hoje</button></div>` : ""}`;
+}
+export function bindVistDia(uid) {
+  const sel = $("#vDia");
+  if (!sel) return;
+  sel.onchange = () => {
+    if (sel.value === "__outro") { ui.vistOutro = true; render(); const i = $("#vDiaOutro"); if (i) { i.focus(); try { i.showPicker && i.showPicker(); } catch (e) {} } return; }
+    ui.vistOutro = false;
+    ui.vistCorr = sel.value ? { dia: sel.value } : null;
+    render();
+  };
+  const outro = $("#vDiaOutro");
+  if (outro) outro.onchange = () => {
+    if (!outro.value) return;
+    if (outro.value >= S.hoje) { toast("Escolha um dia anterior a hoje.", { anular: false }); return; }
+    ui.vistCorr = { dia: outro.value }; ui.vistOutro = false; render();
+  };
+  document.querySelectorAll("[data-vhoje]").forEach((b) => (b.onclick = () => { ui.vistCorr = null; ui.vistOutro = false; render(); }));
+  if (!ui.vistHist) carregarHistVist().then(() => { if (location.hash === "#u-" + uid && ui.unidadeTab === "vist") render(); });
+}
+/* ============================================================ percentagem com botões grandes */
+export function pctCtlHTML(key, val, mudou) {
+  return `<div class="pctc ${mudou ? "mudou" : ""}" role="group" aria-label="Percentagem verificada">
+    ${[0, 25, 50, 75, 100].map((p) => `<button type="button" class="pb ${val === p ? "on" : ""}" data-pv="${key}|${p}">${p}</button>`).join("")}
+    <span class="psep"></span>
+    <button type="button" class="pb pm" data-pv="${key}|-5" aria-label="Menos 5 por cento">−</button>
+    <span class="pval num">${val == null ? "Não vi" : val + "%"}</span>
+    <button type="button" class="pb pm" data-pv="${key}|+5" aria-label="Mais 5 por cento">+</button>
+  </div>`;
+}
+/** Liga os botões de percentagem: onSet(key, novoValor), base(key) dá o valor atual para os −/+. */
+export function bindPctCtl(root, base, onSet) {
+  root.querySelectorAll("[data-pv]").forEach((b) => (b.onclick = () => {
+    const [key, v] = b.dataset.pv.split("|");
+    let val;
+    if (v === "+5" || v === "-5") val = Math.max(0, Math.min(100, (base(key) ?? 0) + Number(v)));
+    else val = Number(v);
+    onSet(key, val);
+  }));
+}
+/* ============================================================ fotografias: escolher origem, pré-visualizar, apagar */
+export function fotoPickerHTML(key, n, texto) {
+  return `<div class="fpick"><button type="button" class="btn sm" data-fp="${key}" aria-haspopup="menu" title="Juntar fotografia">${ICON.camera}${texto ? `<span>${texto}</span>` : ""}${n ? `<span class="num fcnt">${n}</span>` : ""}</button>
+    <div class="fmenu" role="menu" hidden data-fm="${key}">
+      <label class="fopt" role="menuitem">${ICON.camera}<span><b>Tirar fotografia</b><small>Abre a câmara</small></span><input type="file" accept="image/*" capture="environment" data-fin="${key}" hidden></label>
+      <label class="fopt" role="menuitem">${ICON.galeria}<span><b>Escolher fotografias</b><small>Da galeria do telemóvel ou do computador</small></span><input type="file" accept="image/*" multiple data-fin="${key}" hidden></label>
+    </div></div>`;
+}
+export function bindFotoPickers(root, onFiles) {
+  root.querySelectorAll("[data-fp]").forEach((b) => (b.onclick = (e) => {
+    e.stopPropagation();
+    const m = root.querySelector(`[data-fm="${CSS.escape(b.dataset.fp)}"]`);
+    const fechado = m.hidden;
+    document.querySelectorAll(".fmenu").forEach((x) => (x.hidden = true));
+    m.hidden = !fechado;
+  }));
+  root.querySelectorAll("[data-fin]").forEach((inp) => (inp.onchange = async () => {
+    const key = inp.dataset.fin;
+    inp.closest(".fmenu").hidden = true;
+    const out = [];
+    for (const f of inp.files) { try { out.push(await compress(f)); } catch (e) { toast("Não consegui ler a fotografia"); } }
+    inp.value = "";
+    if (out.length) onFiles(key, out);
+  }));
+}
+/** Miniaturas das fotografias ainda por guardar, cada uma com × para retirar. */
+export function pendentesHTML(key, fotos) {
+  if (!fotos || !fotos.length) return "";
+  return `<div class="pend">${fotos.map((f, i) => `<div class="pth"><img src="${f}" alt="Fotografia por guardar"><button type="button" data-prm="${key}|${i}" aria-label="Retirar fotografia" title="Retirar">×</button></div>`).join("")}<span class="note">${fotos.length} por guardar</span></div>`;
+}
+export const podeApagarFoto = (f) => store.user && (store.user.papel === "dono" || f.por === store.user.email);
+
+export async function loadFotos(unidade, el, ativ) {
+  if (!el) return;
+  let fotos = [];
+  try { fotos = await store.getFotos(unidade); } catch (e) { el.innerHTML = `<div class="err">Não foi possível carregar as fotografias.</div>`; return; }
+  if (ativ) fotos = fotos.filter((f) => f.ativ === ativ);
+  fotos.sort((a, b) => b.em.localeCompare(a.em));
+  if (!fotos.length) { el.innerHTML = `<div class="empty" style="grid-column:1/-1">Ainda sem fotografias${ativ ? " desta atividade" : " nesta fração"}. Junte-as na vistoria ou na ficha de cada atividade.</div>`; return; }
+  el.innerHTML = fotos.map((f, i) => `<div class="phw" data-phw="${i}"><button class="ph" data-ph="${i}"><img src="${f.data}" alt="Fotografia de obra" loading="lazy"><b>${esc(f.ativ && S.acts[f.ativ] ? nomeAtiv(S.acts[f.ativ]) : "")}</b><span>${fdt(f.em)} · ${esc(f.nomePor || "")}</span>${f.nota ? `<span class="phn">${esc(f.nota)}</span>` : ""}</button>
+    ${podeApagarFoto(f) ? `<button class="phx" data-phx="${i}" aria-label="Apagar fotografia" title="Apagar fotografia">×</button>` : ""}
+    <div class="phc" data-phc="${i}" hidden><b>Apagar esta fotografia?</b><div class="row" style="gap:6px"><button class="btn sm delfinal" data-phs="${i}">Apagar</button><button class="btn sm" data-phn="${i}">Não</button></div></div></div>`).join("");
+  el.querySelectorAll("[data-phx]").forEach((b) => (b.onclick = (e) => { e.stopPropagation(); el.querySelector(`[data-phc="${b.dataset.phx}"]`).hidden = false; }));
+  el.querySelectorAll("[data-phn]").forEach((b) => (b.onclick = (e) => { e.stopPropagation(); el.querySelector(`[data-phc="${b.dataset.phn}"]`).hidden = true; }));
+  el.querySelectorAll("[data-phs]").forEach((b) => (b.onclick = async (e) => {
+    e.stopPropagation();
+    const f = fotos[+b.dataset.phs];
+    b.disabled = true;
+    try {
+      const x = f.ativ && S.acts[f.ativ];
+      await store.removeFoto(f, { tipo: "foto", texto: `Apagou uma fotografia${x ? " de " + nomeAtiv(x) : ""} em ${f.unidade}` });
+      toast("Fotografia apagada");
+      loadFotos(unidade, el, ativ);
+    } catch (err) { toast("Não foi possível apagar: " + erroSimples(err) + ".", { anular: false }); b.disabled = false; }
+  }));
+  el.querySelectorAll("[data-ph]").forEach((b) => (b.onclick = () => abrirGaleria(fotos, +b.dataset.ph, () => loadFotos(unidade, el, ativ))));
+}
+/** Visualizador em ecrã inteiro: setas para navegar, apagar (com confirmação), fechar. */
+export function abrirGaleria(fotos, i0, depoisApagar) {
+  document.querySelectorAll(".lb").forEach((x) => x.remove());
+  let i = i0, conf = false;
+  const lb = document.createElement("div");
+  lb.className = "lb";
+  lb.setAttribute("role", "dialog");
+  lb.setAttribute("aria-label", "Fotografias");
+  const fechar = () => { lb.remove(); document.removeEventListener("keydown", tecla); };
+  const desenha = () => {
+    const f = fotos[i];
+    const x = f.ativ && S.acts[f.ativ];
+    lb.innerHTML = `<div class="lb-top"><span class="num">${i + 1} de ${fotos.length}</span><button class="lb-x" data-lb="fechar" aria-label="Fechar">×</button></div>
+      <div class="lb-mid">${fotos.length > 1 ? `<button class="lb-nav" data-lb="ant" aria-label="Anterior">‹</button>` : ""}<img src="${f.data}" alt="Fotografia de obra">${fotos.length > 1 ? `<button class="lb-nav" data-lb="seg" aria-label="Seguinte">›</button>` : ""}</div>
+      <div class="lb-cap"><b>${esc(x ? nomeAtiv(x) : "")}</b> · <span class="mono">${esc(f.unidade)}</span> · ${fdt(f.em)} · ${esc(f.nomePor || "")}${f.nota ? `<div>${esc(f.nota)}</div>` : ""}</div>
+      ${podeApagarFoto(f) ? (conf ? `<div class="row lb-del"><span>Apagar esta fotografia?</span><button class="btn sm delfinal" data-lb="apagar">Apagar</button><button class="btn sm" data-lb="nao">Não</button></div>`
+        : `<div class="row lb-del"><button class="btn sm" data-lb="pedir">Apagar fotografia</button></div>`) : ""}`;
+  };
+  const tecla = (e) => { if (e.key === "Escape") fechar(); if (e.key === "ArrowLeft") mover(-1); if (e.key === "ArrowRight") mover(1); };
+  const mover = (d) => { if (fotos.length < 2) return; i = (i + d + fotos.length) % fotos.length; conf = false; desenha(); };
+  lb.onclick = async (e) => {
+    const a = e.target.closest("[data-lb]");
+    if (!a) { if (e.target === lb) fechar(); return; }
+    const v = a.dataset.lb;
+    if (v === "fechar") fechar();
+    else if (v === "ant") mover(-1);
+    else if (v === "seg") mover(1);
+    else if (v === "pedir") { conf = true; desenha(); }
+    else if (v === "nao") { conf = false; desenha(); }
+    else if (v === "apagar") {
+      const f = fotos[i], x = f.ativ && S.acts[f.ativ];
+      try {
+        await store.removeFoto(f, { tipo: "foto", texto: `Apagou uma fotografia${x ? " de " + nomeAtiv(x) : ""} em ${f.unidade}` });
+        toast("Fotografia apagada");
+        fotos.splice(i, 1);
+        if (depoisApagar) depoisApagar();
+        if (!fotos.length) { fechar(); return; }
+        i = Math.min(i, fotos.length - 1); conf = false; desenha();
+      } catch (err) { toast("Não foi possível apagar: " + erroSimples(err) + ".", { anular: false }); }
+    }
+  };
+  let x0 = null;
+  lb.addEventListener("touchstart", (e) => (x0 = e.touches[0].clientX), { passive: true });
+  lb.addEventListener("touchend", (e) => { if (x0 == null) return; const dx = e.changedTouches[0].clientX - x0; if (Math.abs(dx) > 50) mover(dx < 0 ? 1 : -1); x0 = null; });
+  document.addEventListener("keydown", tecla);
+  desenha();
+  document.body.appendChild(lb);
+}
+/** Preenche, em cada linha, o botão que abre as fotografias já guardadas dessa atividade. */
+export async function botoesFotosLinhas(unidade, root) {
+  const slots = root.querySelectorAll("[data-vfotos]");
+  if (!slots.length) return;
+  let fotos = [];
+  try { fotos = await store.getFotos(unidade); } catch (e) { return; }
+  const porAtiv = {};
+  for (const f of fotos.sort((a, b) => b.em.localeCompare(a.em))) (porAtiv[f.ativ] = porAtiv[f.ativ] || []).push(f);
+  slots.forEach((sl) => {
+    const lista = porAtiv[sl.dataset.vfotos];
+    if (!lista || !lista.length) { sl.innerHTML = ""; return; }
+    sl.innerHTML = `<button type="button" class="btn sm vfbtn" title="Ver ${lista.length} fotografia${lista.length > 1 ? "s" : ""} desta atividade" aria-label="Ver fotografias">${ICON.galeria}<span class="num">${lista.length}</span></button>`;
+    sl.querySelector("button").onclick = (e) => { e.stopPropagation(); abrirGaleria(lista.slice(), 0, () => render()); };
+  });
+}
+export function compress(file, max = 1400) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    const url = URL.createObjectURL(file);
+    img.onload = () => {
+      const k = Math.min(1, max / Math.max(img.width, img.height));
+      const c = document.createElement("canvas");
+      c.width = Math.round(img.width * k); c.height = Math.round(img.height * k);
+      c.getContext("2d").drawImage(img, 0, 0, c.width, c.height);
+      URL.revokeObjectURL(url);
+      let q = 0.72, out = c.toDataURL("image/jpeg", q);
+      while (out.length > 680000 && q > 0.3) { q -= 0.1; out = c.toDataURL("image/jpeg", q); }
+      resolve(out);
+    };
+    img.onerror = reject;
+    img.src = url;
+  });
+}
