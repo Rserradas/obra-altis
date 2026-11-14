@@ -58,6 +58,8 @@ const ICON = {
 
 let store, S = null; // S = estado calculado
 const semAcento = (x) => String(x || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+const EQF_PADRAO = () => ({ bloco: "", fr: "", esp: "", estado: "", q: "" });
+const eqfAtivo = (f) => !!(f && (f.bloco || f.fr || f.esp || f.estado || f.q));
 const PLANO_PADRAO = () => ({ f: "todas", bloco: "", tipo: "", unidade: "", ativ: "", equipa: "", q: "", soAtr: false, semConc: true, sort: null, editar: false, atribuir: false, atrEq: "", selec: null });
 const VERSAO = "14.11.2026 V3"; // dia da publicação e versão do dia; mudar também em versao.json e no CACHE de sw.js
 const ui = { bloco: "todos", plano: PLANO_PADRAO(), unidadeTab: "ativ", vistoria: {}, sheet: null };
@@ -67,7 +69,7 @@ function filtrosAlterados() {
   const planoMudou = ["bloco", "tipo", "unidade", "ativ", "equipa", "q", "soAtr", "editar", "atribuir"].some((k) => !!p[k] !== !!d[k]) || p.semConc === false || !!p.sort || (p.f || "todas") !== "todas";
   if (ui.regSort || ui.regQ) return true;
   const ganttMudou = g && (g.bloco || g.unidade || g.ativ || (g.ativs && g.ativs.length) || g.estado || g.equipa || g.tipo || g.q || g.de || g.ate || g.abertas === false || g.ligacoes === false || g.zoom !== "semana" || (g.abertosB && g.abertosB.size) || (g.abertos && g.abertos.size) || g.sel);
-  return !!(planoMudou || ganttMudou || ui.bloco !== "todos" || ui.unitEdit || ui.uSemConc === false || !!ui.porVist || !!ui.comPend);
+  return !!(planoMudou || ganttMudou || eqfAtivo(ui.eqF) || ui.bloco !== "todos" || ui.unitEdit || ui.uSemConc === false || !!ui.porVist || !!ui.comPend);
 }
 /* Os filtros de Trabalhos, A minha semana e Apartamentos ficam guardados neste dispositivo, por utilizador. */
 let filtrosDe = null;
@@ -77,7 +79,7 @@ function lerFiltros() {
   if (filtrosDe === k) return;
   const trocou = filtrosDe !== null;
   filtrosDe = k;
-  if (trocou) { ui.plano = PLANO_PADRAO(); ui.semana = null; ui.bloco = "todos"; ui.porVist = false; ui.comPend = false; }
+  if (trocou) { ui.plano = PLANO_PADRAO(); ui.semana = null; ui.bloco = "todos"; ui.porVist = false; ui.comPend = false; ui.eqF = null; }
   try {
     const f = JSON.parse(localStorage.getItem(k) || "null");
     if (!f) return;
@@ -86,12 +88,13 @@ function lerFiltros() {
     if (f.bloco) ui.bloco = f.bloco;
     if (f.porVist) ui.porVist = true;
     if (f.comPend) ui.comPend = true;
+    if (f.eqF) ui.eqF = { ...EQF_PADRAO(), ...f.eqF };
   } catch (e) {}
 }
 function guardarFiltros() {
   if (filtrosDe !== chaveFiltros()) return;
   const { bloco, tipo, unidade, ativ, equipa, q, soAtr, semConc, sort, f } = ui.plano;
-  try { localStorage.setItem(filtrosDe, JSON.stringify({ plano: { bloco, tipo, unidade, ativ, equipa, q, soAtr, semConc, sort, f }, semana: ui.semana || null, bloco: ui.bloco, porVist: !!ui.porVist, comPend: !!ui.comPend })); } catch (e) {}
+  try { localStorage.setItem(filtrosDe, JSON.stringify({ plano: { bloco, tipo, unidade, ativ, equipa, q, soAtr, semConc, sort, f }, semana: ui.semana || null, bloco: ui.bloco, porVist: !!ui.porVist, comPend: !!ui.comPend, eqF: eqfAtivo(ui.eqF) ? ui.eqF : null })); } catch (e) {}
 }
 /** Volta todos os ecrãs aos filtros com que a aplicação abre (as vistorias por guardar mantêm-se). */
 function reporFiltros() {
@@ -104,6 +107,7 @@ function reporFiltros() {
   ui.comPend = false;
   ui.regSort = null;
   ui.regQ = "";
+  ui.eqF = null;
   if (ui.semana) ui.semana = { equipa: "", bloco: "", ver: "" };
   ui.semana = null;
   ui.delUnit = null;
@@ -4417,6 +4421,8 @@ function planEquipaView() {
   if (!ui.eqPlan || !eqs.some((e) => e.nome === ui.eqPlan)) ui.eqPlan = eqs[0].nome;
   const nome = ui.eqPlan;
   const ep = (ui.eqP = ui.eqP || { conc: false, fr: "", at: "" });
+  const fq = (ui.eqF = ui.eqF || EQF_PADRAO());
+  const passa = passaFiltroEq(fq);
   const fila = filaEquipa(nome);
   const naFila = new Set(fila.map((a) => a.id));
   const vis = ep.conc ? fila : fila.filter((a) => S.res.get(a.id).estado !== "concluida");
@@ -4425,12 +4431,14 @@ function planEquipaView() {
     .sort((x, y) => (S.res.get(x.id).inicio || "").localeCompare(S.res.get(y.id).inicio || ""));
   // janela das barras
   let t0 = null, t1 = null;
-  for (const a of vis) { const r = S.res.get(a.id); for (const d of [r.provIni, r.provFim]) if (d) { if (!t0 || d < t0) t0 = d; if (!t1 || d > t1) t1 = d; } }
+  for (const a of vis.filter(passa)) { const r = S.res.get(a.id); for (const d of [r.provIni, r.provFim]) if (d) { if (!t0 || d < t0) t0 = d; if (!t1 || d > t1) t1 = d; } }
   const span = Math.max(1, t0 ? diffDays(t0, t1) : 1);
   const pos = (d) => Math.max(0, Math.min(100, (100 * diffDays(t0, d)) / span));
+  // dias parados e resumo: sempre da fila toda, com ou sem filtros
   let parada = 0, fimEq = null, iniEq = null;
   let ant = null;
-  const linhas = vis.map((a, i) => {
+  const gaps = new Map();
+  for (const a of vis) {
     const r = S.res.get(a.id);
     const ini = r.provIni, fim = r.provFim;
     if (r.estado !== "concluida") { if (!iniEq || ini < iniEq) iniEq = ini; if (!fimEq || fim > fimEq) fimEq = fim; }
@@ -4443,10 +4451,19 @@ function planEquipaView() {
         motivo = outra && addDays(outra.p.provFim, 1) >= ini ? `à espera de ${nomeAtiv(S.acts[outra.d.id])}${S.acts[outra.d.id].unidade !== a.unidade ? " em " + S.acts[outra.d.id].unidade : ""}` : "data prevista mais tarde";
       }
     }
+    gaps.set(a.id, { gap, motivo });
     ant = a;
-    const pi = fila.indexOf(a);
+  }
+  const visF = vis.filter((a) => passa(a) && (fq.estado !== "parada" || gaps.get(a.id).gap > 0));
+  const filtrado = visF.length !== vis.length;
+  const visIds = visF.map((a) => a.id);
+  const linhas = visF.map((a) => {
+    const r = S.res.get(a.id);
+    const ini = r.provIni, fim = r.provFim;
+    const { gap, motivo } = gaps.get(a.id);
+    const pi = fila.indexOf(a), k = visIds.indexOf(a.id);
     return `<div class="fq-row ${r.estado === "concluida" ? "conc" : ""} ${r.ciclo ? "ciclo" : ""}" data-fq="${a.id}" draggable="true">
-      <div class="ordb"><button class="ord-b" data-fqm="${a.id}|-1" ${pi === 0 ? "disabled" : ""} title="Fazer antes" aria-label="Fazer antes">▲</button><button class="ord-b" data-fqm="${a.id}|1" ${pi === fila.length - 1 ? "disabled" : ""} title="Fazer depois" aria-label="Fazer depois">▼</button></div>
+      <div class="ordb"><button class="ord-b" data-fqm="${a.id}|-1" ${k === 0 ? "disabled" : ""} title="${filtrado ? "Fazer antes do trabalho visível de cima" : "Fazer antes"}" aria-label="Fazer antes">▲</button><button class="ord-b" data-fqm="${a.id}|1" ${k === visIds.length - 1 ? "disabled" : ""} title="${filtrado ? "Fazer depois do trabalho visível de baixo" : "Fazer depois"}" aria-label="Fazer depois">▼</button></div>
       <span class="fq-n num">${pi + 1}</span>
       <div class="fq-t"><button class="lnk-b" data-a="${a.id}"><b>${esc(nomeAtiv(a))}</b></button><span class="mono">${esc(a.unidade)}</span>
         ${gap > 0 ? `<span class="fq-gap">equipa parada ${gap} ${gap === 1 ? "dia" : "dias"} antes: ${esc(motivo)}</span>` : ""}${r.ciclo ? `<span class="fq-gap mau-t">esta ordem contradiz a sequência dos trabalhos</span>` : ""}</div>
@@ -4458,10 +4475,12 @@ function planEquipaView() {
     </div>`;
   }).join("");
   const eq = eqs.find((e) => e.nome === nome);
-  const pot = Object.values(S.acts).filter((a) => !naFila.has(a.id) && a.equipa !== nome && podeFazer(eq, a) && S.res.get(a.id).estado !== "concluida" && (!ep.potFr || a.unidade === ep.potFr))
+  const pot = Object.values(S.acts).filter((a) => !naFila.has(a.id) && a.equipa !== nome && podeFazer(eq, a) && S.res.get(a.id).estado !== "concluida" && passa(a) && fq.estado !== "parada")
     .sort((x, y) => (!x.equipa || !S.equipas.includes(x.equipa) ? 0 : 1) - (!y.equipa || !S.equipas.includes(y.equipa) ? 0 : 1) || (S.res.get(x.id).inicio || "").localeCompare(S.res.get(y.id).inicio || ""));
-  const potFrs = [...new Set(Object.values(S.acts).filter((a) => !naFila.has(a.id) && a.equipa !== nome && podeFazer(eq, a) && S.res.get(a.id).estado !== "concluida").map((a) => a.unidade))].sort((a, b) => a.localeCompare(b, "pt", { numeric: true }));
-  const frs = S.unidades.filter((u) => u.acts.some((a) => !naFila.has(a.id) && S.res.get(a.id).estado !== "concluida"));
+  const porOrdenarF = porOrdenar.filter((a) => passa(a) && fq.estado !== "parada");
+  // atividades que interessam a este ecrã, para as opções dos filtros
+  const daPagina = [...fila, ...porOrdenar, ...Object.values(S.acts).filter((a) => !naFila.has(a.id) && a.equipa !== nome && podeFazer(eq, a) && S.res.get(a.id).estado !== "concluida")];
+  const frs = S.unidades.filter((u) => (!fq.bloco || grupoBloco(u) === fq.bloco) && u.acts.some((a) => !naFila.has(a.id) && S.res.get(a.id).estado !== "concluida"));
   const ativsFr = ep.fr ? (S.uMap[ep.fr] ? S.uMap[ep.fr].acts : []).filter((a) => !naFila.has(a.id) && S.res.get(a.id).estado !== "concluida") : [];
   const html = `
     ${defTabs("planequipa")}
@@ -4470,27 +4489,28 @@ function planEquipaView() {
     <p style="max-width:75ch">Ponha os trabalhos da equipa pela ordem em que os vai fazer: por exemplo, primeiro os azulejos do A-F101, depois os do A-F102. Cada trabalho só começa quando a equipa acaba o anterior, e as datas de tudo o que vem a seguir acertam-se sozinhas. Quando atribui uma equipa a um trabalho, ele entra logo na fila dela, pela data em que pode começar.</p>
     ${(() => { const n = Object.values(S.acts).filter((a) => a.equipa && S.equipas.includes(a.equipa) && (a.eqOrdem == null || a.eqOrdem === "") && S.res.get(a.id).estado !== "concluida").length; return n ? `<div class="banner warn no-print"><span><b>${n} trabalhos com equipa ainda não estão em fila nenhuma.</b> Enquanto não estiverem, a app não sabe que a equipa não pode fazê-los ao mesmo tempo.</span><button class="btn sm pri" id="fqTodasEq">Pôr nas filas</button></div>` : ""; })()}
     <div class="seg-v no-print">${[["lista", "Fila"], ["gantt", "Gantt da equipa"], ["todas", "Gantt de todas as equipas"]].map(([k, l]) => `<button class="${(ep.vista || "lista") === k ? "on" : ""}" data-fqv="${k}">${l}</button>`).join("")}</div>
-    ${ep.vista === "todas" ? ganttEquipasHTML(null) : `
+    ${ep.vista === "todas" ? filtrosEqHTML(fq, Object.values(S.acts).filter((a) => a.equipa && S.res.get(a.id).estado !== "concluida"), false) + ganttEquipasHTML(null, passa) : `
     <div class="fq-res">
       <div><span class="eyebrow">Na fila</span><b class="num">${fila.length - nConc}</b><span class="note">por fazer${nConc ? ` · ${nConc} feitos` : ""}</span></div>
       <div><span class="eyebrow">Começa</span><b class="num">${iniEq ? fd(iniEq, true) : "sem trabalhos"}</b></div>
       <div><span class="eyebrow">Acaba a fila</span><b class="num">${fimEq ? fd(fimEq, true) : "sem trabalhos"}</b></div>
       <div><span class="eyebrow">Dias parada</span><b class="num ${parada ? "mau-t" : ""}">${parada}</b><span class="note">à espera de outros trabalhos</span></div>
     </div>
-    ${ep.vista === "gantt" ? ganttEquipasHTML(nome) : `<section class="card">
+    ${filtrosEqHTML(fq, daPagina, true)}
+    ${ep.vista === "gantt" ? ganttEquipasHTML(nome, passa) : `<section class="card">
       <div class="card-h"><h2>Fila da ${esc(nome)}</h2><div class="row">${nConc ? `<label class="check"><input type="checkbox" id="fqConc" ${ep.conc ? "checked" : ""}><span>Mostrar os já feitos</span></label>` : ""}</div></div>
-      ${vis.length ? `<p class="note" style="margin:0">Arraste as linhas ou use as setas para mudar a ordem.</p><div class="fq">${linhas}</div>` : `<div class="empty">A fila está vazia. Junte trabalhos em baixo.</div>`}
+      ${visF.length ? `<p class="note" style="margin:0">${filtrado ? `A mostrar ${visF.length} de ${vis.length} trabalhos da fila. O número é a posição na fila completa; as setas trocam com o trabalho visível de cima ou de baixo.` : "Arraste as linhas ou use as setas para mudar a ordem."}</p><div class="fq">${linhas}</div>` : vis.length ? `<div class="empty">Nenhum trabalho da fila corresponde aos filtros.</div>` : `<div class="empty">A fila está vazia. Junte trabalhos em baixo.</div>`}
     </section>`}
     <section class="card">
-      <div class="card-h"><h2>Trabalhos da equipa ainda sem lugar na fila</h2>${porOrdenar.length > 1 ? `<button class="btn sm pri" id="fqTodas">Pôr todos na fila</button>` : ""}</div>
-      ${porOrdenar.length ? `<p class="note" style="margin:0">Enquanto aqui estiverem, a app não conta com a disponibilidade da equipa para eles: as datas são as de cada trabalho, como se a equipa os pudesse fazer todos ao mesmo tempo. Ponha-os na fila para isso deixar de acontecer.</p><div class="fq">${porOrdenar.map((a) => { const r = S.res.get(a.id); return `<div class="fq-row fq-po"><span></span><span></span><div class="fq-t"><button class="lnk-b" data-a="${a.id}"><b>${esc(nomeAtiv(a))}</b></button><span class="mono">${esc(a.unidade)}</span></div><span class="pill st-${r.estado}">${ESTADO[r.estado]}</span><span></span><span class="fq-d mono num">${fd(r.provIni)} a ${fd(r.provFim)}</span><span></span><span class="fq-ac"><button class="btn sm" data-fqadd="${a.id}">+ Pôr na fila</button><button class="btn sm tira-b" data-fqrem="${a.id}" title="Deixa de ser desta equipa">× Tirar da equipa</button></span></div>`; }).join("")}</div>`
-        : `<div class="note">Todos os trabalhos atribuídos a esta equipa já estão na fila.</div>`}
+      <div class="card-h"><h2>Trabalhos da equipa ainda sem lugar na fila</h2>${porOrdenarF.length > 1 ? `<button class="btn sm pri" id="fqTodas">${porOrdenarF.length < porOrdenar.length ? `Pôr estes ${porOrdenarF.length} na fila` : "Pôr todos na fila"}</button>` : ""}</div>
+      ${porOrdenarF.length ? `<p class="note" style="margin:0">Enquanto aqui estiverem, a app não conta com a disponibilidade da equipa para eles: as datas são as de cada trabalho, como se a equipa os pudesse fazer todos ao mesmo tempo. Ponha-os na fila para isso deixar de acontecer.</p><div class="fq">${porOrdenarF.map((a) => { const r = S.res.get(a.id); return `<div class="fq-row fq-po"><span></span><span></span><div class="fq-t"><button class="lnk-b" data-a="${a.id}"><b>${esc(nomeAtiv(a))}</b></button><span class="mono">${esc(a.unidade)}</span></div><span class="pill st-${r.estado}">${ESTADO[r.estado]}</span><span></span><span class="fq-d mono num">${fd(r.provIni)} a ${fd(r.provFim)}</span><span></span><span class="fq-ac"><button class="btn sm" data-fqadd="${a.id}">+ Pôr na fila</button><button class="btn sm tira-b" data-fqrem="${a.id}" title="Deixa de ser desta equipa">× Tirar da equipa</button></span></div>`; }).join("")}</div>`
+        : porOrdenar.length ? `<div class="note">Nenhum dos ${porOrdenar.length} trabalhos sem lugar na fila corresponde aos filtros.</div>` : `<div class="note">Todos os trabalhos atribuídos a esta equipa já estão na fila.</div>`}
     </section>
     <section class="card">
-      <div class="card-h"><h2>Trabalhos que a equipa pode fazer</h2>${eq && eq.esp && eq.esp.length && potFrs.length ? `<label class="f">Apartamento<select class="inp" id="fqPotFr"><option value="">Todos</option>${potFrs.map((u) => `<option ${ep.potFr === u ? "selected" : ""}>${esc(u)}</option>`).join("")}</select></label>` : ""}</div>
+      <div class="card-h"><h2>Trabalhos que a equipa pode fazer</h2>${pot.length > 40 ? `<span class="note">os primeiros 40 de ${pot.length}: use os filtros</span>` : ""}</div>
       ${!eq || !eq.esp || !eq.esp.length ? `<div class="note">Diga na ficha da equipa que especialidades ela faz e a aplicação mostra aqui os trabalhos possíveis. <button class="btn sm" data-eqed2="${esc(nome)}">Abrir a ficha da equipa</button></div>`
         : pot.length ? `<p class="note" style="margin:0">Pelas especialidades${eq.blocos && eq.blocos.length ? " e zonas" : ""} da equipa. Primeiro os que não têm equipa.</p><div class="fq">${pot.slice(0, 40).map((a) => { const r = S.res.get(a.id); const outra = a.equipa && S.equipas.includes(a.equipa); return `<div class="fq-row fq-po"><span></span><span></span><div class="fq-t"><button class="lnk-b" data-a="${a.id}"><b>${esc(nomeAtiv(a))}</b></button><span class="mono">${esc(a.unidade)}${outra ? ` · com ${esc(a.equipa)}` : a.equipa ? ` · era de ${esc(a.equipa)}, que saiu` : " · sem equipa"}</span></div><span class="pill st-${r.estado}">${ESTADO[r.estado]}</span><span></span><span class="fq-d mono num">${fd(r.provIni)} a ${fd(r.provFim)}</span><span></span><button class="btn sm" data-fqpot="${a.id}">+ Pôr na fila</button></div>`; }).join("")}</div>${pot.length > 40 ? `<p class="note">E mais ${pot.length - 40}. Escolha um apartamento para ver menos.</p>` : ""}`
-        : `<div class="note">Não há mais trabalhos por fazer que esta equipa possa fazer.</div>`}
+        : `<div class="note">${eqfAtivo(fq) ? "Nenhum trabalho que esta equipa possa fazer corresponde aos filtros." : "Não há mais trabalhos por fazer que esta equipa possa fazer."}</div>`}
     </section>
     <section class="card">
       <div class="card-h"><h2>Juntar outro trabalho à fila</h2></div>
@@ -4506,16 +4526,20 @@ function planEquipaView() {
     $("#fqEq").onchange = (e) => { ui.eqPlan = e.target.value; ep.fr = ""; render(); };
     const fte = $("#fqTodasEq"); if (fte) fte.onclick = filasTodas;
     document.querySelectorAll("[data-fqv]").forEach((b) => (b.onclick = () => { ep.vista = b.dataset.fqv; render(); }));
+    bindFiltrosEq(fq);
     document.querySelectorAll("[data-gez]").forEach((b) => (b.onclick = () => { ep.zoom = b.dataset.gez; render(); }));
     document.querySelectorAll("[data-geq]").forEach((b) => (b.onclick = () => { ui.eqPlan = b.dataset.geq; ep.vista = "gantt"; render(); }));
     const gs = $(".ge-scroll"); if (gs && !gs.dataset.posto) { const h = gs.querySelector(".ge-hoje"); if (h) gs.scrollLeft = Math.max(0, h.offsetLeft - 160); gs.dataset.posto = 1; }
     if (ep.vista === "todas") return;
     const fc = $("#fqConc"); if (fc) fc.onchange = () => { ep.conc = fc.checked; render(); };
     const ids = fila.map((a) => a.id);
-    const mover = (id, para) => { const l = ids.filter((x) => x !== id); l.splice(Math.max(0, Math.min(l.length, para)), 0, id); return l; };
+    // as setas trocam com o vizinho visível (com filtros, os trabalhos escondidos ficam onde estão)
     document.querySelectorAll("[data-fqm]").forEach((b) => (b.onclick = () => {
-      const [id, d] = b.dataset.fqm.split("|"); const i = ids.indexOf(id);
-      gravarFila(nome, mover(id, i + Number(d)), `${nomeAtiv(S.acts[id])} em ${S.acts[id].unidade} passou para ${i + Number(d) + 1}.º`);
+      const [id, d] = b.dataset.fqm.split("|"); const k = visIds.indexOf(id);
+      const viz = visIds[k + Number(d)]; if (!viz) return;
+      const l = ids.filter((x) => x !== id);
+      l.splice(l.indexOf(viz) + (Number(d) > 0 ? 1 : 0), 0, id);
+      gravarFila(nome, l, `${nomeAtiv(S.acts[id])} em ${S.acts[id].unidade} passou para ${l.indexOf(id) + 1}.º`);
     }));
     // arrastar
     let arr = null;
@@ -4539,10 +4563,9 @@ function planEquipaView() {
     }));
     document.querySelectorAll("[data-fqadd]").forEach((b) => (b.onclick = () => { const a = S.acts[b.dataset.fqadd]; gravarFila(nome, ordemComNovos(nome, [a.id], ids), `${nomeAtiv(a)} em ${a.unidade} entrou na fila`); }));
     const ft = $("#fqTodas"); if (ft) ft.onclick = async () => {
-      if (!(await confirmar(`Pôr ${porOrdenar.length} trabalhos na fila?`, `<p>Entram na fila da ${esc(nome)}, cada um na posição da data em que pode começar. Depois pode mudar a ordem.</p>`, "Sim, pôr na fila"))) return;
-      gravarFila(nome, ordemComNovos(nome, porOrdenar.map((a) => a.id), ids), `${porOrdenar.length} trabalhos entraram na fila`);
+      if (!(await confirmar(`Pôr ${porOrdenarF.length} trabalhos na fila?`, `<p>Entram na fila da ${esc(nome)}, cada um na posição da data em que pode começar. Depois pode mudar a ordem.</p>`, "Sim, pôr na fila"))) return;
+      gravarFila(nome, ordemComNovos(nome, porOrdenarF.map((a) => a.id), ids), `${porOrdenarF.length} trabalhos entraram na fila`);
     };
-    const pf = $("#fqPotFr"); if (pf) pf.onchange = () => { ep.potFr = pf.value; render(); };
     document.querySelectorAll("[data-eqed2]").forEach((b) => (b.onclick = () => openEquipa(b.dataset.eqed2)));
     document.querySelectorAll("[data-fqpot]").forEach((b) => (b.onclick = async () => {
       const a = S.acts[b.dataset.fqpot];
@@ -4560,8 +4583,51 @@ function planEquipaView() {
     };
   } };
 }
+/* ============================================================ filtros do plano das equipas */
+const EQF_ESTADOS = [["", "Todos"], ["atrasada", "Atrasados"], ["em_curso", "Em curso"], ["por_iniciar", "Podem começar"], ["bloqueada", "À espera de outros"], ["parada", "Com a equipa parada antes"]];
+function passaFiltroEq(f) {
+  const q = semAcento(f.q || "").trim();
+  return (a) => {
+    const u = S.uMap[a.unidade] || {}, r = S.res.get(a.id);
+    if (f.bloco && grupoBloco(u) !== f.bloco) return false;
+    if (f.fr && a.unidade !== f.fr) return false;
+    if (f.esp && nomeAtiv(a) !== f.esp) return false;
+    if (f.estado === "atrasada" && !r.atrasada) return false;
+    if (["em_curso", "por_iniciar", "bloqueada"].includes(f.estado) && r.estado !== f.estado) return false;
+    if (q && !semAcento(`${a.unidade} ${u.nome || ""} ${nomeAtiv(a)} ${a.ref || ""}`).includes(q)) return false;
+    return true;
+  };
+}
+/** Barra de filtros. acts: as atividades do ecrã, para só mostrar opções que existem. */
+function filtrosEqHTML(f, acts, comParada) {
+  const us = new Map(acts.map((a) => [a.unidade, S.uMap[a.unidade]]).filter(([, u]) => u));
+  const blocos = ORD_BLOCOS.filter((b) => [...us.values()].some((u) => grupoBloco(u) === b));
+  const frs = [...us.values()].filter((u) => !f.bloco || grupoBloco(u) === f.bloco).sort((a, b) => a.id.localeCompare(b.id, "pt", { numeric: true }));
+  const esps = [...new Set(acts.filter((a) => (!f.bloco || grupoBloco(S.uMap[a.unidade] || {}) === f.bloco) && (!f.fr || a.unidade === f.fr)).map(nomeAtiv))].sort((a, b) => a.localeCompare(b, "pt"));
+  if (f.fr && !frs.some((u) => u.id === f.fr)) frs.push(S.uMap[f.fr] || { id: f.fr });
+  if (f.esp && !esps.includes(f.esp)) esps.push(f.esp);
+  return `<div class="filters fq-filtros no-print">
+    <label class="f">Bloco<select class="inp" id="fqfB"><option value="">Todos</option>${blocos.map((b) => `<option value="${b}" ${f.bloco === b ? "selected" : ""}>${rotuloAlvo(b)}</option>`).join("")}</select></label>
+    <label class="f">Apartamento ou zona<select class="inp" id="fqfU"><option value="">Todos</option>${frs.map((u) => `<option value="${esc(u.id)}" ${f.fr === u.id ? "selected" : ""}>${esc(u.tipo === "Apartamento" || u.tipo === "Loja" || !u.nome ? u.id : u.nome)}</option>`).join("")}</select></label>
+    <label class="f">Trabalho<select class="inp" id="fqfE"><option value="">Todos</option>${esps.map((n) => `<option ${f.esp === n ? "selected" : ""}>${esc(n)}</option>`).join("")}</select></label>
+    <label class="f">Estado<select class="inp" id="fqfS">${EQF_ESTADOS.filter(([k]) => comParada || k !== "parada").map(([k, l]) => `<option value="${k}" ${f.estado === k ? "selected" : ""}>${l}</option>`).join("")}</select></label>
+    <label class="f fq-q">Procurar<input class="inp" id="fqfQ" type="search" value="${esc(f.q || "")}" placeholder="Ex.: B-F503, pladur"></label>
+    ${eqfAtivo(f) ? `<button class="btn sm repor-on" id="fqfLimpar">Limpar filtros</button>` : ""}
+  </div>`;
+}
+function bindFiltrosEq(f) {
+  const liga = (sel, k, depois) => { const el = $(sel); if (el) el.onchange = () => { f[k] = el.value; if (depois) depois(); render(); }; };
+  liga("#fqfB", "bloco", () => { if (f.fr && S.uMap[f.fr] && grupoBloco(S.uMap[f.fr]) !== f.bloco && f.bloco) f.fr = ""; });
+  liga("#fqfU", "fr");
+  liga("#fqfE", "esp");
+  liga("#fqfS", "estado");
+  let tm;
+  const q = $("#fqfQ");
+  if (q) q.oninput = (e) => { clearTimeout(tm); tm = setTimeout(() => { f.q = e.target.value; render(); const i = $("#fqfQ"); if (i) { i.focus(); const n = i.value.length; try { i.setSelectionRange(n, n); } catch (er) {} } }, 300); };
+  const l = $("#fqfLimpar"); if (l) l.onclick = () => { Object.assign(f, EQF_PADRAO()); render(); };
+}
 /** Gantt das equipas. nome = uma equipa (uma linha por trabalho, pela ordem da fila); null = todas (uma linha por equipa). */
-function ganttEquipasHTML(nome) {
+function ganttEquipasHTML(nome, passa = () => true) {
   const ep = ui.eqP;
   const pxd = { semana: 14, mes: 5, trimestre: 2 }[ep.zoom || "mes"];
   const eqs = S.eqLista.filter((e) => e.ativa !== false);
@@ -4569,11 +4635,11 @@ function ganttEquipasHTML(nome) {
     const f = filaEquipa(n);
     const naFila = new Set(f.map((a) => a.id));
     const resto = Object.values(S.acts).filter((a) => a.equipa === n && !naFila.has(a.id)).sort((x, y) => (S.res.get(x.id).provIni || "").localeCompare(S.res.get(y.id).provIni || ""));
-    return [...f.map((a) => ({ a, fila: true })), ...resto.map((a) => ({ a, fila: false }))].filter((x) => S.res.get(x.a.id).estado !== "concluida" || (S.res.get(x.a.id).provFim || "") >= addDays(S.hoje, -30));
+    return [...f.map((a) => ({ a, fila: true })), ...resto.map((a) => ({ a, fila: false }))].filter((x) => (S.res.get(x.a.id).estado !== "concluida" || (S.res.get(x.a.id).provFim || "") >= addDays(S.hoje, -30)) && passa(x.a));
   };
   const grupos = nome ? [{ n: nome, itens: deEq(nome) }] : eqs.map((e) => ({ n: e.nome, itens: deEq(e.nome) })).filter((g) => g.itens.length);
   const todos = grupos.flatMap((g) => g.itens);
-  if (!todos.length) return `<section class="card"><div class="empty">${nome ? "Esta equipa não tem trabalhos por fazer." : "As equipas não têm trabalhos por fazer."}</div></section>`;
+  if (!todos.length) return `<section class="card"><div class="empty">${eqfAtivo(ui.eqF) ? "Nenhum trabalho corresponde aos filtros." : nome ? "Esta equipa não tem trabalhos por fazer." : "As equipas não têm trabalhos por fazer."}</div></section>`;
   let t0 = addDays(S.hoje, -21), t1 = addDays(S.hoje, 30);
   for (const { a } of todos) { const r = S.res.get(a.id); if (r.provIni && r.provIni < t0 && r.estado !== "concluida") t0 = r.provIni; if (r.provFim > t1) t1 = r.provFim; }
   if (diffDays(addDays(S.hoje, -120), t0) < 0) t0 = addDays(S.hoje, -120); // não recuar demasiado

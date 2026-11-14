@@ -1406,3 +1406,9 @@ body.gfull .tabbar, body.gfull .nova-versao { display: none; }
 .vcorr-n.nao { color: var(--muted); font-style: italic; }
 .rv-corr { display: inline-block; font-size: .78rem; font-weight: 600; color: var(--warn); background: var(--warn-soft); border-radius: 4px; padding: 0 6px; }
 @media print { .rv-corr { background: none; border: 1px solid currentColor; } }
+
+/* Plano das equipas: filtros */
+.fq-filtros { margin: 2px 0 12px; }
+.fq-filtros label.f { flex: 1 1 150px; }
+.fq-filtros .fq-q { flex: 2 1 200px; }
+.fq-filtros .btn { align-self: flex-end; min-height: 38px; }
