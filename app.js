@@ -2082,7 +2082,7 @@ function planoView() {
         <section class="atr-g"><h4>Previsão</h4>
           <div class="atr-2"><label class="f">Início<input class="inp" type="date" id="prvIni" value="${p.prvIni || ""}"></label>
           <label class="f">Fim<input class="inp" type="date" id="prvFim" value="${p.prvFim || ""}"></label></div>
-          <div class="atr-bt"><button class="btn pri" id="prvOk" ${dis} title="Muda a previsão das escolhidas. Se só indicar o início, o fim recalcula-se com a duração normal. Se só indicar o fim, o início fica como está.">Mudar previsão</button><button class="btn" id="prvRec" ${dis} title="Volta a pôr o fim de cada escolhida com a duração normal, tirando os fins escritos à mão">Recalcular o fim</button></div></section>
+          <div class="atr-bt"><button class="btn pri" id="prvOk" ${dis} title="Muda a previsão das escolhidas. Se só indicar o início, o fim recalcula-se com a duração normal. Se só indicar o fim, o início fica como está.">Mudar previsão</button><button class="btn" id="prvRecIni" ${dis} title="Põe o início de cada escolhida no dia a seguir à última atividade de que depende (nunca antes de hoje), mantendo o prazo de cada uma">Recalcular o início</button><button class="btn" id="prvRec" ${dis} title="Volta a pôr o fim de cada escolhida com a duração normal, tirando os fins escritos à mão">Recalcular o fim</button></div></section>
       </div></div>`;
     })() : ""}
     <div class="note num">${list.length} atividade${list.length === 1 ? "" : "s"}${esconde ? ` · concluídas escondidas <button class="btn sm ghost" id="pmostra" style="min-height:24px;padding:0 6px;text-decoration:underline">mostrar</button>` : ""}</div>
@@ -2162,6 +2162,7 @@ function planoView() {
         $("#atrIni").onclick = async () => { if (await iniciarVarias([...p.selec], dt.value || S.hoje)) p.selec = new Set(), render(); };
         $("#atrAnIni").onclick = async () => { if (await anularInicioVarias([...p.selec])) p.selec = new Set(), render(); };
         $("#prvRec").onclick = async () => { if (await recalcularFim([...p.selec])) p.selec = new Set(), render(); };
+        $("#prvRecIni").onclick = async () => { if (await recalcularInicioVarias([...p.selec])) p.selec = new Set(), render(); };
         const pi = $("#prvIni"), pf = $("#prvFim");
         pi.onchange = () => { p.prvIni = pi.value; };
         pf.onchange = () => { p.prvFim = pf.value; };
@@ -2308,6 +2309,57 @@ async function recalcularInicio(id) {
   const patch = { inicioPrevisto: ri.dia, dataOk: true, ...prazoDe(id) };
   await gravarComSeguintes(id, patch, { tipo: "previsao", texto: `${N}: início recalculado pelas atividades de que depende, ${fd(ri.dia)}` }, delta,
     `Início recalculado: ${fd(ri.dia)} (${delta > 0 ? delta + " dias mais tarde" : -delta + " dias mais cedo"})`);
+  return true;
+}
+/**
+ * Recalcular o início de várias: cada uma passa para o dia a seguir à última atividade de que depende (nunca antes de hoje),
+ * com o mesmo prazo. Se uma escolhida depende de outra escolhida, conta já com a data nova dessa; por isso repete até estabilizar.
+ */
+async function recalcularInicioVarias(ids) {
+  const todas = ids.map((id) => S.acts[id]).filter(Boolean);
+  const conc = todas.filter((a) => S.res.get(a.id).estado === "concluida");
+  const comecadas = todas.filter((a) => !conc.includes(a) && a.realInicio);
+  const cand = todas.filter((a) => !conc.includes(a) && !a.realInicio);
+  const semDeps = cand.filter((a) => !S.res.get(a.id).preds.length);
+  const patches = new Map();
+  let res = S.res;
+  for (let volta = 0; volta < 40; volta++) {
+    let mudou = false;
+    for (const a of cand) {
+      const r = res.get(a.id);
+      let es = null;
+      for (const d of r.preds) { const pr = res.get(d.id); if (!pr) continue; const c = d.tipo === "SS" ? pr.provIni : addDays(pr.provFim, 1); if (!es || c > es) es = c; }
+      if (!es) continue;
+      const dia = es < S.hoje ? S.hoje : es;
+      const atual = patches.has(a.id) ? patches.get(a.id).inicioPrevisto : null;
+      if (atual === dia || (!atual && dia === r.prevIni)) continue;
+      patches.set(a.id, { inicioPrevisto: dia, dataOk: true, ...prazoDe(a.id) });
+      mudou = true;
+    }
+    if (!mudou) break;
+    res = schedule(Object.values(S.acts).map((x) => (patches.has(x.id) ? { ...x, ...patches.get(x.id) } : x)), S.cfg.regras || {}, S.hoje, S.cfg.duracoes || {});
+  }
+  const alvo = cand.filter((a) => patches.has(a.id) && patches.get(a.id).inicioPrevisto !== S.res.get(a.id).prevIni)
+    .map((a) => ({ a, de: S.res.get(a.id).prevIni, para: patches.get(a.id).inicioPrevisto }));
+  const jaCerto = cand.length - alvo.length - semDeps.length;
+  if (!alvo.length) {
+    toast(cand.length ? `Nenhuma muda: ${semDeps.length === cand.length ? "não dependem de outras atividades" : "já estão no primeiro dia possível"}.` : "As escolhidas já começaram ou estão concluídas: o início real é o que conta.", { anular: false });
+    return false;
+  }
+  const mais = alvo.filter((x) => x.para > x.de).length, menos = alvo.length - mais;
+  const k = await perguntar({
+    titulo: `Recalcular o início de ${alvo.length} atividade${alvo.length === 1 ? "" : "s"}?`,
+    texto: `<p>Cada uma passa a começar no dia a seguir à última atividade de que depende (ou hoje, se esse dia já passou), com o mesmo prazo:</p>
+      <ul class="dlg-l">${alvo.slice(0, 8).map((x) => `<li>${esc(nomeAtiv(x.a))} em ${esc(x.a.unidade)}: ${fd(x.de)} passa a <b>${fd(x.para)}</b></li>`).join("")}${alvo.length > 8 ? `<li class="note">e mais ${alvo.length - 8}</li>` : ""}</ul>
+      <p class="note">${[menos ? `${menos} ${menos === 1 ? "começa" : "começam"} mais cedo` : "", mais ? `${mais} ${mais === 1 ? "começa" : "começam"} mais tarde` : ""].filter(Boolean).join(", ")}.
+      ${jaCerto > 0 ? ` ${jaCerto} já ${jaCerto === 1 ? "estava" : "estavam"} no primeiro dia possível.` : ""}${semDeps.length ? ` ${semDeps.length} não ${semDeps.length === 1 ? "depende" : "dependem"} de nenhuma atividade e ${semDeps.length === 1 ? "fica" : "ficam"} como ${semDeps.length === 1 ? "está" : "estão"}.` : ""}${comecadas.length ? ` ${comecadas.length} já ${comecadas.length === 1 ? "começou" : "começaram"}: conta o início real.` : ""}${conc.length ? ` ${conc.length} ${conc.length === 1 ? "está concluída" : "estão concluídas"}.` : ""}</p>
+      <p class="note">As atividades seguintes que não escolheu acertam-se se forem empurradas. Se se enganar, carregue em Anular na mensagem que aparece a seguir.</p>`,
+    opcoes: [{ k: "sim", l: `Sim, recalcular ${alvo.length}`, estilo: "pri" }, { k: "nao", l: "Cancelar" }],
+  });
+  if (k !== "sim") return false;
+  await store.updateMuitas(alvo.map((x) => ({ id: x.a.id, patch: patches.get(x.a.id) })),
+    { tipo: "previsao", texto: alvo.length === 1 ? `${nomeAtiv(alvo[0].a)} em ${alvo[0].a.unidade}: início recalculado pelas atividades de que depende, ${fd(alvo[0].para)}` : `Início recalculado pelas atividades de que dependem em ${alvo.length} atividades` });
+  toast(alvo.length === 1 ? `Início recalculado: ${fd(alvo[0].para)}` : `Início recalculado em ${alvo.length} atividades`);
   return true;
 }
 async function recalcularFim(ids) {
