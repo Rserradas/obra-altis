@@ -220,7 +220,7 @@ export function regrasView() {
         const espera = (k, alvo, vis = new Set()) => { if (vis.has(k)) return false; vis.add(k); return (regras[k] || []).some((q) => q === alvo || espera(q, alvo, vis)); };
         const disp = esp.filter((x) => x.key !== e.key && !pre.includes(x.key) && !espera(x.key, e.key)).sort((x, y) => x.nome.localeCompare(y.nome, "pt", { sensitivity: "base", numeric: true }));
         const i = esp.indexOf(e);
-        return `<div class="rule ${mexe ? "ordenavel" : ""}" data-rk="${e.key}" data-rq="${esc(semAcento([e.nome, ...pre.map((k) => (S.espIdx[k] ? S.espIdx[k].nome : k))].join(" ")))}" ${mexe ? 'draggable="true"' : ""}>${mexe ? `<div class="ordb"><button class="ord-b" data-ord="${e.key}|-1" ${i === 0 ? "disabled" : ""} title="Subir" aria-label="Subir ${esc(e.nome)}">▲</button><button class="ord-b" data-ord="${e.key}|1" ${i === esp.length - 1 ? "disabled" : ""} title="Descer" aria-label="Descer ${esc(e.nome)}">▼</button></div>` : ""}<div class="rnome" data-rnome="${e.key}"><b>${esc(e.nome)}</b>${seq ? `<button class="ren-b" data-ren="${e.key}" title="Mudar o nome" aria-label="Mudar o nome de ${esc(e.nome)}"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20h4L18.5 9.5a2.1 2.1 0 0 0-3-3L5 17v3z"/><path d="M14 8l3 3"/></svg></button>` : ""}</div>
+        return `<div class="rule ${mexe ? "ordenavel" : ""}" data-rk="${e.key}" data-rq="${esc(semAcento([e.nome, ...pre.map((k) => (S.espIdx[k] ? S.espIdx[k].nome : k))].join(" ")))}" ${mexe ? 'draggable="true"' : ""}>${mexe ? `<div class="ordw"><input class="ord-n inp num" type="number" inputmode="numeric" min="1" max="${esp.length}" value="${i + 1}" data-ordn="${e.key}" title="Escreva a posição na lista e carregue em Enter" aria-label="Posição de ${esc(e.nome)}"><div class="ordb"><button class="ord-b" data-ord="${e.key}|-1" ${i === 0 ? "disabled" : ""} title="Subir" aria-label="Subir ${esc(e.nome)}">▲</button><button class="ord-b" data-ord="${e.key}|1" ${i === esp.length - 1 ? "disabled" : ""} title="Descer" aria-label="Descer ${esc(e.nome)}">▼</button></div></div>` : ""}<div class="rnome" data-rnome="${e.key}"><b>${esc(e.nome)}</b>${seq ? `<button class="ren-b" data-ren="${e.key}" title="Mudar o nome" aria-label="Mudar o nome de ${esc(e.nome)}"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20h4L18.5 9.5a2.1 2.1 0 0 0-3-3L5 17v3z"/><path d="M14 8l3 3"/></svg></button>` : ""}</div>
           <input class="inp num" type="number" min="0" max="365" value="${dur[e.key] ?? ""}" ${G === "ap" ? "" : `placeholder="${diasHab(e.key)}" title="Vazio: cada trabalho fica com os dias que já tem"`} data-dur="${e.key}" ${seq ? "" : "disabled"} aria-label="${colDias} de ${esc(e.nome)}">
           <div class="tags">${pre.map((k) => `<span class="tag ${seq ? "" : "ro"}">${esc(S.espIdx[k] ? S.espIdx[k].nome : k)}${seq ? `<button data-rm="${e.key}|${k}" aria-label="Retirar">×</button>` : ""}</span>`).join("") || `<span class="note">Sem condições</span>`}
           ${seq ? `<select class="inp" data-add="${e.key}"><option value="">+ acrescentar</option>${disp.map((x) => `<option value="${x.key}">${esc(x.nome)}</option>`).join("")}</select>` : ""}</div>
@@ -310,6 +310,19 @@ export function regrasView() {
         gravaOrdem(nk, `Sequência: ${S.espIdx[k].nome} ${Number(d) < 0 ? "subiu" : "desceu"} na lista`);
       }));
       if (ui.focoOrd) { const f = document.querySelector(`[data-ord="${ui.focoOrd}"]`); if (f && !f.disabled) f.focus(); ui.focoOrd = null; }
+      // escrever a posição: a especialidade passa a ser a N.ª da lista
+      document.querySelectorAll("[data-ordn]").forEach((inp) => {
+        inp.onkeydown = (ev) => { if (ev.key === "Enter") { ev.preventDefault(); inp.blur(); } if (ev.key === "Escape") { inp.value = inp.defaultValue; inp.blur(); } };
+        inp.onchange = () => {
+          const k = inp.dataset.ordn, n = Math.round(Number(inp.value));
+          if (!n || n === Number(inp.defaultValue)) { inp.value = inp.defaultValue; return; }
+          const alvo = Math.max(1, Math.min(n, keys.length));
+          const nk = keys.filter((x) => x !== k); nk.splice(alvo - 1, 0, k);
+          ui.focoOrdn = k;
+          gravaOrdem(nk, `Sequência: ${S.espIdx[k].nome} passou para ${alvo}.ª posição na lista`);
+        };
+      });
+      if (ui.focoOrdn) { const f = document.querySelector(`[data-ordn="${ui.focoOrdn}"]`); ui.focoOrdn = null; if (f) f.scrollIntoView({ block: "center" }); }
       let arrasta = null;
       document.querySelectorAll(".rule[data-rk]").forEach((row) => {
         row.ondragstart = (ev) => { if (/INPUT|SELECT|BUTTON/.test(ev.target.tagName)) return; arrasta = row.dataset.rk; row.classList.add("arr"); ev.dataTransfer.effectAllowed = "move"; };

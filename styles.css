@@ -1479,3 +1479,16 @@ details.pd-fr { display: block; border-top: 1px solid var(--line); }
 @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .mod-b { background: #E2AA4F; color: #1A1E1C; } }
 h1 .mod-b { font-size: .8rem; padding: 4px 8px; margin-left: 10px; }
 .mod-tg { margin-left: 8px; min-height: 26px; padding: 2px 8px; font-size: .75rem; text-transform: none; letter-spacing: 0; }
+
+/* Escrever a posição (Sequência e fila das equipas) */
+.ordw { display: flex; align-items: center; gap: 4px; }
+.ord-n { width: 46px; min-height: 32px; padding: 2px 4px; text-align: center; font-weight: 700; -moz-appearance: textfield; }
+.ord-n::-webkit-outer-spin-button, .ord-n::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+.rule.ordenavel { grid-template-columns: 82px minmax(150px, 1fr) 96px minmax(0, 2fr) minmax(0, 1.5fr); }
+.fq-row { grid-template-columns: 34px 48px minmax(0, 1.6fr) 104px minmax(110px, 1fr) 128px 74px auto; }
+input.fq-n { border: 1px solid var(--line); border-radius: 6px; background: var(--surface); color: var(--ink); font-size: .95rem; }
+.fq-row.junto input.fq-n { color: var(--accent); border-color: var(--accent); }
+@media (max-width: 760px) {
+  .rule.ordenavel { grid-template-columns: 82px minmax(0, 1fr) 90px; }
+  .fq-row { grid-template-columns: 34px 46px minmax(0, 1fr) auto; }
+}

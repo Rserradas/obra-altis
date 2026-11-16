@@ -276,7 +276,8 @@ export function planEquipaView() {
   }
   const visF = vis.filter((a) => passa(a) && (fq.estado !== "parada" || gaps.get(a.id).gap > 0));
   const numGrupo = new Map();
-  { let g = 0; for (const a of fila) { if (!eJunto(a) || !g) g++; numGrupo.set(a.id, g); } }
+  let nGrupos = 0;
+  { let g = 0; for (const a of fila) { if (!eJunto(a) || !g) g++; numGrupo.set(a.id, g); } nGrupos = g; }
   const nFrentes = frentesDe(nome);
   const filtrado = visF.length !== vis.length;
   const visIds = visF.map((a) => a.id);
@@ -287,7 +288,7 @@ export function planEquipaView() {
     const pi = fila.indexOf(a), k = visIds.indexOf(a.id), junto = eJunto(a);
     return `<div class="fq-row ${r.estado === "concluida" ? "conc" : ""} ${r.ciclo ? "ciclo" : ""} ${junto ? "junto" : ""}" data-fq="${a.id}" draggable="true">
       <div class="ordb"><button class="ord-b" data-fqm="${a.id}|-1" ${k === 0 ? "disabled" : ""} title="${filtrado ? "Fazer antes do trabalho visível de cima" : "Fazer antes"}" aria-label="Fazer antes">▲</button><button class="ord-b" data-fqm="${a.id}|1" ${k === visIds.length - 1 ? "disabled" : ""} title="${filtrado ? "Fazer depois do trabalho visível de baixo" : "Fazer depois"}" aria-label="Fazer depois">▼</button></div>
-      <span class="fq-n num" title="${junto ? "Ao mesmo tempo que o de cima" : "Lugar na fila"}">${numGrupo.get(a.id)}</span>
+      ${r.estado === "concluida" ? `<span class="fq-n num" title="Lugar na fila">${numGrupo.get(a.id)}</span>` : `<input class="fq-n ord-n num" type="number" inputmode="numeric" min="1" max="${nGrupos}" value="${numGrupo.get(a.id)}" data-fqn="${a.id}" title="${junto ? "Ao mesmo tempo que o de cima. " : ""}Escreva o lugar na fila e carregue em Enter" aria-label="Lugar na fila de ${esc(nomeAtiv(a))} em ${esc(a.unidade)}">`}
       <div class="fq-t"><button class="lnk-b" data-a="${a.id}"><b>${esc(nomeAtiv(a))}</b></button><span class="mono">${esc(a.unidade)}</span>
         ${gap > 0 ? `<span class="fq-gap">equipa parada ${gap} ${gap === 1 ? "dia" : "dias"} antes: ${esc(motivo)}</span>` : ""}
         ${depoisGrupo > 0 ? `<span class="fq-gap">começa ${depoisGrupo} ${depoisGrupo === 1 ? "dia" : "dias"} depois do primeiro do grupo: ${esc(motivo)}</span>` : ""}
@@ -326,7 +327,7 @@ export function planEquipaView() {
       <div class="card-h"><h2>Fila da ${esc(nome)}</h2><div class="row">${nConc ? `<label class="check"><input type="checkbox" id="fqConc" ${ep.conc ? "checked" : ""}><span>Mostrar os já feitos</span></label>` : ""}
         <label class="f fq-fr" title="Quantos trabalhos esta equipa faz ao mesmo tempo">Frentes<select class="inp" id="fqFrentes">${[1, 2, 3, 4, 5, 6, 8, 10].map((n) => `<option value="${n}" ${n === nFrentes ? "selected" : ""}>${n === 1 ? "1 (um trabalho de cada vez)" : n + " ao mesmo tempo"}</option>`).join("")}</select></label></div></div>
       ${nFrentes > 1 ? `<p class="note fq-frn">Com ${nFrentes} frentes, a equipa faz ${nFrentes} trabalhos ao mesmo tempo: cada um começa quando acaba o que está ${nFrentes} lugares acima. Os trabalhos juntos com "Ao mesmo tempo que o de cima" contam como um só lugar.</p>` : ""}
-      ${visF.length ? `<p class="note" style="margin:0">${filtrado ? `A mostrar ${visF.length} de ${vis.length} trabalhos da fila. O número é a posição na fila completa; as setas trocam com o trabalho visível de cima ou de baixo.` : "Arraste as linhas ou use as setas para mudar a ordem."}</p><div class="fq">${linhas}</div>` : vis.length ? `<div class="empty">Nenhum trabalho da fila corresponde aos filtros.</div>` : `<div class="empty">A fila está vazia. Junte trabalhos em baixo.</div>`}
+      ${visF.length ? `<p class="note" style="margin:0">${filtrado ? `A mostrar ${visF.length} de ${vis.length} trabalhos da fila. O número é a posição na fila completa; as setas trocam com o trabalho visível de cima ou de baixo.` : "Para mudar a ordem, arraste as linhas, use as setas ou escreva o lugar na caixa do número e carregue em Enter."}</p><div class="fq">${linhas}</div>` : vis.length ? `<div class="empty">Nenhum trabalho da fila corresponde aos filtros.</div>` : `<div class="empty">A fila está vazia. Junte trabalhos em baixo.</div>`}
     </section>`}
     <section class="card">
       <div class="card-h"><h2>Trabalhos da equipa ainda sem lugar na fila</h2>${porOrdenarF.length > 1 ? `<button class="btn sm pri" id="fqTodas">${porOrdenarF.length < porOrdenar.length ? `Pôr estes ${porOrdenarF.length} na fila` : "Pôr todos na fila"}</button>` : ""}</div>
@@ -373,10 +374,27 @@ export function planEquipaView() {
       l.splice(pos, 0, id);
       gravarFila(nome, l, `${nomeAtiv(S.acts[id])} em ${S.acts[id].unidade} passou para ${l.indexOf(id) + 1}.º`, {}, [], { soltar });
     }));
+    // escrever o lugar: o trabalho passa a ser o N.º da fila (sai do grupo onde estava; os grupos contam como um lugar)
+    document.querySelectorAll("[data-fqn]").forEach((inp) => {
+      inp.onkeydown = (e) => { if (e.key === "Enter") { e.preventDefault(); inp.blur(); } if (e.key === "Escape") { inp.value = inp.defaultValue; inp.blur(); } };
+      inp.onchange = () => {
+        const id = inp.dataset.fqn, n = Math.round(Number(inp.value));
+        if (!n || n === Number(inp.defaultValue)) { inp.value = inp.defaultValue; return; }
+        const soltar = soltarAoMover(id, ids);
+        const l = ids.filter((x) => x !== id);
+        const preso = (x) => eJunto(S.acts[x]) && !soltar.has(x);
+        const cabecas = l.map((x, i) => (i === 0 || !preso(x) ? i : -1)).filter((i) => i >= 0);
+        const alvo = Math.max(1, Math.min(n, cabecas.length + 1));
+        l.splice(alvo <= cabecas.length ? cabecas[alvo - 1] : l.length, 0, id);
+        ui.focoFqn = id;
+        gravarFila(nome, l, `${nomeAtiv(S.acts[id])} em ${S.acts[id].unidade} passou para ${alvo}.º lugar na fila`, {}, [], { soltar });
+      };
+    });
+    if (ui.focoFqn) { const f = document.querySelector(`[data-fqn="${ui.focoFqn}"]`); ui.focoFqn = null; if (f) f.scrollIntoView({ block: "center" }); }
     // arrastar
     let arr = null;
     document.querySelectorAll(".fq-row[data-fq]").forEach((row) => {
-      row.ondragstart = (e) => { arr = row.dataset.fq; row.classList.add("arr"); e.dataTransfer.effectAllowed = "move"; };
+      row.ondragstart = (e) => { if (/INPUT|SELECT/.test(e.target.tagName)) { e.preventDefault(); return; } arr = row.dataset.fq; row.classList.add("arr"); e.dataTransfer.effectAllowed = "move"; };
       row.ondragend = () => { row.classList.remove("arr"); document.querySelectorAll(".fq-row.alvo").forEach((x) => x.classList.remove("alvo")); };
       row.ondragover = (e) => { if (!arr) return; e.preventDefault(); document.querySelectorAll(".fq-row.alvo").forEach((x) => x.classList.remove("alvo")); row.classList.add("alvo"); };
       row.ondrop = (e) => { e.preventDefault(); const alvo = row.dataset.fq; if (!arr || arr === alvo) return; const id = arr; arr = null;
