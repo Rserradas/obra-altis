@@ -211,7 +211,7 @@ export function regrasView() {
     ${defTabs("regras")}
     <div class="card-h"><h1>Sequência dos trabalhos</h1>${seq && esp.length ? `<div class="row"><button class="btn" id="ordSeq" title="Põe cada trabalho depois dos de que depende">Ordenar pela sequência</button>${G === "ap" ? `<button class="btn pri" data-nova="esp">+ Nova especialidade</button>` : ""}</div>` : ""}</div>
     <div class="seq-g" role="tablist" aria-label="Secção da sequência">${SEQ_GRUPOS.map((g) => `<button type="button" role="tab" class="${g.k === G ? "on" : ""}" aria-selected="${g.k === G}" data-seqg="${g.k}">${g.l} <span class="num">${nG(g.k)}</span></button>`).join("")}</div>
-    <p style="max-width:70ch">${textoG}</p>
+    <p>${textoG}</p>
     ${foraSeq.length ? (seq ? `<div class="banner warn"><span>${esp.length ? `<b>${foraSeq.length} ${foraSeq.length === 1 ? "trabalho" : "trabalhos"} ${gInfo.de} ainda fora desta lista.</b> Acrescente-os para poder dar-lhes sequência.` : `<b>Os ${foraSeq.length} trabalhos ${gInfo.de} ainda não estão organizados.</b> A aplicação junta os que têm o mesmo nome (por exemplo o mesmo trabalho nos 4 blocos) e mostra-os aqui, com as ligações que já vêm do cronograma. As datas não mudam.`}</span><button class="btn pri" id="seqOrg">${esp.length ? "Acrescentar" : "Organizar"}</button></div>` : `<div class="banner">Os trabalhos ${gInfo.de} ainda não foram organizados nesta lista. O dono de obra ou o empreiteiro podem fazê-lo.</div>`) : ""}
     ${seq ? "" : `<div class="banner">Só o dono de obra e o empreiteiro podem alterar esta sequência.</div>`}
     ${vs ? `<div class="banner"><span>A ver por <b>${NOMES_COL[vs.col]}</b>${vs.dir === "desc" ? " (decrescente)" : ""}. A ordem guardada da lista não mudou.</span><span class="row" style="gap:6px">${seq ? `<button class="btn sm" id="rsGuardar">Guardar como ordem da lista</button>` : ""}<button class="btn sm" id="rsVoltar">Voltar à ordem da lista</button></span></div>` : ""}
@@ -428,7 +428,7 @@ export function equipaView() {
   const html = `
     ${defTabs("equipa")}
     <h1>Acessos</h1>
-    <p style="max-width:70ch">Cada pessoa entra com o seu email e palavra-passe. O perfil define o que pode fazer: o <b>empreiteiro</b> inicia, conclui e reporta atrasos; o <b>fiscal</b> regista vistorias e fotografias; o <b>dono de obra</b> vê tudo e define a sequência; o <b>administrador</b> tem os mesmos direitos do dono de obra e escolhe como quer ver a aplicação (como dono, empreiteiro ou fiscal), para confirmar o que cada um vê.</p>
+    <p>Cada pessoa entra com o seu email e palavra-passe. O perfil define o que pode fazer: o <b>empreiteiro</b> inicia, conclui e reporta atrasos; o <b>fiscal</b> regista vistorias e fotografias; o <b>dono de obra</b> vê tudo e define a sequência; o <b>administrador</b> tem os mesmos direitos do dono de obra e escolhe como quer ver a aplicação (como dono, empreiteiro ou fiscal), para confirmar o que cada um vê.</p>
     <section class="card"><h2>Pessoas com acesso</h2><div class="list" id="ulist"><div class="note">A carregar...</div></div></section>
     <section class="card"><h2>Adicionar pessoa</h2>
       ${demo ? `<div class="banner warn">Na demonstração não se criam contas reais. Na versão instalada, isto cria a conta e o perfil de uma vez.</div>` : ""}
@@ -505,7 +505,7 @@ export function copiaView() {
   const html = `
     ${defTabs("copia")}
     <h1>Cópia de segurança</h1>
-    <p style="max-width:70ch">A cópia é um ficheiro com tudo o que está registado${store.modo === "demo" ? " (nesta demonstração, os dados deste dispositivo)" : " online"}: atividades e datas, percentagens, notas da fiscalização, pendentes, histórico, fotografias, equipas, sequência e acessos. Guarde-a no computador ou numa pasta partilhada da empresa. Não inclui as palavras-passe.</p>
+    <p>A cópia é um ficheiro com tudo o que está registado${store.modo === "demo" ? " (nesta demonstração, os dados deste dispositivo)" : " online"}: atividades e datas, percentagens, notas da fiscalização, pendentes, histórico, fotografias, equipas, sequência e acessos. Guarde-a no computador ou numa pasta partilhada da empresa. Não inclui as palavras-passe.</p>
     <section class="card"><h2>Fazer uma cópia</h2>
       ${ult ? `<p>Última cópia feita neste dispositivo: <b>${fd(ult.em.slice(0, 10), true)}</b>${dias ? `, há ${dias} dia${dias === 1 ? "" : "s"}` : ", hoje"}${ult.mb != null ? ` (${ult.mb} MB)` : ""}.</p>` : `<p>Ainda não fez nenhuma cópia neste dispositivo.</p>`}
       ${dias != null && dias >= 7 ? `<div class="banner warn"><span>Já passou mais de uma semana desde a última cópia.</span></div>` : ""}
@@ -513,7 +513,7 @@ export function copiaView() {
       <p class="note">Sugestão: faça uma cópia por semana, por exemplo antes da reunião de obra. Com muitas fotografias o ficheiro pode ter vários MB.</p>
     </section>
     <section class="card"><h2>Repor a partir de uma cópia</h2>
-      <p style="max-width:70ch">Volta a pôr tudo exatamente como estava quando a cópia foi feita. <b>O que foi registado depois disso perde-se.</b> Antes de repor, a aplicação descarrega automaticamente uma cópia do estado atual, para poder voltar atrás. ${store.user.papel === "dono" ? "Os acessos das pessoas nunca são apagados." : "Os acessos das pessoas não mudam: só o dono de obra mexe nos acessos."}</p>
+      <p>Volta a pôr tudo exatamente como estava quando a cópia foi feita. <b>O que foi registado depois disso perde-se.</b> Antes de repor, a aplicação descarrega automaticamente uma cópia do estado atual, para poder voltar atrás. ${store.user.papel === "dono" ? "Os acessos das pessoas nunca são apagados." : "Os acessos das pessoas não mudam: só o dono de obra mexe nos acessos."}</p>
       <label class="btn" style="cursor:pointer;display:inline-flex;width:auto">Escolher ficheiro da cópia<input type="file" id="cpFich" accept=".json,application/json" hidden></label>
       ${st.erro ? `<div class="err" style="margin-top:10px">${esc(st.erro)}</div>` : ""}
       ${L ? `<div class="copia-lida">

@@ -65,7 +65,7 @@ export function vistoriasView() {
   const st = ui.vistLista;
   const html = `
     <div class="card-h"><h1>Relatórios de vistoria</h1></div>
-    <p style="max-width:70ch">Cada vez que o fiscal guarda uma vistoria, fica registado o que mudou: a percentagem antes e depois, o comentário e as fotografias. Escolha um ou mais dias e veja o relatório, que pode imprimir ou guardar em PDF.</p>
+    <p>Cada vez que o fiscal guarda uma vistoria, fica registado o que mudou: a percentagem antes e depois, o comentário e as fotografias. Escolha um ou mais dias e veja o relatório, que pode imprimir ou guardar em PDF.</p>
     <div id="vlista"><div class="note">A carregar as vistorias...</div></div>`;
   return {
     html, bind: async () => {

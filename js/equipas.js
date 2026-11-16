@@ -150,7 +150,7 @@ export function equipasView() {
   const html = `
     ${defTabs("equipas")}
     <div class="card-h"><h1>Equipas de trabalho</h1><button class="btn pri" id="eqNova">+ Nova equipa</button></div>
-    <p style="max-width:70ch">As equipas que fazem os trabalhos na obra (mosaicos, pintura, carpintaria...). Na ficha de cada equipa diga o que ela pode fazer e onde trabalha: a aplicação mostra-lhe os trabalhos possíveis para planear. Se uma equipa sair da obra, abra a ficha dela e use <b>A equipa sai da obra</b>: os trabalhos que faltam passam para outras equipas.</p>
+    <p>As equipas que fazem os trabalhos na obra (mosaicos, pintura, carpintaria...). Na ficha de cada equipa diga o que ela pode fazer e onde trabalha: a aplicação mostra-lhe os trabalhos possíveis para planear. Se uma equipa sair da obra, abra a ficha dela e use <b>A equipa sai da obra</b>: os trabalhos que faltam passam para outras equipas.</p>
     ${semEq ? `<div class="banner"><span><b>${semEq} trabalhos por fazer ainda não têm equipa.</b></span><button class="btn sm" data-eqatr="_sem">Atribuir equipas</button></div>` : ""}
     ${lista.length ? `<div class="eqcards">${lista.filter((e) => e.ativa !== false).map((e) => {
       const t = statsEquipa(e.nome);
@@ -313,7 +313,7 @@ export function planEquipaView() {
     ${defTabs("planequipa")}
     <div class="card-h"><h1>Plano das equipas</h1>
       <label class="f" ${ep.vista === "todas" ? "hidden" : ""}>Equipa<select class="inp" id="fqEq">${eqs.map((e) => `<option ${e.nome === nome ? "selected" : ""}>${esc(e.nome)}</option>`).join("")}</select></label></div>
-    <p style="max-width:75ch">Ponha os trabalhos da equipa pela ordem em que os vai fazer: por exemplo, primeiro os azulejos do A-F101, depois os do A-F102. Cada trabalho só começa quando a equipa acaba o anterior, e as datas de tudo o que vem a seguir acertam-se sozinhas. Se a equipa fizer vários trabalhos ao mesmo tempo, mude as Frentes ou marque Ao mesmo tempo que o de cima. Quando atribui uma equipa a um trabalho, ele entra logo na fila dela, pela data em que pode começar.</p>
+    <p>Ponha os trabalhos da equipa pela ordem em que os vai fazer: por exemplo, primeiro os azulejos do A-F101, depois os do A-F102. Cada trabalho só começa quando a equipa acaba o anterior, e as datas de tudo o que vem a seguir acertam-se sozinhas. Se a equipa fizer vários trabalhos ao mesmo tempo, mude as Frentes ou marque Ao mesmo tempo que o de cima. Quando atribui uma equipa a um trabalho, ele entra logo na fila dela, pela data em que pode começar.</p>
     ${(() => { const n = Object.values(S.acts).filter((a) => a.equipa && S.equipas.includes(a.equipa) && (a.eqOrdem == null || a.eqOrdem === "") && S.res.get(a.id).estado !== "concluida").length; return n ? `<div class="banner warn no-print"><span><b>${n} trabalhos com equipa ainda não estão em fila nenhuma.</b> Enquanto não estiverem, a app não sabe que a equipa não pode fazê-los ao mesmo tempo.</span><button class="btn sm pri" id="fqTodasEq">Pôr nas filas</button></div>` : ""; })()}
     <div class="seg-v no-print">${[["lista", "Fila"], ["gantt", "Gantt da equipa"], ["todas", "Gantt de todas as equipas"]].map(([k, l]) => `<button class="${(ep.vista || "lista") === k ? "on" : ""}" data-fqv="${k}">${l}</button>`).join("")}</div>
     ${ep.vista === "todas" ? filtrosEqHTML(fq, Object.values(S.acts).filter((a) => a.equipa && S.res.get(a.id).estado !== "concluida"), false) + ganttEquipasHTML(null, passa) : `
