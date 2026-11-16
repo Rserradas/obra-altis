@@ -74,7 +74,7 @@ export function filtrosAlterados() {
   const planoMudou = ["bloco", "tipo", "unidade", "ativ", "equipa", "q", "soAtr", "editar", "atribuir"].some((k) => !!p[k] !== !!d[k]) || p.semConc === false || !!p.sort || (p.f || "todas") !== "todas";
   if (ui.regSort || ui.regQ) return true;
   const ganttMudou = g && (g.bloco || g.unidade || g.ativ || (g.ativs && g.ativs.length) || g.estado || g.equipa || g.tipo || g.q || g.de || g.ate || g.abertas === false || g.ligacoes === false || g.zoom !== "semana" || (g.abertosB && g.abertosB.size) || (g.abertos && g.abertos.size) || g.sel);
-  const vl = ui.vistLista, vistMudou = !!(vl && vl.por && vl.por !== (store.user.papel === "fiscal" && !store.admin ? store.user.email : ""));
+  const vl = ui.vistLista, vistMudou = !!(vl && vl.por);
   return !!(planoMudou || ganttMudou || vistMudou || eqfAtivo(ui.eqF) || ui.soModelo || ui.bloco !== "todos" || ui.unitEdit || ui.uSemConc === false || !!ui.porVist || !!ui.comPend);
 }
 /* Os filtros de Trabalhos, A minha semana e Apartamentos ficam guardados neste dispositivo, por utilizador. */

@@ -60,9 +60,8 @@ export async function eliminarRelatorio(x) {
   return true;
 }
 export function vistoriasView() {
-  // o fiscal vê à partida as suas vistorias; o administrador, em qualquer vista, vê as de todos.
-  // O filtro volta ao início quando se muda de vista, para não esconder as vistorias dos outros.
-  if (!ui.vistLista || ui.vistLista.papel !== store.user.papel) ui.vistLista = { papel: store.user.papel, por: store.user.papel === "fiscal" && !store.admin ? store.user.email : "", sel: null };
+  // todos veem à partida as vistorias de todos os fiscais; o filtro Fiscal volta a Todos quando se muda de vista
+  if (!ui.vistLista || ui.vistLista.papel !== store.user.papel) ui.vistLista = { papel: store.user.papel, por: "", sel: null };
   const st = ui.vistLista;
   const html = `
     <div class="card-h"><h1>Relatórios de vistoria</h1></div>
@@ -172,7 +171,9 @@ export function relVistView() {
       const ordemL = ordemU.flatMap((uid) => porU.get(uid));
       fotos.sort((a, b) => ordemL.findIndex((l) => l.ativ === a.ativ) - ordemL.findIndex((l) => l.ativ === b.ativ) || (a.em || "").localeCompare(b.em || ""));
       fotos.forEach((f, i) => (f.num = i + 1));
-      const refsDe = (ativ) => fotos.filter((f) => f.ativ === ativ).map((f) => `<a href="#rvf${f.num}" class="rv-fr">F${f.num}</a>`).join(" ");
+      // as fotografias de cada especialidade aparecem logo por baixo dela, no registo por fração
+      const fotosDe = (ativ, nome, jaDito = []) => fotos.map((f, i) => [f, i]).filter(([f]) => f.ativ === ativ).map(([f, i]) => `<figure id="rvf${f.num}"><button class="rv-img" data-rvi="${i}" aria-label="Ver a fotografia F${f.num} em grande"><img src="${f.data}" alt="F${f.num}: ${esc(nome || "")} em ${esc(nomeU(f.unidade))}" loading="lazy"></button>
+        <figcaption><b>F${f.num}</b> · ${fd(diaLocal(f.em))} ${hora(f.em)}${f.nota && !jaDito.includes(f.nota) ? `<span>${esc(f.nota)}</span>` : ""}</figcaption></figure>`).join(""); // o comentário já escrito na linha não se repete
       // pendentes: todos os que já existiam no fim do período e ainda não estavam fechados nessa altura,
       // mais os que foram fechados durante o período. O estado é o desse dia (um relatório antigo não muda).
       const iniP = new Date(dias[0] + "T00:00:00").toISOString(), fimP = new Date(new Date(dias[dias.length - 1] + "T00:00:00").getTime() + 86400000).toISOString();
@@ -226,12 +227,12 @@ export function relVistView() {
         </section>
 
         <section class="rv-sec"><h2>${++sec}. Registo por fração</h2>
-          <p class="rv-nota">"Vistoria anterior" é a última vistoria antes deste período; "Agora" é a percentagem verificada no fim do período; "Evolução" é a diferença entre as duas, em pontos percentuais (pp). Por baixo de cada especialidade estão as observações e as fotografias (Fn remete para o registo fotográfico).</p>
+          <p class="rv-nota">"Vistoria anterior" é a última vistoria antes deste período; "Agora" é a percentagem verificada no fim do período; "Evolução" é a diferença entre as duas, em pontos percentuais (pp). Por baixo de cada especialidade estão as observações e as fotografias dessa especialidade; toque numa fotografia para a ver em grande.</p>
           ${ordemU.map((uid) => `<div class="rv-u"><h3><span class="mono">${esc(nomeU(uid))}</span><small>${esc(descU(uid))}</small></h3>
             <table class="rv-t"><thead><tr><th>Especialidade</th><th class="n">Vistoria anterior</th><th class="n">Agora</th><th class="n">Evolução</th><th class="n">Empreiteiro</th></tr></thead>
-            ${porU.get(uid).map((l) => { const at = atencao.includes(l) ? "at" : "", refs = refsDe(l.ativ), notas = l.notas.map((t) => esc(t)).join(" · ");
-              const obs = l.confirmado || notas || refs ? `<tr class="rv-obs ${at}"><td colspan="5">${l.confirmado ? `<span class="rv-conf">Confirmado sem alteração</span> ` : ""}${notas}${refs ? `<span class="rv-obs-f${notas ? " sep" : ""}">Fotos: ${refs}</span>` : ""}</td></tr>` : "";
-              return `<tbody class="rv-esp${obs ? " com-obs" : ""}"><tr class="${at}"><td><b>${esc(l.nome)}</b>${l.a ? ` <button class="lnk-b no-print rv-fic" data-a="${l.a.id}">ficha</button>` : ""}</td>
+            ${porU.get(uid).map((l) => { const at = atencao.includes(l) ? "at" : "", figs = fotosDe(l.ativ, l.nome, l.notas), notas = l.notas.map((t) => esc(t)).join(" · ");
+              const obs = l.confirmado || notas || figs ? `<tr class="rv-obs ${at}"><td colspan="5">${l.confirmado || notas ? `<div>${l.confirmado ? `<span class="rv-conf">Confirmado sem alteração</span> ` : ""}${notas}</div>` : ""}${figs ? `<div class="rv-fl">${figs}</div>` : ""}</td></tr>` : "";
+              return `<tbody class="rv-esp${obs ? " com-obs" : ""}${figs ? " com-fotos" : ""}"><tr class="${at}"><td><b>${esc(l.nome)}</b>${l.a ? ` <button class="lnk-b no-print rv-fic" data-a="${l.a.id}">ficha</button>` : ""}</td>
               ${l.semDados && l.depois == null ? `<td colspan="4" class="rv-ant">${esc(l.texto || "")}</td>` : (() => {
                 const base = l.prev && l.prev.pct != null ? l.prev.pct : null;
                 const ev = base != null && l.depois != null ? l.depois - base : null;
@@ -242,10 +243,6 @@ export function relVistView() {
             </table></div>`).join("")}
         </section>
 
-        ${fotos.length ? `<section class="rv-sec rv-fotos"><h2>${++sec}. Registo fotográfico</h2>
-          <div class="rv-fg">${fotos.map((f, i) => { const l = linhas.find((x) => x.ativ === f.ativ); return `<figure id="rvf${f.num}"><button class="rv-img" data-rvi="${i}" aria-label="Ver a fotografia F${f.num} em grande"><img src="${f.data}" alt="F${f.num}: ${esc((l && l.nome) || "")} em ${esc(nomeU(f.unidade))}"></button>
-            <figcaption><b>F${f.num}</b> · <span class="mono">${esc(nomeU(f.unidade))}</span> · ${esc((l && l.nome) || "")} · ${fd(diaLocal(f.em))} ${hora(f.em)}${f.nota ? `<br><span>${esc(f.nota)}</span>` : ""}</figcaption></figure>`; }).join("")}</div>
-        </section>` : ""}
 
         <section class="rv-sec rv-ass"><h2>${++sec}. Validação</h2>
           <div class="rv-assg">

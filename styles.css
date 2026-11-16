@@ -1504,3 +1504,15 @@ input.fq-n { border: 1px solid var(--line); border-radius: 6px; background: var(
 .rv-obs-f.sep { margin-left: 12px; }
 .rv-u .rv-t tr.rv-obs td { width: auto; }
 @media (max-width: 640px) { .rv-u .rv-t td:first-child { width: auto; } .rv-u .rv-esp.com-obs > tr:first-child { border-bottom: 0; padding-bottom: 2px; } .rv-u .rv-t tr.rv-obs { padding-top: 0; } .rv-t tr.rv-obs td { grid-column: 1 / -1; } }
+
+/* fotografias logo por baixo de cada especialidade */
+.rv-fl { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; margin: 6px 0 4px; }
+.rv-fl figure { margin: 0; border: 1px solid #d5d9d4; border-radius: 4px; overflow: hidden; background: #fff; break-inside: avoid; display: flex; flex-direction: column; }
+.rv-fl .rv-img { height: 120px; aspect-ratio: auto; width: 100%; }
+.rv-fl .rv-img img { max-height: 120px; }
+.rv-fl figcaption { padding: 4px 6px; font-size: 11px; color: #5b635e; border-top: 1px solid #e3e6e2; line-height: 1.35; }
+.rv-fl figcaption b { color: #1E4D8C; font-family: var(--f-mono, monospace); font-weight: 600; }
+.rv-fl figcaption span { display: block; color: #2b302d; }
+.rv-u .rv-esp.com-fotos { break-inside: auto; }
+@media (max-width: 640px) { .rv-fl { grid-template-columns: repeat(2, minmax(0, 1fr)); } .rv-fl .rv-img { height: 110px; } .rv-fl .rv-img img { max-height: 110px; } }
+@media print { .rv-fl { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 3mm; } .rv-fl .rv-img { height: 38mm; } .rv-fl .rv-img img { max-height: 38mm; } }
