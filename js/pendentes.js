@@ -237,7 +237,7 @@ export function pendentesView() {
   const n = (f) => todos.filter((x) => f(x) && passaSemEstado(x)).length;
   const nomesAtiv = [...new Set(todos.map(nomeA).filter(Boolean))].sort((a, b) => a.localeCompare(b, "pt"));
   const filtrosOn = st.e !== (store.user.papel === "empreiteiro" ? "por" : "abertos") || st.bloco || st.q || st.tipo || st.ativ || st.quem;
-  const abreTudo = !!q || lista.length <= 6; // com uma procura ou poucos resultados, abre tudo
+  const abreTudo = q.length > 0 || lista.length <= 6; // com uma procura ou poucos resultados, abre tudo
   const contaEst = (xs) => { const c = { por: 0, esp: 0, f: 0 }; for (const x of xs) x.estado === "aberto" ? c.por++ : x.estado === "feito" ? c.esp++ : c.f++; return [c.por ? `<span class="pdc por">${c.por} por resolver</span>` : "", c.esp ? `<span class="pdc esp">${c.esp} por verificar</span>` : "", c.f ? `<span class="pdc f">${c.f} fechado${c.f === 1 ? "" : "s"}</span>` : ""].join(""); };
   const blocos = PEND_BLOCOS.map((b) => ({ b, us: ordenaUnidades([...porU.keys()].map((id) => S.uMap[id]).filter((u) => u.bloco === b)) })).filter((x) => x.us.length);
   const fracHTML = (u) => { const xs = porU.get(u.id).sort((a, b) => (b.criadoEm || "").localeCompare(a.criadoEm || "")); const k = "u:" + u.id;
