@@ -223,18 +223,20 @@ export function relVistView() {
         </section>
 
         <section class="rv-sec"><h2>${++sec}. Registo por fração</h2>
-          <p class="rv-nota">"Vistoria anterior" é a última vistoria antes deste período; "Agora" é a percentagem verificada no fim do período; "Evolução" é a diferença entre as duas, em pontos percentuais (pp). Fn remete para o registo fotográfico.</p>
+          <p class="rv-nota">"Vistoria anterior" é a última vistoria antes deste período; "Agora" é a percentagem verificada no fim do período; "Evolução" é a diferença entre as duas, em pontos percentuais (pp). Por baixo de cada especialidade estão as observações e as fotografias (Fn remete para o registo fotográfico).</p>
           ${ordemU.map((uid) => `<div class="rv-u"><h3><span class="mono">${esc(nomeU(uid))}</span><small>${esc(descU(uid))}</small></h3>
-            <table class="rv-t"><thead><tr><th>Especialidade</th><th class="n">Vistoria anterior</th><th class="n">Agora</th><th class="n">Evolução</th><th class="n">Empreiteiro</th><th>Observações</th><th>Fotos</th></tr></thead><tbody>
-            ${porU.get(uid).map((l) => `<tr class="${atencao.includes(l) ? "at" : ""}"><td><b>${esc(l.nome)}</b>${l.a ? ` <button class="lnk-b no-print rv-fic" data-a="${l.a.id}">ficha</button>` : ""}</td>
+            <table class="rv-t"><thead><tr><th>Especialidade</th><th class="n">Vistoria anterior</th><th class="n">Agora</th><th class="n">Evolução</th><th class="n">Empreiteiro</th></tr></thead>
+            ${porU.get(uid).map((l) => { const at = atencao.includes(l) ? "at" : "", refs = refsDe(l.ativ), notas = l.notas.map((t) => esc(t)).join(" · ");
+              const obs = l.confirmado || notas || refs ? `<tr class="rv-obs ${at}"><td colspan="5">${l.confirmado ? `<span class="rv-conf">Confirmado sem alteração</span> ` : ""}${notas}${refs ? `<span class="rv-obs-f${notas ? " sep" : ""}">Fotos: ${refs}</span>` : ""}</td></tr>` : "";
+              return `<tbody class="rv-esp${obs ? " com-obs" : ""}"><tr class="${at}"><td><b>${esc(l.nome)}</b>${l.a ? ` <button class="lnk-b no-print rv-fic" data-a="${l.a.id}">ficha</button>` : ""}</td>
               ${l.semDados && l.depois == null ? `<td colspan="4" class="rv-ant">${esc(l.texto || "")}</td>` : (() => {
                 const base = l.prev && l.prev.pct != null ? l.prev.pct : null;
                 const ev = base != null && l.depois != null ? l.depois - base : null;
                 const evTxt = ev == null ? `<span class="rv-vazio">primeira</span>` : ev > 0 ? `<span class="bom">+${ev} pp</span><small>em ${diasEntre(l.prev.em, l.regs[l.regs.length - 1].em)} d</small>` : parado.includes(l) ? `<span class="aviso">sem avanço</span><small>${diasEntre(l.prev.em, l.regs[l.regs.length - 1].em)} d</small>` : ev < 0 ? `<span class="mau">${ev} pp</span>` : `<span>0 pp</span>`;
                 return `<td class="n">${l.prev ? `${pctTxt(l.prev.pct)}<small>${fd(diaLocal(l.prev.em))}</small>` : `<span class="rv-vazio">sem vistoria</span>`}</td><td class="n"><b>${pctTxt(l.depois)}</b></td><td class="n rv-ev">${evTxt}</td><td class="n">${pctTxt(l.emp)}</td>`;
               })()}
-              <td>${l.corrigido ? `<span class="rv-corr">Corrigido a ${fd(diaLocal(l.corrigido), true)}</span><br>` : ""}${l.confirmado ? `<span class="rv-conf">Confirmado sem alteração</span>${l.notas.length ? "<br>" : ""}` : ""}${l.notas.map((t) => esc(t)).join("<br>") || (l.confirmado ? "" : `<span class="rv-vazio">sem observações</span>`)}</td><td class="rv-refs">${refsDe(l.ativ)}</td></tr>`).join("")}
-            </tbody></table></div>`).join("")}
+              </tr>${obs}</tbody>`; }).join("")}
+            </table></div>`).join("")}
         </section>
 
         ${fotos.length ? `<section class="rv-sec rv-fotos"><h2>${++sec}. Registo fotográfico</h2>

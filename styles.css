@@ -1494,3 +1494,13 @@ input.fq-n { border: 1px solid var(--line); border-radius: 6px; background: var(
 }
 .rule.junto { border-left: 3px solid var(--accent); background: color-mix(in srgb, var(--accent-soft) 45%, transparent); }
 .rule.junto .ord-n { color: var(--accent); border-color: var(--accent); }
+
+/* registo por fração: observações e fotos numa linha por baixo de cada especialidade */
+.rv-u .rv-esp { break-inside: avoid; }
+.rv-u .rv-esp.com-obs > tr:first-child td { border-bottom: 0; padding-bottom: 2px; }
+.rv-t tr.rv-obs td { padding-top: 0; color: #2b302d; line-height: 1.45; }
+.rv-obs-f { white-space: nowrap; color: #5b635e; font-size: 12px; }
+.rv-conf { white-space: nowrap; }
+.rv-obs-f.sep { margin-left: 12px; }
+.rv-u .rv-t tr.rv-obs td { width: auto; }
+@media (max-width: 640px) { .rv-u .rv-t td:first-child { width: auto; } .rv-u .rv-esp.com-obs > tr:first-child { border-bottom: 0; padding-bottom: 2px; } .rv-u .rv-t tr.rv-obs { padding-top: 0; } .rv-t tr.rv-obs td { grid-column: 1 / -1; } }
