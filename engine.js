@@ -136,21 +136,23 @@ function calcAtiv(a, predsA, succA, ciclo, get, hoje, duracoes, emDia) {
   const pct = pctEfetiva(a);
   const r = { id, dur, preds: predsA, succ: succA, bloqueadaPor: [], ciclo, atraso: null, atrasoInicio: null };
   const concluida = !!a.concluido || (pct >= 100 && !!a.realFim);
-  // primeira data possível dada pelas antecessoras (usa o fim provável delas, para empurrar)
-  let es = null, eqFim = null;
-  for (const d of r.preds) {
-    const pr = get.get(d.id);
-    if (!pr) continue; // ciclo: ignora
-    if (d.fonte === "equipa" && pr.estado !== "concluida") eqFim = maxD(eqFim, pr.provFim);
-    const cand = d.tipo === "SS" ? pr.provIni : addDays(pr.provFim, 1);
-    es = maxD(es, cand);
-    if (pr.estado !== "concluida" && d.tipo !== "SS") r.bloqueadaPor.push(d.id);
-  }
   const arrancou = !!a.realInicio || concluida;
   // num grupo da equipa ("ao mesmo tempo que o de cima"), enquanto não arranca segue o primeiro do grupo: a data prevista própria não conta
   const segueGrupo = !arrancou && r.preds.some((d) => d.fonte === "grupo");
   const propriaOrig = a.inicioPrevisto || a.planInicio || null;
   const propria = segueGrupo ? null : propriaOrig;
+  // primeira data possível dada pelas antecessoras (usa o fim provável delas, para empurrar)
+  let es = null, eqFim = null;
+  for (const d of r.preds) {
+    const pr = get.get(d.id);
+    if (!pr) continue; // ciclo: ignora
+    // uma antecessora já concluída não empurra uma data escrita para esta (só sugere a primeira data a quem não tem nenhuma)
+    if (pr.estado === "concluida" && propria) continue;
+    if (d.fonte === "equipa" && pr.estado !== "concluida") eqFim = maxD(eqFim, pr.provFim);
+    const cand = d.tipo === "SS" ? pr.provIni : addDays(pr.provFim, 1);
+    es = maxD(es, cand);
+    if (pr.estado !== "concluida" && d.tipo !== "SS") r.bloqueadaPor.push(d.id);
+  }
   r.segueGrupo = segueGrupo;
   r.semPlano = !propria && !segueGrupo && !a.realInicio && !a.dataOk; // data nunca dada nem confirmada
   // previsão de início: a própria, empurrada pelas antecessoras enquanto não arrancou

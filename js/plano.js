@@ -385,11 +385,14 @@ export function inicioRecalc(id) {
   if (!a || !r) return { pode: false, porque: "" };
   if (r.estado === "concluida") return { pode: false, porque: "Atividade concluída." };
   if (a.realInicio) return { pode: false, porque: "Já começou: o início real é o que conta." };
-  const { es, quem } = primeiraPossivel(r);
+  let { es, quem } = primeiraPossivel(r);
+  // todas as de que depende já acabaram: pode começar hoje
+  if (!es && r.preds.some((d) => S.res.get(d.id) && S.res.get(d.id).estado === "concluida")) es = S.hoje;
   if (!es) return { pode: false, porque: "Não depende de nenhuma atividade. Mude a data à mão, se precisar." };
   const dia = es < S.hoje ? S.hoje : es;
-  if (dia === r.prevIni) return { pode: false, dia, quem, porque: `O início já é o primeiro dia possível (${fd(dia)}), logo a seguir a ${nomeAtiv(quem)} em ${quem.unidade}.` };
-  return { pode: true, dia, quem, es, porque: `Passa o início para ${fd(dia)}${es < S.hoje ? " (hoje)" : ""}, logo a seguir a ${nomeAtiv(quem)} em ${quem.unidade}. Mantém o prazo desta atividade.` };
+  const depois = quem ? `logo a seguir a ${nomeAtiv(quem)} em ${quem.unidade}` : "as atividades de que depende já acabaram";
+  if (dia === r.prevIni) return { pode: false, dia, quem, porque: `O início já é o primeiro dia possível (${fd(dia)}): ${depois}.` };
+  return { pode: true, dia, quem, es, porque: `Passa o início para ${fd(dia)}${es < S.hoje ? " (hoje)" : ""}: ${depois}. Mantém o prazo desta atividade.` };
 }
 export async function recalcularInicio(id) {
   const a = S.acts[id], r = S.res.get(id), ri = inicioRecalc(id);
@@ -419,7 +422,9 @@ export async function recalcularInicioVarias(ids) {
     for (const a of cand) {
       const r = res.get(a.id);
       let es = null;
-      for (const d of r.preds) { const pr = res.get(d.id); if (!pr) continue; const c = d.tipo === "SS" ? pr.provIni : addDays(pr.provFim, 1); if (!es || c > es) es = c; }
+      let temConc = false;
+      for (const d of r.preds) { const pr = res.get(d.id); if (!pr) continue; if (pr.estado === "concluida") { temConc = true; continue; } const c = d.tipo === "SS" ? pr.provIni : addDays(pr.provFim, 1); if (!es || c > es) es = c; }
+      if (!es && temConc) es = S.hoje; // as de que depende já acabaram
       if (!es) continue;
       const dia = es < S.hoje ? S.hoje : es;
       const atual = patches.has(a.id) ? patches.get(a.id).inicioPrevisto : null;
@@ -698,6 +703,7 @@ export function primeiraPossivel(r) {
   let es = null, quem = null;
   for (const d of r.preds) {
     const pr = S.res.get(d.id); if (!pr) continue;
+    if (pr.estado === "concluida") continue; // já acabou: não impede a data que se escreve
     const c = d.tipo === "SS" ? pr.provIni : addDays(pr.provFim, 1);
     if (!es || c > es) { es = c; quem = S.acts[d.id]; }
   }
