@@ -193,6 +193,10 @@ export function regrasView() {
     return (vs.dir === "desc" ? -c : c) || a.ordem - b.ordem;
   }) : esp;
   const mexe = seq && !vs; // setas e arrastar só na ordem guardada
+  // número de cada especialidade: as que têm a mesma ordem começam ao mesmo tempo e mostram o mesmo número
+  const passo = {};
+  let nPassos = 0;
+  { let ult = null; for (const e of esp) { if (e.ordem !== ult) { nPassos++; ult = e.ordem; } passo[e.key] = nPassos; } }
   const NOMES_COL = { nome: "ordem alfabética", dias: "dias por fração", cond: "número de condições", seg: "número de atividades que dependem desta" };
   const th = (col, l) => { const on = vs && vs.col === col; return `<button class="th-sort ${on ? "on" : ""}" data-rsort="${col}" title="Ordenar por ${l.toLowerCase()}">${l}<span class="arr">${on ? (vs.dir === "desc" ? "▼" : "▲") : "↕"}</span></button>`; };
   const nAp = S.unidades.filter((u) => u.tipo === "Apartamento").length;
@@ -220,7 +224,7 @@ export function regrasView() {
         const espera = (k, alvo, vis = new Set()) => { if (vis.has(k)) return false; vis.add(k); return (regras[k] || []).some((q) => q === alvo || espera(q, alvo, vis)); };
         const disp = esp.filter((x) => x.key !== e.key && !pre.includes(x.key) && !espera(x.key, e.key)).sort((x, y) => x.nome.localeCompare(y.nome, "pt", { sensitivity: "base", numeric: true }));
         const i = esp.indexOf(e);
-        return `<div class="rule ${mexe ? "ordenavel" : ""}" data-rk="${e.key}" data-rq="${esc(semAcento([e.nome, ...pre.map((k) => (S.espIdx[k] ? S.espIdx[k].nome : k))].join(" ")))}" ${mexe ? 'draggable="true"' : ""}>${mexe ? `<div class="ordw"><input class="ord-n inp num" type="number" inputmode="numeric" min="1" max="${esp.length}" value="${i + 1}" data-ordn="${e.key}" title="Escreva a posição na lista e carregue em Enter" aria-label="Posição de ${esc(e.nome)}"><div class="ordb"><button class="ord-b" data-ord="${e.key}|-1" ${i === 0 ? "disabled" : ""} title="Subir" aria-label="Subir ${esc(e.nome)}">▲</button><button class="ord-b" data-ord="${e.key}|1" ${i === esp.length - 1 ? "disabled" : ""} title="Descer" aria-label="Descer ${esc(e.nome)}">▼</button></div></div>` : ""}<div class="rnome" data-rnome="${e.key}"><b>${esc(e.nome)}</b>${seq ? `<button class="ren-b" data-ren="${e.key}" title="Mudar o nome" aria-label="Mudar o nome de ${esc(e.nome)}"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20h4L18.5 9.5a2.1 2.1 0 0 0-3-3L5 17v3z"/><path d="M14 8l3 3"/></svg></button>` : ""}</div>
+        return `<div class="rule ${mexe ? "ordenavel" : ""} ${mexe && i > 0 && passo[esp[i - 1].key] === passo[e.key] ? "junto" : ""}" data-rk="${e.key}" data-rq="${esc(semAcento([e.nome, ...pre.map((k) => (S.espIdx[k] ? S.espIdx[k].nome : k))].join(" ")))}" ${mexe ? 'draggable="true"' : ""}>${mexe ? `<div class="ordw"><input class="ord-n inp num" type="number" inputmode="numeric" min="1" max="${nPassos + 1}" value="${passo[e.key]}" data-ordn="${e.key}" title="Escreva a posição e carregue em Enter. Um número que já é de outra especialidade põe as duas a começar ao mesmo tempo" aria-label="Posição de ${esc(e.nome)}"><div class="ordb"><button class="ord-b" data-ord="${e.key}|-1" ${i === 0 ? "disabled" : ""} title="Subir" aria-label="Subir ${esc(e.nome)}">▲</button><button class="ord-b" data-ord="${e.key}|1" ${i === esp.length - 1 ? "disabled" : ""} title="Descer" aria-label="Descer ${esc(e.nome)}">▼</button></div></div>` : ""}<div class="rnome" data-rnome="${e.key}"><b>${esc(e.nome)}</b>${seq ? `<button class="ren-b" data-ren="${e.key}" title="Mudar o nome" aria-label="Mudar o nome de ${esc(e.nome)}"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20h4L18.5 9.5a2.1 2.1 0 0 0-3-3L5 17v3z"/><path d="M14 8l3 3"/></svg></button>` : ""}</div>
           <input class="inp num" type="number" min="0" max="365" value="${dur[e.key] ?? ""}" ${G === "ap" ? "" : `placeholder="${diasHab(e.key)}" title="Vazio: cada trabalho fica com os dias que já tem"`} data-dur="${e.key}" ${seq ? "" : "disabled"} aria-label="${colDias} de ${esc(e.nome)}">
           <div class="tags">${pre.map((k) => `<span class="tag ${seq ? "" : "ro"}">${esc(S.espIdx[k] ? S.espIdx[k].nome : k)}${seq ? `<button data-rm="${e.key}|${k}" aria-label="Retirar">×</button>` : ""}</span>`).join("") || `<span class="note">Sem condições</span>`}
           ${seq ? `<select class="inp" data-add="${e.key}"><option value="">+ acrescentar</option>${disp.map((x) => `<option value="${x.key}">${esc(x.nome)}</option>`).join("")}</select>` : ""}</div>
@@ -295,11 +299,22 @@ export function regrasView() {
         save({ regras: r }, `Sequência: ${S.espIdx[k].nome} passa a esperar por ${S.espIdx[p].nome}`);
       }));
       // ordem das especialidades: setas, arrastar (rato) e ordenar pela sequência
-      const gravaOrdem = async (keys, texto) => {
-        const pos = Object.fromEntries(keys.map((k, i) => [k, gInfo.base + i + 1]));
+      // as que tinham a mesma ordem e continuam lado a lado mantêm-na (começam ao mesmo tempo); soltar: as que mudaram de sítio
+      const ordensSeq = (keys, { soltar = new Set(), juntar = new Set() } = {}) => {
+        const velha = Object.fromEntries(esp.map((e) => [e.key, e.ordem])), pos = {};
+        let v = gInfo.base;
+        keys.forEach((k, i) => {
+          const ant = keys[i - 1];
+          const junto = i > 0 && (juntar.has(k) || (!soltar.has(k) && !soltar.has(ant) && velha[k] === velha[ant]));
+          pos[k] = junto ? v : ++v;
+        });
+        return pos;
+      };
+      const gravaOrdem = async (keys, texto, grupos = {}, regrasNovas = null) => {
+        const pos = ordensSeq(keys, grupos);
         const lista = S.cfg.especialidades.map((x) => ({ ...x, ordem: pos[x.key] ?? x.ordem }));
-        await store.setConfig({ especialidades: lista }, { tipo: "regras", texto });
-        toast("Ordem guardada");
+        await store.setConfig(regrasNovas ? { especialidades: lista, regras: regrasNovas } : { especialidades: lista }, { tipo: "regras", texto });
+        toast(regrasNovas ? "Sequência atualizada" : "Ordem guardada");
       };
       const keys = esp.map((e) => e.key);
       document.querySelectorAll("[data-ord]").forEach((bt) => (bt.onclick = () => {
@@ -307,19 +322,52 @@ export function regrasView() {
         if (j < 0 || j >= keys.length) return;
         const nk = [...keys]; [nk[i], nk[j]] = [nk[j], nk[i]];
         ui.focoOrd = k + "|" + d;
-        gravaOrdem(nk, `Sequência: ${S.espIdx[k].nome} ${Number(d) < 0 ? "subiu" : "desceu"} na lista`);
+        gravaOrdem(nk, `Sequência: ${S.espIdx[k].nome} ${Number(d) < 0 ? "subiu" : "desceu"} na lista`, { soltar: new Set([k, keys[j]]) });
       }));
       if (ui.focoOrd) { const f = document.querySelector(`[data-ord="${ui.focoOrd}"]`); if (f && !f.disabled) f.focus(); ui.focoOrd = null; }
-      // escrever a posição: a especialidade passa a ser a N.ª da lista
+      // escrever o número: um número que já é de outra especialidade põe as duas a começar ao mesmo tempo;
+      // um número para lá do último põe-na em último, sozinha
+      const nomeE = (k) => (S.espIdx[k] ? S.espIdx[k].nome : k);
+      const listaNomes = (ks) => (ks.length ? ks.map((k) => `<b>${esc(nomeE(k))}</b>`).join(", ") : "nada");
       document.querySelectorAll("[data-ordn]").forEach((inp) => {
         inp.onkeydown = (ev) => { if (ev.key === "Enter") { ev.preventDefault(); inp.blur(); } if (ev.key === "Escape") { inp.value = inp.defaultValue; inp.blur(); } };
-        inp.onchange = () => {
+        inp.onchange = async () => {
           const k = inp.dataset.ordn, n = Math.round(Number(inp.value));
-          if (!n || n === Number(inp.defaultValue)) { inp.value = inp.defaultValue; return; }
-          const alvo = Math.max(1, Math.min(n, keys.length));
-          const nk = keys.filter((x) => x !== k); nk.splice(alvo - 1, 0, k);
+          if (!n || n === passo[k]) { inp.value = inp.defaultValue; return; }
+          const membros = esp.filter((e) => passo[e.key] === n && e.key !== k).map((e) => e.key);
+          const semK = keys.filter((x) => x !== k);
           ui.focoOrdn = k;
-          gravaOrdem(nk, `Sequência: ${S.espIdx[k].nome} passou para ${alvo}.ª posição na lista`);
+          if (!membros.length) { gravaOrdem([...semK, k], `Sequência: ${nomeE(k)} passou para o fim da lista`, { soltar: new Set([k]) }); return; }
+          const X = membros[0];
+          // 1) tira-a da cadeia: quem esperava por ela passa a esperar pelo que ela esperava
+          const r = Object.fromEntries(Object.entries(regras).map(([x, l]) => [x, [...(l || [])]]));
+          const preK = r[k] || [];
+          const pontes = [], novasEsperas = [];
+          for (const y of Object.keys(r)) if (y !== k && r[y].includes(k)) { r[y] = [...new Set([...r[y].filter((q) => q !== k), ...preK.filter((q) => q !== y)])]; pontes.push(y); }
+          // 2) fica com as mesmas condições das outras desse número
+          r[k] = [...new Set(r[X] || [])].filter((q) => q !== k && !membros.includes(q));
+          // 3) quem espera pelas desse número passa a esperar também por ela
+          for (const y of Object.keys(r)) if (y !== k && !membros.includes(y) && membros.some((m) => r[y].includes(m)) && !r[y].includes(k)) { r[y] = [...r[y], k]; novasEsperas.push(y); }
+          for (const m of membros) if (r[m]) r[m] = r[m].filter((q) => q !== k);
+          // confirma que não cria um círculo com as ligações das frações
+          const r2 = schedule(Object.values(S.acts), r, S.hoje, S.cfg.duracoes || {}, optsMotor());
+          const ciclo = [...r2.values()].some((x) => x.ciclo && !S.res.get(x.id).ciclo);
+          const ultimo = Math.max(...membros.map((m) => semK.indexOf(m)));
+          const nk = [...semK]; nk.splice(ultimo + 1, 0, k);
+          const kOp = await perguntar({
+            titulo: `Pôr ${nomeE(k)} a começar ao mesmo tempo que ${membros.map(nomeE).join(", ")}?`,
+            texto: ciclo ? `<p>Não dá: noutras ligações das frações, ${esc(nomeE(X))} já espera (direta ou indiretamente) por ${esc(nomeE(k))}. Mude primeiro essas condições.</p>`
+              : `<p>Ficam as duas com o número ${n} e começam ao mesmo tempo em cada fração (se nada dessa fração o impedir).</p>
+              <ul class="dlg-l"><li>${esc(nomeE(k))} passa a esperar por ${listaNomes(r[k])}${preK.length ? ` (esperava por ${listaNomes(preK)})` : ""}.</li>
+              ${novasEsperas.filter((y) => !pontes.includes(y)).length ? `<li>Passam a esperar também por ${esc(nomeE(k))}: ${listaNomes(novasEsperas.filter((y) => !pontes.includes(y)))}.</li>` : ""}
+              ${pontes.filter((y) => !novasEsperas.includes(y)).length ? `<li>Deixam de esperar por ${esc(nomeE(k))} e passam a esperar pelo que ela esperava: ${listaNomes(pontes.filter((y) => !novasEsperas.includes(y)))}.</li>` : ""}
+              ${pontes.filter((y) => novasEsperas.includes(y)).length ? `<li>Continuam a esperar por ${esc(nomeE(k))} e passam a esperar também pelo que ela esperava antes: ${listaNomes(pontes.filter((y) => novasEsperas.includes(y)))}.</li>` : ""}</ul>
+              <p class="note">As datas das frações acertam-se sozinhas. Se quiser só mudar o lugar na lista, sem mexer nas condições, escolha a segunda opção.</p>`,
+            opcoes: [...(ciclo ? [] : [{ k: "sim", l: "Sim, ao mesmo tempo", estilo: "pri" }]), { k: "lugar", l: "Só mudar o lugar na lista" }, { k: "nao", l: "Cancelar" }],
+          });
+          if (kOp === "sim") gravaOrdem(nk, `Sequência: ${nomeE(k)} passa a começar ao mesmo tempo que ${membros.map(nomeE).join(", ")}`, { soltar: new Set([k]), juntar: new Set([k]) }, r);
+          else if (kOp === "lugar") { const l = [...semK]; l.splice(semK.indexOf(membros[0]), 0, k); gravaOrdem(l, `Sequência: ${nomeE(k)} passou para a posição ${n} na lista`, { soltar: new Set([k]) }); }
+          else { inp.value = inp.defaultValue; ui.focoOrdn = null; }
         };
       });
       if (ui.focoOrdn) { const f = document.querySelector(`[data-ordn="${ui.focoOrdn}"]`); ui.focoOrdn = null; if (f) f.scrollIntoView({ block: "center" }); }
@@ -333,7 +381,7 @@ export function regrasView() {
           const de = arrasta, para = row.dataset.rk; arrasta = null;
           if (!de || de === para) return;
           const nk = keys.filter((k) => k !== de); nk.splice(nk.indexOf(para) + (keys.indexOf(de) < keys.indexOf(para) ? 1 : 0), 0, de);
-          gravaOrdem(nk, `Sequência: ${S.espIdx[de].nome} mudou de posição na lista`);
+          gravaOrdem(nk, `Sequência: ${S.espIdx[de].nome} mudou de posição na lista`, { soltar: new Set([de]) });
         };
       });
       const os = $("#ordSeq");

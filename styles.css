@@ -1492,3 +1492,5 @@ input.fq-n { border: 1px solid var(--line); border-radius: 6px; background: var(
   .rule.ordenavel { grid-template-columns: 82px minmax(0, 1fr) 90px; }
   .fq-row { grid-template-columns: 34px 46px minmax(0, 1fr) auto; }
 }
+.rule.junto { border-left: 3px solid var(--accent); background: color-mix(in srgb, var(--accent-soft) 45%, transparent); }
+.rule.junto .ord-n { color: var(--accent); border-color: var(--accent); }
