@@ -36,6 +36,7 @@ export function buildDeps(acts, regras, frentes = null) {
   const ids = new Set(acts.map((a) => a.id));
   // fila de cada equipa: cada trabalho só começa quando a equipa acaba o anterior da fila
   const antNaFila = new Map();
+  const comPrimeiro = new Map();
   const filas = new Map();
   for (const a of acts) {
     if (!a.equipa || a.eqOrdem == null || a.eqOrdem === "" || a.eqOrdem === false) continue; // false: tirado da fila de propósito
@@ -54,6 +55,8 @@ export function buildDeps(acts, regras, frentes = null) {
     }
     const n = Math.max(1, Math.floor(Number(frentes && frentes[f[0].equipa]) || 1));
     for (let i = n; i < grupos.length; i++) for (const id of grupos[i].ids) antNaFila.set(id, grupos[i - n].ids);
+    // num grupo, os outros começam com o primeiro (ligação início com início); a data prevista deles deixa de contar
+    for (const g of grupos) for (const id of g.ids.slice(1)) comPrimeiro.set(id, g.ids[0]);
   }
   const preds = new Map();
   for (const a of acts) {
@@ -66,6 +69,7 @@ export function buildDeps(acts, regras, frentes = null) {
       list.push({ id, tipo: tipo || "FS", fonte });
     };
     for (const pid of antNaFila.get(a.id) || []) push(pid, "FS", "equipa");
+    if (comPrimeiro.has(a.id)) push(comPrimeiro.get(a.id), "SS", "grupo");
     for (const d of a.deps || []) push(d.id, d.tipo, "excel");
     for (const d of a.depsExtra || []) push(d.id, d.tipo, "manual");
     if (a.esp && regras && regras[a.esp]) {
@@ -142,9 +146,13 @@ function calcAtiv(a, predsA, succA, ciclo, get, hoje, duracoes, emDia) {
     es = maxD(es, cand);
     if (pr.estado !== "concluida" && d.tipo !== "SS") r.bloqueadaPor.push(d.id);
   }
-  const propria = a.inicioPrevisto || a.planInicio || null;
-  r.semPlano = !propria && !a.realInicio && !a.dataOk; // data nunca dada nem confirmada
   const arrancou = !!a.realInicio || concluida;
+  // num grupo da equipa ("ao mesmo tempo que o de cima"), enquanto não arranca segue o primeiro do grupo: a data prevista própria não conta
+  const segueGrupo = !arrancou && r.preds.some((d) => d.fonte === "grupo");
+  const propriaOrig = a.inicioPrevisto || a.planInicio || null;
+  const propria = segueGrupo ? null : propriaOrig;
+  r.segueGrupo = segueGrupo;
+  r.semPlano = !propria && !segueGrupo && !a.realInicio && !a.dataOk; // data nunca dada nem confirmada
   // previsão de início: a própria, empurrada pelas antecessoras enquanto não arrancou
   // (se arrancou sem nunca ter tido previsão, a referência é o próprio início real)
   let prevIni = arrancou ? propria || a.realInicio || maxD(es, null) || a.realFim || hoje : maxD(propria, es);
@@ -153,7 +161,10 @@ function calcAtiv(a, predsA, succA, ciclo, get, hoje, duracoes, emDia) {
   // previsão de fim: a escrita à mão; senão a duração própria; senão a do Excel (se couber); senão a padrão
   const temDurManual = a.duracaoManual != null && a.duracaoManual !== "";
   let prevFim;
-  if (a.fimPrevisto) {
+  if (segueGrupo) {
+    // mantém o prazo que tinha (do fim escrito à mão, se houver), contado a partir do início do grupo
+    prevFim = a.fimPrevisto && propriaOrig && a.fimPrevisto >= propriaOrig ? addDays(prevIni, diffDays(propriaOrig, a.fimPrevisto)) : addDays(prevIni, dur);
+  } else if (a.fimPrevisto) {
     // um fim prometido antes de arrancar acompanha o início se as antecessoras o empurrarem
     if (!arrancou && propria && a.fimPrevisto >= propria) prevFim = addDays(prevIni, diffDays(propria, a.fimPrevisto));
     else prevFim = maxD(a.fimPrevisto, prevIni);

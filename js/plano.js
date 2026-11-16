@@ -93,7 +93,7 @@ export function planoView() {
   const ligItem = (id, de, comoSeg) => {
     const x = S.acts[id], rx = S.res.get(id); if (!x || !rx) return "";
     const pr = comoSeg ? ((rx.preds || []).find((q) => q.id === de) || {}) : ((S.res.get(de).preds || []).find((q) => q.id === id) || {});
-    const porque = pr.fonte === "equipa" ? "mesma equipa, trabalho anterior" : pr.tipo === "SS" ? "começam juntas" : "";
+    const porque = pr.fonte === "equipa" ? "mesma equipa, trabalho anterior" : pr.fonte === "grupo" ? "ao mesmo tempo, na fila da equipa" : pr.tipo === "SS" ? "começam juntas" : "";
     return `<li><button class="lnk-b" data-a="${id}"><span class="mono">${esc(x.unidade)}</span> <b>${esc(nomeAtiv(x))}</b></button>
       <span class="pill st-${rx.estado}">${ESTADO[rx.estado]}</span><span class="note num">${rx.estado === "concluida" ? "acabou a " + fd(rx.fim) : `${fd(rx.inicio)} a ${fd(rx.fim)}`}</span>${porque ? `<span class="note">(${porque})</span>` : ""}${rx.estado === "concluida" ? "" : deltaHTML(rx.atraso)}</li>`;
   };

@@ -58,7 +58,7 @@ export function renderSheet() {
   const id = ui.sheet.id, a = S.acts[id], r = S.res.get(id);
   if (!a) { closeSheet(); return; }
   const down = downstream(id, S.res);
-  const fonteTxt = { excel: "Original", regra: "Sequência", manual: "Manual", equipa: "Fila da equipa" };
+  const fonteTxt = { excel: "Original", regra: "Sequência", manual: "Manual", equipa: "Fila da equipa", grupo: "Ao mesmo tempo, na fila da equipa" };
   const depRow = (pid, fonte, rem, tipo) => {
     const p = S.acts[pid]; if (!p) return "";
     const pr = S.res.get(pid);

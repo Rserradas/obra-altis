@@ -255,18 +255,23 @@ export function planEquipaView() {
     const r = S.res.get(a.id);
     const ini = r.provIni, fim = r.provFim;
     if (r.estado !== "concluida") { if (!iniEq || ini < iniEq) iniEq = ini; if (!fimEq || fim > fimEq) fimEq = fim; }
-    let gap = 0, motivo = "";
+    let gap = 0, motivo = "", depoisGrupo = 0;
+    // à espera de outro trabalho (que não seja da fila da equipa) ou da data prevista
+    const porque = () => { const outra = (r.preds || []).filter((d) => d.fonte !== "equipa" && d.fonte !== "grupo").map((d) => ({ d, p: S.res.get(d.id) })).filter((x) => x.p).sort((x, y) => y.p.provFim.localeCompare(x.p.provFim))[0];
+      return outra && addDays(outra.p.provFim, 1) >= ini ? `à espera de ${nomeAtiv(S.acts[outra.d.id])}${S.acts[outra.d.id].unidade !== a.unidade ? " em " + S.acts[outra.d.id].unidade : ""}` : ini === S.hoje ? "ainda não começou" : "data prevista mais tarde"; };
+    // ao mesmo tempo que o de cima: compara com o primeiro do grupo, não conta como equipa parada
+    const prim = r.estado !== "concluida" && (r.preds || []).find((d) => d.fonte === "grupo");
     // a equipa fica parada entre o fim do(s) trabalho(s) de que espera na fila e o início deste
-    const antEq = r.estado === "concluida" ? [] : (r.preds || []).filter((d) => d.fonte === "equipa").map((d) => S.res.get(d.id)).filter((p) => p && p.estado !== "concluida");
+    const antEq = r.estado === "concluida" || prim ? [] : (r.preds || []).filter((d) => d.fonte === "equipa").map((d) => S.res.get(d.id)).filter((p) => p && p.estado !== "concluida");
+    if (prim && S.res.get(prim.id)) { depoisGrupo = Math.max(0, diffDays(S.res.get(prim.id).provIni, ini)); if (depoisGrupo > 0) motivo = porque(); }
     if (antEq.length) {
       gap = Math.max(0, diffDays(antEq.reduce((m, p) => (p.provFim > m ? p.provFim : m), ""), ini) - 1);
       if (gap > 0) {
         parada += gap;
-        const outra = (r.preds || []).filter((d) => d.fonte !== "equipa").map((d) => ({ d, p: S.res.get(d.id) })).filter((x) => x.p).sort((x, y) => y.p.provFim.localeCompare(x.p.provFim))[0];
-        motivo = outra && addDays(outra.p.provFim, 1) >= ini ? `à espera de ${nomeAtiv(S.acts[outra.d.id])}${S.acts[outra.d.id].unidade !== a.unidade ? " em " + S.acts[outra.d.id].unidade : ""}` : "data prevista mais tarde";
+        motivo = porque();
       }
     }
-    gaps.set(a.id, { gap, motivo });
+    gaps.set(a.id, { gap, motivo, depoisGrupo });
     ant = a;
   }
   const visF = vis.filter((a) => passa(a) && (fq.estado !== "parada" || gaps.get(a.id).gap > 0));
@@ -278,13 +283,14 @@ export function planEquipaView() {
   const linhas = visF.map((a) => {
     const r = S.res.get(a.id);
     const ini = r.provIni, fim = r.provFim;
-    const { gap, motivo } = gaps.get(a.id);
+    const { gap, motivo, depoisGrupo } = gaps.get(a.id);
     const pi = fila.indexOf(a), k = visIds.indexOf(a.id), junto = eJunto(a);
     return `<div class="fq-row ${r.estado === "concluida" ? "conc" : ""} ${r.ciclo ? "ciclo" : ""} ${junto ? "junto" : ""}" data-fq="${a.id}" draggable="true">
       <div class="ordb"><button class="ord-b" data-fqm="${a.id}|-1" ${k === 0 ? "disabled" : ""} title="${filtrado ? "Fazer antes do trabalho visível de cima" : "Fazer antes"}" aria-label="Fazer antes">▲</button><button class="ord-b" data-fqm="${a.id}|1" ${k === visIds.length - 1 ? "disabled" : ""} title="${filtrado ? "Fazer depois do trabalho visível de baixo" : "Fazer depois"}" aria-label="Fazer depois">▼</button></div>
       <span class="fq-n num" title="${junto ? "Ao mesmo tempo que o de cima" : "Lugar na fila"}">${numGrupo.get(a.id)}</span>
       <div class="fq-t"><button class="lnk-b" data-a="${a.id}"><b>${esc(nomeAtiv(a))}</b></button><span class="mono">${esc(a.unidade)}</span>
         ${gap > 0 ? `<span class="fq-gap">equipa parada ${gap} ${gap === 1 ? "dia" : "dias"} antes: ${esc(motivo)}</span>` : ""}
+        ${depoisGrupo > 0 ? `<span class="fq-gap">começa ${depoisGrupo} ${depoisGrupo === 1 ? "dia" : "dias"} depois do primeiro do grupo: ${esc(motivo)}</span>` : ""}
         ${pi > 0 && r.estado !== "concluida" ? `<label class="check fq-junto" title="${filtrado ? "Tire os filtros para juntar ou separar" : "A equipa faz este trabalho ao mesmo tempo que o de cima; o seguinte espera que acabem os dois"}"><input type="checkbox" data-fqj="${a.id}" ${junto ? "checked" : ""} ${filtrado ? "disabled" : ""}><span>Ao mesmo tempo que o de cima</span></label>` : ""}${r.ciclo ? `<span class="fq-gap mau-t">esta ordem contradiz a sequência dos trabalhos</span>` : ""}</div>
       <span class="pill st-${r.estado}">${ESTADO[r.estado]}</span>
       <div class="tl fq-tl" aria-hidden="true"><div class="fc st-${r.estado}" style="left:${pos(ini)}%;width:${Math.max(1, pos(fim) - pos(ini))}%"></div>${S.hoje >= t0 && S.hoje <= t1 ? `<div class="today" style="left:${pos(S.hoje)}%"></div>` : ""}</div>
@@ -513,7 +519,7 @@ export function ganttEquipasHTML(nome, passa = () => true) {
         subs[k] = r.provFim;
         (g.sub = g.sub || [])[k] = (g.sub[k] || []).concat(barra(it, false));
       }
-      const parada = (() => { let p = 0; for (const it of g.itens.filter((z) => z.fila && S.res.get(z.a.id).estado !== "concluida")) { const r = S.res.get(it.a.id); const ant = (r.preds || []).filter((d) => d.fonte === "equipa").map((d) => S.res.get(d.id)).filter((x) => x && x.estado !== "concluida"); if (ant.length) p += Math.max(0, diffDays(ant.reduce((m, x) => (x.provFim > m ? x.provFim : m), ""), r.provIni) - 1); } return p; })();
+      const parada = (() => { let p = 0; for (const it of g.itens.filter((z) => z.fila && S.res.get(z.a.id).estado !== "concluida")) { const r = S.res.get(it.a.id); if ((r.preds || []).some((d) => d.fonte === "grupo")) continue; const ant = (r.preds || []).filter((d) => d.fonte === "equipa").map((d) => S.res.get(d.id)).filter((x) => x && x.estado !== "concluida"); if (ant.length) p += Math.max(0, diffDays(ant.reduce((m, x) => (x.provFim > m ? x.provFim : m), ""), r.provIni) - 1); } return p; })();
       const fimG = g.itens.reduce((m, it) => (S.res.get(it.a.id).provFim > m ? S.res.get(it.a.id).provFim : m), "");
       g.sub.forEach((bs, k) => linhas.push({ rot: k === 0 ? `<button class="lnk-b" data-geq="${esc(g.n)}"><b>${esc(g.n)}</b></button><span class="note">${g.itens.length} trabalhos · acaba ${fd(fimG)}${parada ? ` · <span class="mau-t">${parada} d parada</span>` : ""}</span>` : "", bars: bs, cont: k > 0 }));
     }
