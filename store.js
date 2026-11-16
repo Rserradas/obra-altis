@@ -76,6 +76,7 @@ export class DemoStore extends Emitter {
       if (saved.utilizadores) this.state.utilizadores = saved.utilizadores;
     }
     this.patches = (saved && saved.patches) || {};
+    this._simularVistoria();
     this.novas = (saved && saved.novas) || [];
     this.removidas = (saved && saved.removidas) || [];
   }
@@ -83,11 +84,52 @@ export class DemoStore extends Emitter {
     const c = this.state.config;
     const data = { config: { regras: c.regras, duracoes: c.duracoes, especialidades: c.especialidades, unidades: c.unidades, correcaoExpiradas: c.correcaoExpiradas }, patches: this.patches,
       novas: this.novas.filter((a) => this.state.atividades[a.id]), removidas: this.removidas,
-      registos: this.state.registos.slice(-500), utilizadores: this.state.utilizadores, pendentes: this.state.pendentes };
+      registos: this.state.registos.filter((r) => !r.sim).slice(-500), utilizadores: this.state.utilizadores, pendentes: this.state.pendentes };
     try {
-      localStorage.setItem(this.KEY, JSON.stringify({ ...data, fotos: this.state.fotos }));
+      localStorage.setItem(this.KEY, JSON.stringify({ ...data, fotos: this.state.fotos.filter((f) => !f.sim) }));
     } catch (e) {
       try { localStorage.setItem(this.KEY, JSON.stringify(data)); } catch (e2) { /* sem armazenamento */ }
+    }
+  }
+  /**
+   * Só na demonstração: uma vistoria simulada do fiscal há 3 dias, em 3 frações, com comentários e fotografias desenhadas,
+   * para se ver o relatório completo. Não fica gravada (marcada sim) e volta a ser criada ao abrir.
+   * Nos testes locais (localhost) não aparece, a menos que o endereço tenha ?sim.
+   */
+  _simularVistoria() {
+    try { if (/^(localhost|127\.0\.0\.1)$/.test(location.hostname) && !/[?&]sim\b/.test(location.search)) return; } catch (e) { return; }
+    this.state.registos = this.state.registos.filter((r) => !r.sim);
+    this.state.fotos = this.state.fotos.filter((f) => !f.sim);
+    const d = new Date(); d.setDate(d.getDate() - 3); d.setHours(10, 5, 0, 0);
+    const em = (min) => new Date(d.getTime() + min * 60000).toISOString();
+    const CORES = [["#c9b79c", "#8a6f4e"], ["#d9d4c7", "#6f7d86"], ["#bcc7c1", "#55705f"], ["#e2d3c1", "#a0643c"], ["#cfd6dd", "#3f5f86"]];
+    const foto = (u, esp, k) => {
+      const [fundo, linha] = CORES[k % CORES.length];
+      const ladr = Array.from({ length: 6 }, (_, i) => `<path d="M0 ${60 + i * 50}h640M${(i * 97) % 640} 0v480" stroke="${linha}" stroke-opacity=".35" stroke-width="3"/>`).join("");
+      const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="640" height="480" viewBox="0 0 640 480"><rect width="640" height="480" fill="${fundo}"/>${ladr}
+        <rect x="${120 + (k % 3) * 40}" y="110" width="220" height="250" fill="none" stroke="${linha}" stroke-width="10"/><circle cx="${470 - (k % 2) * 60}" cy="200" r="46" fill="${linha}" fill-opacity=".55"/>
+        <rect x="0" y="410" width="640" height="70" fill="#000" fill-opacity=".45"/><text x="24" y="453" font-family="Arial, sans-serif" font-size="26" fill="#fff">Foto simulada · ${u}</text></svg>`;
+      return "data:image/svg+xml;charset=utf-8," + encodeURIComponent(svg);
+    };
+    const NOTAS = ["Falta rematar o canto junto à janela da sala.", "Juntas por limpar na base do duche.", "Material em obra, falta montar duas portas.", "Tubagem testada e sem fugas.", "Pintura com manchas no teto do quarto 2, refazer."];
+    const acts = Object.values(this.state.atividades);
+    const fracs = ["B-F503", "B-F504", "C-F107"].filter((u) => acts.some((a) => a.unidade === u));
+    let min = 0, k = 0;
+    for (const u of fracs) {
+      const lista = acts.filter((a) => a.unidade === u && !a.concluido).sort((x, y) => (x.realInicio ? 0 : 1) - (y.realInicio ? 0 : 1) || String(x.planInicio || "").localeCompare(String(y.planInicio || ""))).slice(0, 5);
+      lista.forEach((a, i) => {
+        const emp = Math.round(Number(a.pctEmp) || 0);
+        const confirmado = i === 3;
+        const depois = confirmado ? emp : Math.min(100, Math.max(5, emp + [10, -15, 25, 0, 5][i]));
+        const nota = i === 3 ? null : NOTAS[(k + i) % NOTAS.length];
+        const nf = i === 0 ? 2 : i === 2 ? 1 : i === 4 ? 2 : 0;
+        const quando = em(min += 2);
+        for (let j = 0; j < nf; j++) this.state.fotos.push({ id: "fsim" + k + "-" + j, sim: true, ativ: a.id, unidade: u, data: foto(u, a.seccao || "", k + j), nota: nota || "", por: "fiscal@demo", nomePor: "Fiscal", em: quando });
+        const dados = { esp: a.seccao, antes: null, depois, emp, nota, nfotos: nf, confirmado };
+        this.state.registos.push({ id: "gsim" + k, sim: true, tipo: "vistoria", ativ: a.id, unidade: u, por: "fiscal@demo", nomePor: "Fiscal", papel: "fiscal", em: quando,
+          texto: `Vistoria ${a.seccao} em ${u}: ${depois}% (empreiteiro dizia ${emp}%)`, dados });
+        k++;
+      });
     }
   }
   async init() {
