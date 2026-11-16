@@ -60,7 +60,10 @@ export async function eliminarRelatorio(x) {
   return true;
 }
 export function vistoriasView() {
-  const st = (ui.vistLista = ui.vistLista || { por: store.user.papel === "fiscal" ? store.user.email : "", sel: null });
+  // o fiscal vê à partida as suas vistorias; o administrador, em qualquer vista, vê as de todos.
+  // O filtro volta ao início quando se muda de vista, para não esconder as vistorias dos outros.
+  if (!ui.vistLista || ui.vistLista.papel !== store.user.papel) ui.vistLista = { papel: store.user.papel, por: store.user.papel === "fiscal" && !store.admin ? store.user.email : "", sel: null };
+  const st = ui.vistLista;
   const html = `
     <div class="card-h"><h1>Relatórios de vistoria</h1></div>
     <p style="max-width:70ch">Cada vez que o fiscal guarda uma vistoria, fica registado o que mudou: a percentagem antes e depois, o comentário e as fotografias. Escolha um ou mais dias e veja o relatório, que pode imprimir ou guardar em PDF.</p>
