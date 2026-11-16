@@ -63,6 +63,14 @@ export const ICON = {
 };
 
 export const semAcento = (x) => String(x || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+/** Procurar: várias palavras separadas por espaços, todas têm de aparecer (por qualquer ordem), sem ligar a acentos nem a maiúsculas.
+ *  Nos códigos os hífens e pontos não contam: BF-203, BF203 e B-F203 encontram o mesmo. */
+export const termosPesquisa = (q) => semAcento(String(q || "").trim()).split(/\s+/).filter(Boolean);
+export const casaPesquisa = (texto, termos) => {
+  if (!termos || !termos.length) return true;
+  const t = semAcento(texto), tc = t.replace(/[-.\s]/g, "");
+  return termos.every((w) => t.includes(w) || tc.includes(w.replace(/[-.]/g, "")));
+};
 export const EQF_PADRAO = () => ({ bloco: "", fr: "", esp: "", estado: "", q: "" });
 export const eqfAtivo = (f) => !!(f && (f.bloco || f.fr || f.esp || f.estado || f.q));
 export const PLANO_PADRAO = () => ({ f: "todas", bloco: "", tipo: "", unidade: "", ativ: "", equipa: "", q: "", soAtr: false, semConc: true, sort: null, editar: false, atribuir: false, atrEq: "", selec: null });

@@ -1,6 +1,6 @@
 // Trabalhos: lista, escolha em massa, datas e gravação com as seguintes.
 import { addDays, diffDays, downstream, duracaoDe, pctEfetiva, schedule } from "../engine.js";
-import { $, ESTADO, ICON, can, deltaHTML, esc, fd, filtrosAlterados, reporFiltros, toast, ui } from "./base.js";
+import { $, ESTADO, ICON, can, casaPesquisa, deltaHTML, esc, fd, filtrosAlterados, reporFiltros, termosPesquisa, toast, ui } from "./base.js";
 import { actsObra, blocoLabel, compute, modeloTag, nomeAtiv, optsMotor } from "./calculo.js";
 import { atribuirEquipa, openEquipa } from "./equipas.js";
 import { S, store } from "./estado.js";
@@ -36,8 +36,7 @@ export function planoView() {
       default: return true;
     }
   };
-  const semAc = (t) => String(t).toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-  const qt = semAc(p.q.trim()).split(/\s+/).filter(Boolean); // várias palavras: todas têm de aparecer, sem ligar a acentos
+  const qt = termosPesquisa(p.q); // várias palavras: todas têm de aparecer, sem ligar a acentos nem aos hífens dos códigos
   // filtros de "onde" e "o quê" (os estados contam-se sobre este conjunto)
   const base = Object.values(S.acts).map((a) => ({ a, r: S.res.get(a.id) })).filter(({ a, r }) => {
     const u = S.uMap[a.unidade];
@@ -50,7 +49,7 @@ export function planoView() {
     if (p.equipa === "_sem" ? !!a.equipa : p.equipa && a.equipa !== p.equipa) return false;
     if (p.soAtr && !r.atrasada) return false;
     if (esconde && concluida(a, r)) return false;
-    if (qt.length) { const txt = semAc(nomeAtiv(a) + " " + a.unidade + " " + a.ref + " " + (a.equipa || "") + " " + (u.nome || "")); if (!qt.every((t) => txt.includes(t))) return false; }
+    if (qt.length && !casaPesquisa(nomeAtiv(a) + " " + a.unidade + " " + a.ref + " " + (a.equipa || "") + " " + (u.nome || ""), qt)) return false;
     return true;
   });
   const conta = Object.fromEntries(ESTADOS.map(([k]) => [k, base.filter(({ r }) => testa(k, r)).length]));

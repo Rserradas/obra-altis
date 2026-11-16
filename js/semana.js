@@ -1,6 +1,6 @@
 // A minha semana, relatório para reunião e pesquisa rápida.
 import { addDays } from "../engine.js";
-import { $, ESTADO, PLANO_PADRAO, deltaHTML, esc, fd, toast, ui } from "./base.js";
+import { $, ESTADO, PLANO_PADRAO, casaPesquisa, deltaHTML, esc, fd, termosPesquisa, toast, ui } from "./base.js";
 import { actsObra, modeloTag, nomeAtiv } from "./calculo.js";
 import { S, store } from "./estado.js";
 import { openSheet } from "./ficha.js";
@@ -170,9 +170,9 @@ export function ligarPesquisa(root) {
     const q = norm(inp.value.trim());
     if (q.length < 2) { out.hidden = true; res = []; return; }
     const fr = S.unidades.filter((u) => norm(u.id + " " + u.nome).includes(q) || norm(u.id).replace(/-/g, "").includes(q.replace(/[-\s]/g, ""))).slice(0, 6).map((u) => ({ t: "u", u }));
-    const termos = q.split(/\s+/);
-    const nomes = [...new Set(Object.values(S.acts).map((a) => nomeAtiv(a)))].filter((n) => termos.every((t) => norm(n).includes(t))).slice(0, 4).map((n) => ({ t: "n", n }));
-    const at = Object.values(S.acts).filter((a) => { const s = norm(nomeAtiv(a) + " " + a.unidade + " " + a.ref + " " + (a.equipa || "")); return termos.every((t) => s.includes(t)); })
+    const termos = termosPesquisa(q);
+    const nomes = [...new Set(Object.values(S.acts).map((a) => nomeAtiv(a)))].filter((n) => casaPesquisa(n, termos)).slice(0, 4).map((n) => ({ t: "n", n }));
+    const at = Object.values(S.acts).filter((a) => casaPesquisa(nomeAtiv(a) + " " + a.unidade + " " + a.ref + " " + (a.equipa || ""), termos))
       .slice(0, 8).map((a) => ({ t: "a", a }));
     res = [...fr, ...nomes, ...at];
     out.innerHTML = res.length ? res.map((x, i) => x.t === "u" ? `<button data-pr="${i}"><span class="psq-k">Fração</span><b class="mono">${esc(x.u.id)}</b>${modeloTag(x.u.id)}<span class="note">${esc(x.u.tipo)} · ${x.u.pct}%</span></button>`

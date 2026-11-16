@@ -1,5 +1,5 @@
 // Pendentes: regras, lista, formulários e o ecrã Pendentes.
-import { $, esc, fd, fdt, semAcento, toast, ui } from "./base.js";
+import { $, casaPesquisa, esc, fd, fdt, semAcento, termosPesquisa, toast, ui } from "./base.js";
 import { modeloTag, nomeAtiv } from "./calculo.js";
 import { S, store } from "./estado.js";
 import { ordenaUnidades } from "./nova.js";
@@ -226,11 +226,11 @@ export function pendentesView() {
   const EST = [["abertos", "Por fechar", (x) => x.estado !== "fechado"], ["por", "Por resolver", (x) => x.estado === "aberto"], ["esp", "Resolvidos, por verificar", (x) => x.estado === "feito"],
     ["semok", "Fechados sem ok do fiscal", (x) => x.estado === "fechado" && !x.fiscalOk], ["fech", "Fechados", (x) => x.estado === "fechado"], ["todos", "Todos", () => true]];
   const fE = (EST.find(([k]) => k === st.e) || EST[0])[2];
-  const q = semAcento(st.q || "").trim();
+  const q = termosPesquisa(st.q);
   const nomeA = (x) => (x.ativ && S.acts[x.ativ] ? nomeAtiv(S.acts[x.ativ]) : "");
   const passaSemEstado = (x) => { const u = S.uMap[x.unidade];
     return (!st.bloco || u.bloco === st.bloco) && (!st.tipo || tipoPend(u) === st.tipo) && (!st.ativ || (st.ativ === "_fr" ? !nomeA(x) : nomeA(x) === st.ativ))
-      && (!st.quem || x.criadoPapel === st.quem) && (!q || semAcento([x.texto, x.unidade, u.nome || "", nomeA(x), x.ultimaNota || ""].join(" ")).includes(q)); };
+      && (!st.quem || x.criadoPapel === st.quem) && (!q.length || casaPesquisa([x.texto, x.unidade, u.nome || "", nomeA(x), x.ultimaNota || ""].join(" "), q)); };
   const lista = todos.filter((x) => fE(x) && passaSemEstado(x));
   const porU = new Map();
   for (const x of lista) (porU.get(x.unidade) || porU.set(x.unidade, []).get(x.unidade)).push(x);

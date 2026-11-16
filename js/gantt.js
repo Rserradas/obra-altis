@@ -1,6 +1,6 @@
 // Gantt e caminho crítico.
 import { addDays, diffDays, downstream, pctEfetiva } from "../engine.js";
-import { $, ESTADO, MESES, can, deltaHTML, esc, fd, filtrosAlterados, reporFiltros, toast, ui } from "./base.js";
+import { $, ESTADO, MESES, can, casaPesquisa, deltaHTML, esc, fd, filtrosAlterados, reporFiltros, termosPesquisa, toast, ui } from "./base.js";
 import { modeloTag, nomeAtiv } from "./calculo.js";
 import { S } from "./estado.js";
 import { openSheet } from "./ficha.js";
@@ -77,7 +77,7 @@ export function bindGantt() {
   $("#gaOk").onclick = () => { gaD.open = false; aplicar(); };
   $("#gaT").onclick = () => gaD.querySelectorAll(".msel-l2 label:not([hidden]) input").forEach((c) => (c.checked = true));
   $("#gaN").onclick = () => gaD.querySelectorAll(".msel-l2 input").forEach((c) => (c.checked = false));
-  $("#gaQ").oninput = (e) => { const t = semAcentos(e.target.value.trim()).split(/\s+/).filter(Boolean); gaD.querySelectorAll("[data-gan]").forEach((l) => (l.hidden = !t.every((x) => l.dataset.gan.includes(x)))); };
+  $("#gaQ").oninput = (e) => { const t = termosPesquisa(e.target.value); gaD.querySelectorAll("[data-gan]").forEach((l) => (l.hidden = !casaPesquisa(l.dataset.gan, t))); };
   if (!ui._gaFora) { ui._gaFora = true; document.addEventListener("click", (e) => { const d = document.querySelector("#gaD"); if (d && d.open && !d.contains(e.target)) d.open = false; }); }
   $("#gc").onchange = (e) => { g.abertas = e.target.checked; render(); };
   $("#gl").onchange = (e) => { g.ligacoes = e.target.checked; drawGantt(); };
@@ -140,8 +140,8 @@ export function ganttPassa(a, r) {
   const fim = maxD(r.fim, r.provFim);
   if (g.de && fim && fim < g.de) return false;
   if (g.ate && r.inicio && r.inicio > g.ate) return false;
-  const q = semAcentos((g.q || "").trim()).split(/\s+/).filter(Boolean);
-  if (q.length) { const u = S.uMap[a.unidade] || {}; const txt = semAcentos(nomeAtiv(a) + " " + a.unidade + " " + (a.ref || "") + " " + (a.equipa || "") + " " + (u.nome || "")); if (!q.every((t) => txt.includes(t))) return false; }
+  const q = termosPesquisa(g.q);
+  if (q.length) { const u = S.uMap[a.unidade] || {}; if (!casaPesquisa(nomeAtiv(a) + " " + a.unidade + " " + (a.ref || "") + " " + (a.equipa || "") + " " + (u.nome || ""), q)) return false; }
   return true;
 }
 /* ============================================================ caminho crítico

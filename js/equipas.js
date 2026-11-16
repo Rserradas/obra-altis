@@ -1,6 +1,6 @@
 // Equipas de trabalho e plano das equipas.
 import { addDays, diffDays, schedule } from "../engine.js";
-import { $, EQF_PADRAO, ESTADO, MESES, PLANO_PADRAO, deltaHTML, eqfAtivo, esc, fd, semAcento, toast, ui } from "./base.js";
+import { $, EQF_PADRAO, ESTADO, MESES, PLANO_PADRAO, casaPesquisa, deltaHTML, eqfAtivo, esc, fd, semAcento, termosPesquisa, toast, ui } from "./base.js";
 import { espAp, frentesDe, nomeAtiv, optsMotor } from "./calculo.js";
 import { defTabs } from "./definicoes.js";
 import { S, store } from "./estado.js";
@@ -454,7 +454,7 @@ export async function mudarFrentes(nome, n) {
 /* ============================================================ filtros do plano das equipas */
 export const EQF_ESTADOS = [["", "Todos"], ["atrasada", "Atrasados"], ["em_curso", "Em curso"], ["por_iniciar", "Podem começar"], ["bloqueada", "À espera de outros"], ["parada", "Com a equipa parada antes"]];
 export function passaFiltroEq(f) {
-  const q = semAcento(f.q || "").trim();
+  const q = termosPesquisa(f.q);
   return (a) => {
     const u = S.uMap[a.unidade] || {}, r = S.res.get(a.id);
     if (f.bloco && grupoBloco(u) !== f.bloco) return false;
@@ -462,7 +462,7 @@ export function passaFiltroEq(f) {
     if (f.esp && nomeAtiv(a) !== f.esp) return false;
     if (f.estado === "atrasada" && !r.atrasada) return false;
     if (["em_curso", "por_iniciar", "bloqueada"].includes(f.estado) && r.estado !== f.estado) return false;
-    if (q && !semAcento(`${a.unidade} ${u.nome || ""} ${nomeAtiv(a)} ${a.ref || ""}`).includes(q)) return false;
+    if (q.length && !casaPesquisa(`${a.unidade} ${u.nome || ""} ${nomeAtiv(a)} ${a.ref || ""} ${a.equipa || ""}`, q)) return false;
     return true;
   };
 }

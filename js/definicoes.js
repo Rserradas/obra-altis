@@ -1,7 +1,7 @@
 // Definições: sequência, simulação, acessos e cópia de segurança.
 import { addDays, schedule } from "../engine.js";
 import { COPIA_COLECOES, COPIA_FORMATO } from "../store.js";
-import { $, PAPEL, VERSAO, can, erroSimples, esc, fd, filtrosAlterados, semAcento, toast, ui } from "./base.js";
+import { $, PAPEL, VERSAO, can, casaPesquisa, erroSimples, esc, fd, filtrosAlterados, semAcento, termosPesquisa, toast, ui } from "./base.js";
 import { nomeAtiv, optsMotor } from "./calculo.js";
 import { S, store } from "./estado.js";
 import { openNova, slugKey } from "./nova.js";
@@ -258,9 +258,9 @@ export function regrasView() {
       const filtra = () => {
         if (!$("#regQn")) return;
         ui.regQ = rq.value;
-        const t = semAcento(rq.value.trim()).split(/\s+/).filter(Boolean);
+        const t = termosPesquisa(rq.value);
         let n = 0;
-        document.querySelectorAll(".rule[data-rq]").forEach((r) => { const ok = t.every((w) => r.dataset.rq.includes(w)); r.hidden = !ok; if (ok) n++; });
+        document.querySelectorAll(".rule[data-rq]").forEach((r) => { const ok = casaPesquisa(r.dataset.rq, t); r.hidden = !ok; if (ok) n++; });
         const fa = filtrosAlterados();
         document.querySelectorAll("aside [data-repor]").forEach((x) => x.classList.toggle("repor-on", fa));
         document.querySelectorAll("[data-repor-top]").forEach((x) => (x.hidden = !fa));
