@@ -1565,3 +1565,9 @@ input.fq-n { border: 1px solid var(--line); border-radius: 6px; background: var(
 .fq-edn { margin: 4px 0 6px; }
 @media (max-width: 1150px) { .fq.ed .fq-row { grid-template-columns: 30px 48px 62px minmax(0, 1fr) auto; } .fq.ed .fq-row .fq-d { grid-column: 2 / 5; } }
 @media (max-width: 640px) { .fq.ed .fq-row { grid-template-columns: 30px 44px auto minmax(0, 1fr); } .fq.ed .fq-row .fq-d { grid-column: 1 / -1; } .fq-ded .dt-in { width: auto; flex: 1; } }
+
+/* Apartamento: eliminar várias atividades */
+.arow.linha.udel { cursor: pointer; }
+.arow.linha.udel-on { background: color-mix(in srgb, var(--crit) 8%, var(--surface)); }
+.arow.linha .udel-ck { width: 18px; height: 18px; flex: 0 0 auto; margin: 0 4px 0 0; accent-color: var(--crit); align-self: center; cursor: pointer; }
+.udel-bar { position: sticky; top: 8px; z-index: 5; flex-wrap: wrap; gap: 8px; }

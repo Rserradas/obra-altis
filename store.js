@@ -189,8 +189,13 @@ export class DemoStore extends Emitter {
     for (const a of lista) {
       const n = { ...a, criadoEm: agora, criadoPor: this.user.email };
       this.state.atividades[a.id] = n;
+      this.novas = this.novas.filter((x) => x.id !== a.id);
       this.novas.push(n);
+      delete this.patches[a.id];
     }
+    // uma atividade eliminada que volta (Anular) deixa de contar como removida
+    const voltam = new Set(lista.map((a) => a.id));
+    this.removidas = this.removidas.filter((id) => !voltam.has(id));
     if (registo) this._reg(lista.length === 1 ? lista[0].id : null, lista.length === 1 ? lista[0].unidade : null, registo);
     this._save();
     this.emit("data");
@@ -199,7 +204,7 @@ export class DemoStore extends Emitter {
     for (const id of ids) {
       delete this.state.atividades[id];
       delete this.patches[id];
-      if (!this.novas.some((a) => a.id === id)) this.removidas.push(id);
+      if (!this.removidas.includes(id)) this.removidas.push(id); // também as que tinham voltado com Anular (podem existir no ficheiro de origem)
     }
     this.novas = this.novas.filter((a) => !ids.includes(a.id));
     if (registo) this._reg(null, null, registo);

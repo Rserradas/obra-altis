@@ -6,7 +6,7 @@ import { S, store } from "./estado.js";
 import { bindDelUnidade, delUnidadeHTML, openNovaFracao } from "./nova.js";
 import { render } from "./nucleo.js";
 import { bindPendentes, pedirTexto, pendAberto, pendCriar, pendDe, pendFormHTML, pendListaHTML, pendVivo } from "./pendentes.js";
-import { bindDateInputs, bindEstadoPct, dateInput, estadoEdHTML, pctEdHTML } from "./plano.js";
+import { bindDateInputs, bindEstadoPct, confirmar, dateInput, estadoEdHTML, pctEdHTML } from "./plano.js";
 import { bindCommon } from "./previsao.js";
 import { pl } from "./segurar.js";
 import { DIAS_SEM, diaLocal, diaNome } from "./vistorias.js";
@@ -92,15 +92,18 @@ export function unidadeView(id) {
   const span = Math.max(1, diffDays(t0, t1));
   const pos = (d) => Math.max(0, Math.min(100, (100 * diffDays(t0, d)) / span));
   const edU = !!ui.unitEdit && can("executar");
+  // eliminar várias atividades desta fração (só o dono de obra)
+  const delM = store.user.papel === "dono" && !!ui.uDel && ui.uDel.id === u.id && !edU;
+  const delSel = delM ? ui.uDel.sel : new Set();
   const rowsAtiv = visiveis.map((a) => {
     const r = S.res.get(a.id);
     const espera = [...new Set(r.bloqueadaPor.map((pid) => S.acts[pid]).filter(Boolean).map((p) => nomeAtiv(p) + (p.unidade !== a.unidade ? " (" + p.unidade + ")" : "")))];
     const seguintes = [...new Set(r.succ.map((sid) => S.acts[sid]).filter(Boolean).map((x) => nomeAtiv(x) + (x.unidade !== a.unidade ? " (" + x.unidade + ")" : "")))];
     const pe = a.pctEmp ?? 0, pf = a.pctFiscal;
     const dica = [ESTADO[r.estado] + (r.atrasada ? ", atrasada" : ""), a.equipa, espera.length && r.estado === "bloqueada" ? "À espera de: " + espera.join(", ") : "", seguintes.length ? "Segue-se: " + seguintes.join(", ") : ""].filter(Boolean).join(" · ");
-    return `<div class="arow linha ${edU ? "editing" : ""}" ${edU ? "" : `data-a="${a.id}"`} title="${esc(dica)}">
+    return `<div class="arow linha ${edU ? "editing" : ""} ${delM ? "udel" : ""} ${delSel.has(a.id) ? "udel-on" : ""}" ${edU || delM ? "" : `data-a="${a.id}"`} ${delM ? `data-udelrow="${a.id}"` : ""} title="${esc(dica)}">
       <span class="dot st-${r.estado}${r.atrasada ? " atr" : ""}" aria-label="${esc(ESTADO[r.estado] + (r.atrasada ? ", atrasada" : ""))}"></span>
-      <div class="nm1">${edU ? `<button class="lnk-b" data-a="${a.id}"><b>${esc(nomeAtiv(a))}</b></button>` : `<b>${esc(nomeAtiv(a))}</b>`}${espera.length && r.estado === "bloqueada" ? `<span class="wait1">à espera de ${esc(espera[0])}${espera.length > 1 ? " +" + (espera.length - 1) : ""}</span>` : a.equipa ? `<span class="eq1">${esc(a.equipa)}</span>` : ""}${seguintes.length ? `<span class="seg1">segue-se ${esc(seguintes[0])}${seguintes.length > 1 ? " +" + (seguintes.length - 1) : ""}</span>` : ""}</div>
+      <div class="nm1">${delM ? `<input type="checkbox" class="udel-ck" data-udel="${a.id}" ${delSel.has(a.id) ? "checked" : ""} aria-label="Escolher ${esc(nomeAtiv(a))} para eliminar">` : ""}${edU ? `<button class="lnk-b" data-a="${a.id}"><b>${esc(nomeAtiv(a))}</b></button>` : `<b>${esc(nomeAtiv(a))}</b>`}${espera.length && r.estado === "bloqueada" ? `<span class="wait1">à espera de ${esc(espera[0])}${espera.length > 1 ? " +" + (espera.length - 1) : ""}</span>` : a.equipa ? `<span class="eq1">${esc(a.equipa)}</span>` : ""}${seguintes.length ? `<span class="seg1">segue-se ${esc(seguintes[0])}${seguintes.length > 1 ? " +" + (seguintes.length - 1) : ""}</span>` : ""}</div>
       <div class="tl" aria-hidden="true">
         <div class="fc st-${r.estado}" style="left:${pos(r.inicio)}%;width:${Math.max(0.8, pos(r.fim) - pos(r.inicio))}%"></div>
         ${S.hoje >= t0 && S.hoje <= t1 ? `<div class="today" style="left:${pos(S.hoje)}%"></div>` : ""}
@@ -169,8 +172,11 @@ export function unidadeView(id) {
       <button data-tab="ativ" class="${tab === "ativ" || (tab === "vist" && !fiscal) ? "on" : ""}">Atividades</button>
       <button data-tab="pend" class="${tab === "pend" ? "on" : ""}">Pendentes${nPend ? ` <span class="tab-n">${nPend}</span>` : ""}</button>
       <button data-tab="fotos" class="${tab === "fotos" ? "on" : ""}">Fotografias</button>
-      ${can("executar") && tab !== "vist" && tab !== "fotos" && tab !== "pend" ? `<button id="uEdit" class="tab-act ${edU ? "on" : ""}">${edU ? "Terminar edição" : "Editar datas"}</button>` : ""}
+      ${can("executar") && tab !== "vist" && tab !== "fotos" && tab !== "pend" && !delM ? `<button id="uEdit" class="tab-act ${edU ? "on" : ""}">${edU ? "Terminar edição" : "Editar datas"}</button>` : ""}
+      ${store.user.papel === "dono" && tab !== "vist" && tab !== "fotos" && tab !== "pend" && !edU && u.acts.length ? `<button id="uDelM" class="tab-act ${delM ? "on" : ""}">${delM ? "Cancelar eliminar" : "Eliminar várias"}</button>` : ""}
     </div>
+    ${delM && tab !== "pend" && tab !== "fotos" ? `<div class="banner warn udel-bar"><span>Escolha as atividades de ${esc(u.id)} que quer eliminar. <b class="num" id="uDelN">${delSel.size ? `${delSel.size} escolhida${delSel.size === 1 ? "" : "s"}` : "Nenhuma escolhida"}</b></span>
+      <span class="row" style="gap:6px"><button class="btn sm" id="uDelTodas">${visiveis.length && visiveis.every((a) => delSel.has(a.id)) ? "Tirar todas" : "Escolher todas as que estão à vista"}</button><button class="btn sm warn" id="uDelOk" ${delSel.size ? "" : "disabled"}>Eliminar ${delSel.size || ""} ${delSel.size === 1 ? "atividade" : "atividades"}</button><button class="btn sm ghost" id="uDelNao">Cancelar</button></span></div>` : ""}
     ${edU && tab === "ativ" ? `<div class="banner">Altere as datas e a percentagem de cada atividade, ou toque no estado para a iniciar ou concluir hoje. Cada alteração fica guardada logo e as atividades seguintes acertam-se sozinhas.</div>` : ""}
     ${tab === "vist" && fiscal ? `<section class="pd-vist ${pendVist.length ? "" : "vazio"}"><div class="card-h"><h2>Pendentes deste apartamento <span class="note num">${pendVist.length}</span></h2>
           <button class="btn sm" data-pdabrir>${(ui.pdFormAberto || {})[u.id] ? "Fechar" : "+ Novo pendente"}</button></div>
@@ -201,6 +207,7 @@ export function bindUnidade(u) {
   bindPendentes(document.querySelector("#view"));
   bindDelUnidade(u);
   const ue = $("#uEdit"); if (ue) ue.onclick = () => { ui.unitEdit = !ui.unitEdit; render(); };
+  bindEliminarVarias(u);
   const usc = $("#uSemConc"); if (usc) usc.onchange = () => { ui.uSemConc = usc.checked; render(); };
   bindDateInputs(document.querySelector("#view") || document);
   bindEstadoPct(document.querySelector("#view") || document);
@@ -531,4 +538,51 @@ export function compress(file, max = 1400) {
     img.onerror = reject;
     img.src = url;
   });
+}
+
+/** Eliminar várias atividades de uma fração de uma vez (dono de obra), com confirmação e Anular. */
+function bindEliminarVarias(u) {
+  const bm = $("#uDelM");
+  if (bm) bm.onclick = () => { ui.uDel = ui.uDel && ui.uDel.id === u.id ? null : { id: u.id, sel: new Set() }; ui.unitEdit = false; render(); };
+  if (!ui.uDel || ui.uDel.id !== u.id) return;
+  const sel = ui.uDel.sel;
+  const marca = (id, on) => { if (on) sel.add(id); else sel.delete(id); render(); };
+  document.querySelectorAll("[data-udelrow]").forEach((row) => (row.onclick = (e) => {
+    if (e.target.closest("[data-vfotos], .vf-slot, a")) return;
+    const id = row.dataset.udelrow;
+    marca(id, e.target.matches("[data-udel]") ? e.target.checked : !sel.has(id));
+  }));
+  const nao = $("#uDelNao"); if (nao) nao.onclick = () => { ui.uDel = null; render(); };
+  const todas = $("#uDelTodas");
+  if (todas) todas.onclick = () => {
+    const vis = [...document.querySelectorAll("[data-udelrow]")].map((r) => r.dataset.udelrow);
+    const tudo = vis.length && vis.every((id) => sel.has(id));
+    for (const id of vis) { if (tudo) sel.delete(id); else sel.add(id); }
+    render();
+  };
+  const ok = $("#uDelOk");
+  if (ok) ok.onclick = async () => {
+    const ids = [...sel].filter((id) => S.acts[id]);
+    if (!ids.length) return;
+    const nomes = ids.map((id) => nomeAtiv(S.acts[id])).sort((a, b) => a.localeCompare(b, "pt"));
+    const nConc = ids.filter((id) => S.res.get(id) && S.res.get(id).estado === "concluida").length;
+    const set = new Set(ids);
+    // atividades de outras frações (ou desta, que ficam) que esperavam por estas
+    const fora = [...new Set(ids.flatMap((id) => (S.res.get(id) ? S.res.get(id).succ : [])).filter((x) => !set.has(x)))].map((x) => S.acts[x]).filter(Boolean);
+    const sim = await confirmar(`Eliminar ${ids.length} ${ids.length === 1 ? "atividade" : "atividades"} de ${esc(u.id)}?`,
+      `<ul class="dlg-l">${nomes.slice(0, 12).map((n) => `<li>${esc(n)}</li>`).join("")}${nomes.length > 12 ? `<li>e mais ${nomes.length - 12}</li>` : ""}</ul>
+      ${nConc ? `<div class="dlg-av">${nConc === 1 ? "Uma delas já está concluída." : `${nConc} delas já estão concluídas.`}</div>` : ""}
+      ${fora.length ? `<p>${fora.length === 1 ? "Há 1 atividade" : `Há ${fora.length} atividades`} que ${fora.length === 1 ? "esperava" : "esperavam"} por estas e ${fora.length === 1 ? "deixa" : "deixam"} de esperar: ${esc(fora.slice(0, 4).map((x) => nomeAtiv(x) + (x.unidade !== u.id ? " (" + x.unidade + ")" : "")).join(", "))}${fora.length > 4 ? "..." : ""}.</p>` : ""}
+      <p class="note">As fotografias e o histórico ficam guardados. Logo a seguir pode Anular.</p>`, `Sim, eliminar ${ids.length}`);
+    if (!sim) return;
+    const copia = ids.map((id) => JSON.parse(JSON.stringify(S.acts[id])));
+    ui.uDel = null;
+    try {
+      await store.removeAtividades(ids, { tipo: "eliminar", texto: `Eliminou ${ids.length} ${ids.length === 1 ? "atividade" : "atividades"} de ${u.id}: ${nomes.join(", ")}` });
+    } catch (e) { toast("Não foi possível eliminar: " + erroSimples(e), { anular: false }); return; }
+    toast(`${ids.length} ${ids.length === 1 ? "atividade eliminada" : "atividades eliminadas"} de ${u.id}`, { anular: false, acao: { label: "Anular", fn: async () => {
+      await store.addAtividades(copia, null, { tipo: "anular", texto: `Anulou a eliminação de ${copia.length} ${copia.length === 1 ? "atividade" : "atividades"} de ${u.id}` });
+      toast("Eliminação anulada: as atividades voltaram", { anular: false });
+    } } });
+  };
 }

@@ -127,6 +127,7 @@ export function reporFiltros() {
   if (ui.semana) ui.semana = { equipa: "", bloco: "", ver: "" };
   ui.semana = null;
   ui.delUnit = null;
+  ui.uDel = null;
   ui.lastUnit = null;
   ui.unidadeTab = store.user && store.user.papel === "fiscal" ? "vist" : "ativ";
   window.scrollTo(0, 0);
