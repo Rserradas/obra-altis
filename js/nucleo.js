@@ -185,6 +185,14 @@ export function render() {
     const ae = document.activeElement;
     const busy = ae && ae.closest && ae.closest(".sheet") && /INPUT|TEXTAREA|SELECT/.test(ae.tagName);
     if (!busy) renderSheet();
+    else if (ae.matches("[data-ed]")) {
+      // num campo de data (por exemplo, passou do início para o fim com Tab): a ficha atualiza-se na mesma e o cursor volta ao mesmo campo,
+      // para nunca ficar a mostrar datas e durações antigas que depois seriam gravadas por engano
+      const k = ae.dataset.ed, v = ae.value, mexido = v !== ae.defaultValue;
+      renderSheet();
+      const n = document.querySelector(`aside[data-dw="ativ"] [data-ed="${k}"]`);
+      if (n) { if (mexido) n.value = v; n.focus({ preventScroll: true }); }
+    }
   }
   if (same) window.scrollTo(0, scrollY);
   setLastView(location.hash);

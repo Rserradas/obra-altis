@@ -297,15 +297,26 @@ export function renderSheet() {
     const pt = ui.sheet.pctTmp;
     guardarPct(pt && pt.id === id ? pt.v : Number(rp.value));
   });
-  on("#bPrev", () => guardarPrev($("#dMot", sh).value.trim(), $("#dDur", sh).value));
-  const guardarPrev = (mot, dur) => {
-    const patch = { motivo: mot || null, duracaoManual: dur === "" ? null : Math.max(0, Number(dur)) };
-    // uma duração escrita passa a mandar no fim (um fim escrito antes deixaria a duração sem efeito)
-    if (dur !== "" && S.res.get(id).estado !== "concluida") patch.fimPrevisto = null;
-    const partes = [];
-    if (dur !== "") partes.push("duração de " + dur + " dias");
-    if (mot) partes.push("motivo: " + mot);
-    return upd(patch, `${N}: ${partes.join(", ") || "motivo e duração limpos"}`, "previsao");
+  // só conta o que a pessoa mudou nas caixas desde que a ficha foi desenhada (nunca volta a gravar um valor antigo que lá ficou)
+  const mexidosPrev = () => {
+    const dm = $("#dMot", sh), dd = $("#dDur", sh);
+    return { mot: !!dm && dm.value.trim() !== dm.defaultValue.trim(), dur: !!dd && dd.value !== dd.defaultValue };
+  };
+  on("#bPrev", () => {
+    const q = mexidosPrev();
+    if (!q.mot && !q.dur) return toast("Sem alteração", { anular: false });
+    return guardarPrev($("#dMot", sh).value.trim(), $("#dDur", sh).value, q);
+  });
+  const guardarPrev = (mot, dur, quais = { mot: true, dur: true }) => {
+    const patch = {}, partes = [];
+    if (quais.mot) { patch.motivo = mot || null; partes.push(mot ? "motivo: " + mot : "motivo limpo"); }
+    if (quais.dur) {
+      patch.duracaoManual = dur === "" ? null : Math.max(0, Number(dur));
+      // uma duração escrita passa a mandar no fim (um fim escrito antes deixaria a duração sem efeito)
+      if (dur !== "" && S.res.get(id).estado !== "concluida") patch.fimPrevisto = null;
+      partes.unshift(dur !== "" ? "duração de " + dur + " dias" : "duração própria limpa");
+    }
+    return upd(patch, `${N}: ${partes.join(", ")}`, "previsao");
   };
   const pctVist0 = Math.round(a.pctFiscal ?? a.pctEmp ?? 0);
   let pctVist = pctVist0;
@@ -343,7 +354,7 @@ export function renderSheet() {
   const sujos = () => {
     const out = [];
     const rpx = $("#rPct", sh); if (rpx && Number(rpx.value) !== Math.round(a.pctEmp ?? 0)) out.push("pct");
-    const dm = $("#dMot", sh), dd = $("#dDur", sh); if (dm && dd && (dm.value.trim() !== (a.motivo || "") || dd.value !== String(a.duracaoManual ?? ""))) out.push("prev");
+    const mp = mexidosPrev(); if (mp.mot || mp.dur) out.push("prev");
     const fn = $("#fNota", sh); if ($("#bVist", sh) && (pctVist !== pctVist0 || (fn && fn.value.trim()) || fotos.length)) out.push("vist");
     const pt = sh.querySelector('[data-pane="pend"] [data-pdtxt]'); if (pt && pt.value.trim()) out.push("pend");
     return out;
@@ -357,12 +368,12 @@ export function renderSheet() {
     const s = sujos(); if (!s.length) return true;
     // ler tudo antes de gravar: cada gravação volta a desenhar a ficha
     const rpx = $("#rPct", sh), pt = ui.sheet.pctTmp;
-    const v = { pct: pt && pt.id === id ? pt.v : rpx ? Number(rpx.value) : null, mot: ($("#dMot", sh) || {}).value, dur: ($("#dDur", sh) || {}).value, vv: pctVist, nota: (($("#fNota", sh) || {}).value || "").trim(), fotos: [...fotos] };
+    const v = { pct: pt && pt.id === id ? pt.v : rpx ? Number(rpx.value) : null, mot: ($("#dMot", sh) || {}).value, dur: ($("#dDur", sh) || {}).value, prev: mexidosPrev(), vv: pctVist, nota: (($("#fNota", sh) || {}).value || "").trim(), fotos: [...fotos] };
     bG.disabled = true;
     try {
       if (s.includes("vist")) await guardarVist(v.vv, v.nota, v.fotos);
       if (s.includes("pct")) await guardarPct(v.pct);
-      if (s.includes("prev")) await guardarPrev((v.mot || "").trim(), v.dur);
+      if (s.includes("prev")) await guardarPrev((v.mot || "").trim(), v.dur, v.prev);
       if (s.includes("pend")) { const b = document.querySelector('aside[data-dw="ativ"] [data-pane="pend"] [data-pdadd]'); if (b) b.click(); }
       if (s.length > 1) toast("Tudo guardado");
       return true;
