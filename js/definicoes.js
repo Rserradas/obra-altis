@@ -182,7 +182,7 @@ export function regrasView() {
   const regras = S.cfg.regras || {}, dur = S.cfg.duracoes || {};
   // dias de cada trabalho quando não há valor na lista (o que cada atividade já tem)
   const diasHab = (k) => { const c = {}; for (const a of Object.values(S.acts)) if (a.esp === k) { const d = Number(a.duracao) || 0; c[d] = (c[d] || 0) + 1; } const t = Object.entries(c).sort((x, y) => y[1] - x[1])[0]; return t ? t[0] : ""; };
-  // ordenação só de visualização (clicar no título da coluna); a ordem guardada não muda
+  // a lista segue sempre a sequência (calculada a partir das condições); clicar no título da coluna só muda a visualização
   const vs = ui.regSort || null;
   // seguintes: as especialidades que esperam por esta (o inverso de «Só começa depois de»)
   const seguintes = (k) => esp.filter((x) => (regras[x.key] || []).includes(k));
@@ -192,11 +192,6 @@ export function regrasView() {
     const c = typeof x === "string" ? x.localeCompare(y, "pt", { sensitivity: "base", numeric: true }) : x - y;
     return (vs.dir === "desc" ? -c : c) || a.ordem - b.ordem;
   }) : esp;
-  const mexe = seq && !vs; // setas e arrastar só na ordem guardada
-  // número de cada especialidade: as que têm a mesma ordem começam ao mesmo tempo e mostram o mesmo número
-  const passo = {};
-  let nPassos = 0;
-  { let ult = null; for (const e of esp) { if (e.ordem !== ult) { nPassos++; ult = e.ordem; } passo[e.key] = nPassos; } }
   const NOMES_COL = { nome: "ordem alfabética", dias: "dias por fração", cond: "número de condições", seg: "número de atividades que dependem desta" };
   const th = (col, l) => { const on = vs && vs.col === col; return `<button class="th-sort ${on ? "on" : ""}" data-rsort="${col}" title="Ordenar por ${l.toLowerCase()}">${l}<span class="arr">${on ? (vs.dir === "desc" ? "▼" : "▲") : "↕"}</span></button>`; };
   const nAp = S.unidades.filter((u) => u.tipo === "Apartamento").length;
@@ -209,22 +204,21 @@ export function regrasView() {
   }[G];
   const html = `
     ${defTabs("regras")}
-    <div class="card-h"><h1>Sequência dos trabalhos</h1>${seq && esp.length ? `<div class="row"><button class="btn" id="ordSeq" title="Põe cada trabalho depois dos de que depende">Ordenar pela sequência</button>${G === "ap" ? `<button class="btn pri" data-nova="esp">+ Nova especialidade</button>` : ""}</div>` : ""}</div>
+    <div class="card-h"><h1>Sequência dos trabalhos</h1>${seq && esp.length && G === "ap" ? `<div class="row"><button class="btn pri" data-nova="esp">+ Nova especialidade</button></div>` : ""}</div>
     <div class="seq-g" role="tablist" aria-label="Secção da sequência">${SEQ_GRUPOS.map((g) => `<button type="button" role="tab" class="${g.k === G ? "on" : ""}" aria-selected="${g.k === G}" data-seqg="${g.k}">${g.l} <span class="num">${nG(g.k)}</span></button>`).join("")}</div>
     <p>${textoG}</p>
     ${foraSeq.length ? (seq ? `<div class="banner warn"><span>${esp.length ? `<b>${foraSeq.length} ${foraSeq.length === 1 ? "trabalho" : "trabalhos"} ${gInfo.de} ainda fora desta lista.</b> Acrescente-os para poder dar-lhes sequência.` : `<b>Os ${foraSeq.length} trabalhos ${gInfo.de} ainda não estão organizados.</b> A aplicação junta os que têm o mesmo nome (por exemplo o mesmo trabalho nos 4 blocos) e mostra-os aqui, com as ligações que já vêm do cronograma. As datas não mudam.`}</span><button class="btn pri" id="seqOrg">${esp.length ? "Acrescentar" : "Organizar"}</button></div>` : `<div class="banner">Os trabalhos ${gInfo.de} ainda não foram organizados nesta lista. O dono de obra ou o empreiteiro podem fazê-lo.</div>`) : ""}
     ${seq ? "" : `<div class="banner">Só o dono de obra e o empreiteiro podem alterar esta sequência.</div>`}
-    ${vs ? `<div class="banner"><span>A ver por <b>${NOMES_COL[vs.col]}</b>${vs.dir === "desc" ? " (decrescente)" : ""}. A ordem guardada da lista não mudou.</span><span class="row" style="gap:6px">${seq ? `<button class="btn sm" id="rsGuardar">Guardar como ordem da lista</button>` : ""}<button class="btn sm" id="rsVoltar">Voltar à ordem da lista</button></span></div>` : ""}
+    ${vs ? `<div class="banner"><span>A ver por <b>${NOMES_COL[vs.col]}</b>${vs.dir === "desc" ? " (decrescente)" : ""}.</span><button class="btn sm" id="rsVoltar">Voltar à ordem da sequência</button></div>` : ""}
     <div class="reg-q"><input class="inp" type="search" id="regQ" placeholder="${G === "ap" ? "Procurar especialidade" : "Procurar trabalho"}" aria-label="${G === "ap" ? "Procurar especialidade" : "Procurar trabalho"}" autocomplete="off" value="${esc(ui.regQ || "")}"><span class="note" id="regQn"></span></div>
     ${esp.length ? `<div class="rules">
-      <div class="rule rule-h ${mexe ? "ordenavel" : ""}">${mexe ? "<span></span>" : ""}<span>${th("nome", G === "ap" ? "Especialidade" : "Trabalho")}</span><span>${th("dias", colDias)}</span><span>${th("cond", "Só começa depois de")}</span><span>${th("seg", "Dependem desta")}</span></div>
+      <div class="rule rule-h"><span>${th("nome", G === "ap" ? "Especialidade" : "Trabalho")}</span><span>${th("dias", colDias)}</span><span>${th("cond", "Só começa depois de")}</span><span>${th("seg", "Dependem desta")}</span></div>
       ${vista.map((e) => {
         const pre = regras[e.key] || [];
         // não deixa escolher uma especialidade que já espera (direta ou indiretamente) por esta: seria um círculo
         const espera = (k, alvo, vis = new Set()) => { if (vis.has(k)) return false; vis.add(k); return (regras[k] || []).some((q) => q === alvo || espera(q, alvo, vis)); };
         const disp = esp.filter((x) => x.key !== e.key && !pre.includes(x.key) && !espera(x.key, e.key)).sort((x, y) => x.nome.localeCompare(y.nome, "pt", { sensitivity: "base", numeric: true }));
-        const i = esp.indexOf(e);
-        return `<div class="rule ${mexe ? "ordenavel" : ""} ${mexe && i > 0 && passo[esp[i - 1].key] === passo[e.key] ? "junto" : ""}" data-rk="${e.key}" data-rq="${esc(semAcento([e.nome, ...pre.map((k) => (S.espIdx[k] ? S.espIdx[k].nome : k))].join(" ")))}" ${mexe ? 'draggable="true"' : ""}>${mexe ? `<div class="ordw"><input class="ord-n inp num" type="number" inputmode="numeric" min="1" max="${nPassos + 1}" value="${passo[e.key]}" data-ordn="${e.key}" title="Escreva a posição e carregue em Enter. Um número que já é de outra especialidade põe as duas a começar ao mesmo tempo" aria-label="Posição de ${esc(e.nome)}"><div class="ordb"><button class="ord-b" data-ord="${e.key}|-1" ${i === 0 ? "disabled" : ""} title="Subir" aria-label="Subir ${esc(e.nome)}">▲</button><button class="ord-b" data-ord="${e.key}|1" ${i === esp.length - 1 ? "disabled" : ""} title="Descer" aria-label="Descer ${esc(e.nome)}">▼</button></div></div>` : ""}<div class="rnome" data-rnome="${e.key}"><b>${esc(e.nome)}</b>${seq ? `<button class="ren-b" data-ren="${e.key}" title="Mudar o nome" aria-label="Mudar o nome de ${esc(e.nome)}"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20h4L18.5 9.5a2.1 2.1 0 0 0-3-3L5 17v3z"/><path d="M14 8l3 3"/></svg></button>` : ""}</div>
+        return `<div class="rule" data-rk="${e.key}" data-rq="${esc(semAcento([e.nome, ...pre.map((k) => (S.espIdx[k] ? S.espIdx[k].nome : k))].join(" ")))}" ><div class="rnome" data-rnome="${e.key}"><b>${esc(e.nome)}</b>${seq ? `<button class="ren-b" data-ren="${e.key}" title="Mudar o nome" aria-label="Mudar o nome de ${esc(e.nome)}"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20h4L18.5 9.5a2.1 2.1 0 0 0-3-3L5 17v3z"/><path d="M14 8l3 3"/></svg></button>` : ""}</div>
           <input class="inp num" type="number" min="0" max="365" value="${dur[e.key] ?? ""}" ${G === "ap" ? "" : `placeholder="${diasHab(e.key)}" title="Vazio: cada trabalho fica com os dias que já tem"`} data-dur="${e.key}" ${seq ? "" : "disabled"} aria-label="${colDias} de ${esc(e.nome)}">
           <div class="tags">${pre.map((k) => `<span class="tag ${seq ? "" : "ro"}">${esc(S.espIdx[k] ? S.espIdx[k].nome : k)}${seq ? `<button data-rm="${e.key}|${k}" aria-label="Retirar">×</button>` : ""}</span>`).join("") || `<span class="note">Sem condições</span>`}
           ${seq ? `<select class="inp" data-add="${e.key}"><option value="">+ acrescentar</option>${disp.map((x) => `<option value="${x.key}">${esc(x.nome)}</option>`).join("")}</select>` : ""}</div>
@@ -268,13 +262,6 @@ export function regrasView() {
       };
       rq.oninput = filtra; filtra();
       if (!seq) return;
-      const rg = $("#rsGuardar");
-      if (rg) rg.onclick = async () => {
-        const pos = Object.fromEntries(vista.map((e, i) => [e.key, gInfo.base + i + 1]));
-        await store.setConfig({ especialidades: S.cfg.especialidades.map((x) => ({ ...x, ordem: pos[x.key] ?? x.ordem })) }, { tipo: "regras", texto: `Especialidades ordenadas por ${NOMES_COL[vs.col]}` });
-        ui.regSort = null;
-        toast("Ordem da lista guardada");
-      };
       document.querySelectorAll("[data-nova]").forEach((b) => (b.onclick = () => openNova(b.dataset.nova)));
       const save = (patch, texto) => store.setConfig(patch, { tipo: "regras", texto }).then(() => toast("Sequência atualizada"));
       document.querySelectorAll("[data-rm]").forEach((b) => (b.onclick = async () => {
@@ -298,104 +285,6 @@ export function regrasView() {
         }
         save({ regras: r }, `Sequência: ${S.espIdx[k].nome} passa a esperar por ${S.espIdx[p].nome}`);
       }));
-      // ordem das especialidades: setas, arrastar (rato) e ordenar pela sequência
-      // as que tinham a mesma ordem e continuam lado a lado mantêm-na (começam ao mesmo tempo); soltar: as que mudaram de sítio
-      const ordensSeq = (keys, { soltar = new Set(), juntar = new Set() } = {}) => {
-        const velha = Object.fromEntries(esp.map((e) => [e.key, e.ordem])), pos = {};
-        let v = gInfo.base;
-        keys.forEach((k, i) => {
-          const ant = keys[i - 1];
-          const junto = i > 0 && (juntar.has(k) || (!soltar.has(k) && !soltar.has(ant) && velha[k] === velha[ant]));
-          pos[k] = junto ? v : ++v;
-        });
-        return pos;
-      };
-      const gravaOrdem = async (keys, texto, grupos = {}, regrasNovas = null) => {
-        const pos = ordensSeq(keys, grupos);
-        const lista = S.cfg.especialidades.map((x) => ({ ...x, ordem: pos[x.key] ?? x.ordem }));
-        await store.setConfig(regrasNovas ? { especialidades: lista, regras: regrasNovas } : { especialidades: lista }, { tipo: "regras", texto });
-        toast(regrasNovas ? "Sequência atualizada" : "Ordem guardada");
-      };
-      const keys = esp.map((e) => e.key);
-      document.querySelectorAll("[data-ord]").forEach((bt) => (bt.onclick = () => {
-        const [k, d] = bt.dataset.ord.split("|"), i = keys.indexOf(k), j = i + Number(d);
-        if (j < 0 || j >= keys.length) return;
-        const nk = [...keys]; [nk[i], nk[j]] = [nk[j], nk[i]];
-        ui.focoOrd = k + "|" + d;
-        gravaOrdem(nk, `Sequência: ${S.espIdx[k].nome} ${Number(d) < 0 ? "subiu" : "desceu"} na lista`, { soltar: new Set([k, keys[j]]) });
-      }));
-      if (ui.focoOrd) { const f = document.querySelector(`[data-ord="${ui.focoOrd}"]`); if (f && !f.disabled) f.focus(); ui.focoOrd = null; }
-      // escrever o número: um número que já é de outra especialidade põe as duas a começar ao mesmo tempo;
-      // um número para lá do último põe-na em último, sozinha
-      const nomeE = (k) => (S.espIdx[k] ? S.espIdx[k].nome : k);
-      const listaNomes = (ks) => (ks.length ? ks.map((k) => `<b>${esc(nomeE(k))}</b>`).join(", ") : "nada");
-      document.querySelectorAll("[data-ordn]").forEach((inp) => {
-        inp.onkeydown = (ev) => { if (ev.key === "Enter") { ev.preventDefault(); inp.blur(); } if (ev.key === "Escape") { inp.value = inp.defaultValue; inp.blur(); } };
-        inp.onchange = async () => {
-          const k = inp.dataset.ordn, n = Math.round(Number(inp.value));
-          if (!n || n === passo[k]) { inp.value = inp.defaultValue; return; }
-          const membros = esp.filter((e) => passo[e.key] === n && e.key !== k).map((e) => e.key);
-          const semK = keys.filter((x) => x !== k);
-          ui.focoOrdn = k;
-          if (!membros.length) { gravaOrdem([...semK, k], `Sequência: ${nomeE(k)} passou para o fim da lista`, { soltar: new Set([k]) }); return; }
-          const X = membros[0];
-          // 1) tira-a da cadeia: quem esperava por ela passa a esperar pelo que ela esperava
-          const r = Object.fromEntries(Object.entries(regras).map(([x, l]) => [x, [...(l || [])]]));
-          const preK = r[k] || [];
-          const pontes = [], novasEsperas = [];
-          for (const y of Object.keys(r)) if (y !== k && r[y].includes(k)) { r[y] = [...new Set([...r[y].filter((q) => q !== k), ...preK.filter((q) => q !== y)])]; pontes.push(y); }
-          // 2) fica com as mesmas condições das outras desse número
-          r[k] = [...new Set(r[X] || [])].filter((q) => q !== k && !membros.includes(q));
-          // 3) quem espera pelas desse número passa a esperar também por ela
-          for (const y of Object.keys(r)) if (y !== k && !membros.includes(y) && membros.some((m) => r[y].includes(m)) && !r[y].includes(k)) { r[y] = [...r[y], k]; novasEsperas.push(y); }
-          for (const m of membros) if (r[m]) r[m] = r[m].filter((q) => q !== k);
-          // confirma que não cria um círculo com as ligações das frações
-          const r2 = schedule(Object.values(S.acts), r, S.hoje, S.cfg.duracoes || {}, optsMotor());
-          const ciclo = [...r2.values()].some((x) => x.ciclo && !S.res.get(x.id).ciclo);
-          const ultimo = Math.max(...membros.map((m) => semK.indexOf(m)));
-          const nk = [...semK]; nk.splice(ultimo + 1, 0, k);
-          const kOp = await perguntar({
-            titulo: `Pôr ${nomeE(k)} a começar ao mesmo tempo que ${membros.map(nomeE).join(", ")}?`,
-            texto: ciclo ? `<p>Não dá: noutras ligações das frações, ${esc(nomeE(X))} já espera (direta ou indiretamente) por ${esc(nomeE(k))}. Mude primeiro essas condições.</p>`
-              : `<p>Ficam as duas com o número ${n} e começam ao mesmo tempo em cada fração (se nada dessa fração o impedir).</p>
-              <ul class="dlg-l"><li>${esc(nomeE(k))} passa a esperar por ${listaNomes(r[k])}${preK.length ? ` (esperava por ${listaNomes(preK)})` : ""}.</li>
-              ${novasEsperas.filter((y) => !pontes.includes(y)).length ? `<li>Passam a esperar também por ${esc(nomeE(k))}: ${listaNomes(novasEsperas.filter((y) => !pontes.includes(y)))}.</li>` : ""}
-              ${pontes.filter((y) => !novasEsperas.includes(y)).length ? `<li>Deixam de esperar por ${esc(nomeE(k))} e passam a esperar pelo que ela esperava: ${listaNomes(pontes.filter((y) => !novasEsperas.includes(y)))}.</li>` : ""}
-              ${pontes.filter((y) => novasEsperas.includes(y)).length ? `<li>Continuam a esperar por ${esc(nomeE(k))} e passam a esperar também pelo que ela esperava antes: ${listaNomes(pontes.filter((y) => novasEsperas.includes(y)))}.</li>` : ""}</ul>
-              <p class="note">As datas das frações acertam-se sozinhas. Se quiser só mudar o lugar na lista, sem mexer nas condições, escolha a segunda opção.</p>`,
-            opcoes: [...(ciclo ? [] : [{ k: "sim", l: "Sim, ao mesmo tempo", estilo: "pri" }]), { k: "lugar", l: "Só mudar o lugar na lista" }, { k: "nao", l: "Cancelar" }],
-          });
-          if (kOp === "sim") gravaOrdem(nk, `Sequência: ${nomeE(k)} passa a começar ao mesmo tempo que ${membros.map(nomeE).join(", ")}`, { soltar: new Set([k]), juntar: new Set([k]) }, r);
-          else if (kOp === "lugar") { const l = [...semK]; l.splice(semK.indexOf(membros[0]), 0, k); gravaOrdem(l, `Sequência: ${nomeE(k)} passou para a posição ${n} na lista`, { soltar: new Set([k]) }); }
-          else { inp.value = inp.defaultValue; ui.focoOrdn = null; }
-        };
-      });
-      if (ui.focoOrdn) { const f = document.querySelector(`[data-ordn="${ui.focoOrdn}"]`); ui.focoOrdn = null; if (f) f.scrollIntoView({ block: "center" }); }
-      let arrasta = null;
-      document.querySelectorAll(".rule[data-rk]").forEach((row) => {
-        row.ondragstart = (ev) => { if (/INPUT|SELECT|BUTTON/.test(ev.target.tagName)) return; arrasta = row.dataset.rk; row.classList.add("arr"); ev.dataTransfer.effectAllowed = "move"; };
-        row.ondragend = () => { row.classList.remove("arr"); document.querySelectorAll(".rule.sobre").forEach((x) => x.classList.remove("sobre")); };
-        row.ondragover = (ev) => { if (!arrasta) return; ev.preventDefault(); document.querySelectorAll(".rule.sobre").forEach((x) => x.classList.remove("sobre")); row.classList.add("sobre"); };
-        row.ondrop = (ev) => {
-          ev.preventDefault();
-          const de = arrasta, para = row.dataset.rk; arrasta = null;
-          if (!de || de === para) return;
-          const nk = keys.filter((k) => k !== de); nk.splice(nk.indexOf(para) + (keys.indexOf(de) < keys.indexOf(para) ? 1 : 0), 0, de);
-          gravaOrdem(nk, `Sequência: ${S.espIdx[de].nome} mudou de posição na lista`, { soltar: new Set([de]) });
-        };
-      });
-      const os = $("#ordSeq");
-      if (os) os.onclick = () => {
-        // ordenação topológica estável: mantém a ordem atual sempre que as regras o permitem
-        const feito = new Set(), out = [];
-        while (out.length < keys.length) {
-          const k = keys.find((x) => !feito.has(x) && (regras[x] || []).every((p) => feito.has(p) || !keys.includes(p)))
-            || keys.find((x) => !feito.has(x)); // ciclo: segue a ordem atual
-          feito.add(k); out.push(k);
-        }
-        if (out.join() === keys.join()) return toast("A ordem já segue a sequência");
-        gravaOrdem(out, "Sequência: especialidades ordenadas pela sequência dos trabalhos");
-      };
       document.querySelectorAll("[data-ren]").forEach((bt) => (bt.onclick = () => {
         const k = bt.dataset.ren, e = S.espIdx[k], box = document.querySelector(`[data-rnome="${k}"]`);
         box.classList.add("ed");

@@ -4,10 +4,36 @@ import { toast } from "./base.js";
 import { S, setS, store } from "./estado.js";
 
 /* ============================================================ cálculo */
+/** Ordem das especialidades pela sequência: cada uma aparece depois daquelas de que depende.
+ *  Em cada secção (apartamentos, zonas comuns, geral) conta o lugar na cadeia de condições; no mesmo lugar, a ordem antiga e o nome. */
+export function ordemPelaSequencia(esps, regras) {
+  const BASE = { ap: 0, zc: 1000, geral: 2000 };
+  const grupo = (e) => e.grupo || "ap";
+  const porK = new Map(esps.map((e) => [e.key, e]));
+  const nivel = new Map(), aVer = new Set();
+  const niv = (k) => {
+    if (nivel.has(k)) return nivel.get(k);
+    if (aVer.has(k)) return 0; // círculo: não conta
+    aVer.add(k);
+    const e = porK.get(k);
+    let n = 0;
+    for (const p of regras[k] || []) { const pe = porK.get(p); if (pe && grupo(pe) === grupo(e)) n = Math.max(n, niv(p) + 1); }
+    aVer.delete(k); nivel.set(k, n);
+    return n;
+  };
+  const out = [];
+  for (const g of [...new Set(esps.map(grupo))]) {
+    const lista = esps.filter((e) => grupo(e) === g).sort((a, b) => niv(a.key) - niv(b.key) || (a.ordem ?? 0) - (b.ordem ?? 0) || String(a.nome).localeCompare(String(b.nome), "pt", { sensitivity: "base", numeric: true }));
+    const base = BASE[g] ?? 3000;
+    lista.forEach((e, i) => out.push({ ...e, ordem: base + i + 1 }));
+  }
+  return out;
+}
 export function compute() {
   const d = store.data;
   if (!d.config) { setS(null); return; }
-  const cfg = d.config;
+  // a ordem das especialidades é sempre a da sequência, calculada a partir das regras (não se escreve à mão)
+  const cfg = { ...d.config, especialidades: ordemPelaSequencia(d.config.especialidades || [], d.config.regras || {}) };
   const acts = Object.values(d.atividades);
   const hoje = todayISO();
   const res = schedule(acts, cfg.regras || {}, hoje, cfg.duracoes || {}, optsMotor(cfg));
