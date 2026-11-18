@@ -551,7 +551,7 @@ export async function concluirHoje(id) {
   const pct = Math.round(pctEfetiva(a));
   const k = await perguntar({
     titulo: "Concluir esta atividade?",
-    texto: `<p>${rotuloAt(a)} fica concluída hoje, <b>${fd(S.hoje, true)}</b>, com 100%.</p>${pct < 90 ? `<p class="note">Atenção: está registada com ${pct}%.</p>` : ""}${(() => { const n = pendDe(a.unidade, a.id).filter(pendAberto).length; return n ? `<div class="dlg-av">Esta atividade tem ${n} pendente${n === 1 ? "" : "s"} por resolver. Pode concluir na mesma; os pendentes continuam abertos.</div>` : ""; })()}<p class="note">Se se enganar, pode reabri-la depois.</p>`,
+    texto: `<p>${rotuloAt(a)} fica concluída hoje, <b>${fd(S.hoje, true)}</b>, com 100%.</p>${a.realInicio ? "" : `<p>Ainda não tinha início registado: o início real fica a <b>${fd(r.prevIni && r.prevIni <= S.hoje ? r.prevIni : S.hoje, true)}</b>${r.prevIni && r.prevIni < S.hoje ? ", o dia previsto" : ""}. Pode corrigi-lo na ficha.</p>`}${pct < 90 && a.realInicio ? `<p class="note">Atenção: está registada com ${pct}%.</p>` : ""}${(() => { const n = pendDe(a.unidade, a.id).filter(pendAberto).length; return n ? `<div class="dlg-av">Esta atividade tem ${n} pendente${n === 1 ? "" : "s"} por resolver. Pode concluir na mesma; os pendentes continuam abertos.</div>` : ""; })()}<p class="note">Se se enganar, pode reabri-la depois.</p>`,
     opcoes: [{ k: "sim", l: "Sim, concluir hoje", estilo: "ok" }, { k: "nao", l: "Cancelar" }],
   });
   if (k !== "sim") return render();

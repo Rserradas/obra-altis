@@ -37,7 +37,7 @@ export function semanaView() {
       <div class="si">${tipo === "curso" ? `<div class="sbar"><i style="width:${pct}%"></i></div><span class="num mono">${pct}%</span><span class="note">até ${fd(r.fim)}</span>`
         : `<span class="note">${r.inicio < hoje ? `devia ter começado a ${fd(r.inicio)}` : `${tipo === "espera" ? "pode começar" : "começa"} ${r.inicio === hoje ? "hoje" : fd(r.inicio)}`}</span>`}${deltaHTML(r.atraso)}</div>
       <div class="sa">${tipo === "curso" ? `<button class="btn sm" data-q="mais|${a.id}" ${pct >= 95 ? "disabled" : ""}>+10%</button><button class="btn sm ok" data-q="fim|${a.id}">Concluir</button>`
-        : tipo === "comecar" ? `<button class="btn sm pri" data-q="ini|${a.id}">Iniciar</button>` : `<button class="btn sm" data-a="${a.id}">Ver ficha</button>`}</div>
+        : tipo === "comecar" ? `<button class="btn sm pri" data-q="ini|${a.id}">Iniciar</button><button class="btn sm ok" data-q="fim|${a.id}" title="Já está feita: fica concluída hoje">Concluir</button>` : `<button class="btn sm" data-a="${a.id}">Ver ficha</button>`}</div>
     </div>`;
   };
   const secao = (titulo, sub, lista, tipo, filtro) => `<section class="card">
