@@ -6,7 +6,7 @@ import { S, store } from "./estado.js";
 import { bindDelUnidade, delUnidadeHTML, openNovaFracao } from "./nova.js";
 import { render } from "./nucleo.js";
 import { bindPendentes, pedirTexto, pendAberto, pendCriar, pendDe, pendFormHTML, pendListaHTML, pendVivo } from "./pendentes.js";
-import { bindDateInputs, bindEstadoPct, confirmar, dateInput, estadoEdHTML, pctEdHTML } from "./plano.js";
+import { bindDateInputs, bindEstadoPct, confirmar, dateInput, estadoEdHTML, pctEdHTML, perguntar } from "./plano.js";
 import { bindCommon } from "./previsao.js";
 import { pl } from "./segurar.js";
 import { DIAS_SEM, diaLocal, diaNome } from "./vistorias.js";
@@ -95,6 +95,8 @@ export function unidadeView(id) {
   // eliminar várias atividades desta fração (só o dono de obra)
   const delM = store.user.papel === "dono" && !!ui.uDel && ui.uDel.id === u.id && !edU;
   const delSel = delM ? ui.uDel.sel : new Set();
+  // ponto de situação: o empreiteiro (ou o dono de obra) diz o estado e a percentagem de cada atividade, como o fiscal na vistoria
+  const sitOK = can("executar") && !fiscal;
   const rowsAtiv = visiveis.map((a) => {
     const r = S.res.get(a.id);
     const espera = [...new Set(r.bloqueadaPor.map((pid) => S.acts[pid]).filter(Boolean).map((p) => nomeAtiv(p) + (p.unidade !== a.unidade ? " (" + p.unidade + ")" : "")))];
@@ -113,6 +115,19 @@ export function unidadeView(id) {
       ${edU ? `<div class="pcts ed">${estadoEdHTML(a, r)}${pctEdHTML(a)}</div>` : `<div class="pcts" title="Empreiteiro / Fiscal"><span class="vf-slot" data-vfotos="${a.id}"></span>E <b>${Math.round(pe)}%</b> · F <b>${pf == null ? "s/v" : Math.round(pf) + "%"}</b></div>`}
     </div>`;
   }).join("");
+  const nSit = sitOK ? visiveisSit(u).filter((a) => sitMudou(a)).length : 0;
+  const rowsSit = sitOK && tab === "sit" ? visiveis.map((a) => {
+    const r = S.res.get(a.id), s = sitAtual(a), mud = sitMudou(a), o = sitOrig(a);
+    const espera = r.estado === "bloqueada" ? [...new Set(r.bloqueadaPor.map((pid) => S.acts[pid]).filter(Boolean).map((x) => nomeAtiv(x) + (x.unidade !== a.unidade ? " (" + x.unidade + ")" : "")))] : [];
+    const bt = (k, l) => `<button type="button" class="sb sb-${k} ${s.est === k ? "on" : ""}" data-sit="${a.id}|${k}" aria-pressed="${s.est === k}">${l}</button>`;
+    const agora = o.est === "conc" ? "concluída" : o.est === "curso" ? `em curso, ${o.pct}%` : espera.length ? `à espera de ${espera[0]}${espera.length > 1 ? " +" + (espera.length - 1) : ""}` : "não iniciada";
+    return `<div class="sitrow ${espera.length && s.est === "por" ? "espera" : ""} ${mud ? "mudou" : ""}" id="sr-${a.id}">
+      <div class="sit-nm"><b>${esc(nomeAtiv(a))}</b><small>${mud ? `<span class="sit-alt">Por guardar</span> · era ` : "Agora: "}${esc(agora)}</small></div>
+      <div class="sit-est" role="group" aria-label="Estado de ${esc(nomeAtiv(a))}">${bt("por", "Não iniciada")}${bt("curso", "Em curso")}${bt("conc", "Concluída")}</div>
+      ${s.est === "curso" ? `<div class="sit-pct">${pctCtlHTML("s~" + a.id, s.pct, mud && s.pct !== o.pct)}</div>` : ""}
+    </div>`;
+  }).join("") : "";
+  const segSit = vizinhas(u.id).seg;
   const barraConc = `<div class="ubar"><label class="check"><input type="checkbox" id="uSemConc" ${ui.uSemConc ? "checked" : ""}><span>Esconder concluídas</span></label>
     <span class="note num">${ui.uSemConc ? `${visiveis.length} por concluir · ${nConcl} concluída${nConcl === 1 ? "" : "s"} escondida${nConcl === 1 ? "" : "s"}` : `${u.acts.length} atividades`}</span>
     <span class="legend" style="margin-left:auto"><span><i class="dot st-concluida"></i>Concluída</span><span><i class="dot st-em_curso"></i>Em curso</span><span><i class="dot st-bloqueada"></i>Bloqueada</span><span><i class="dot st-por_iniciar"></i>Por iniciar</span><span><i class="dot st-por_iniciar atr"></i>Atrasada</span></span></div>`;
@@ -169,13 +184,14 @@ export function unidadeView(id) {
     ${segHTML(u)}
     <div class="tabs">
       ${fiscal ? `<button data-tab="vist" class="${tab === "vist" ? "on" : ""}">Vistoria</button>` : ""}
-      <button data-tab="ativ" class="${tab === "ativ" || (tab === "vist" && !fiscal) ? "on" : ""}">Atividades</button>
+      ${sitOK ? `<button data-tab="sit" class="${tab === "sit" ? "on" : ""}">Ponto de situação${nSit ? ` <span class="tab-n">${nSit}</span>` : ""}</button>` : ""}
+      <button data-tab="ativ" class="${tab === "ativ" || (tab === "vist" && !fiscal) || (tab === "sit" && !sitOK) ? "on" : ""}">Atividades</button>
       <button data-tab="pend" class="${tab === "pend" ? "on" : ""}">Pendentes${nPend ? ` <span class="tab-n">${nPend}</span>` : ""}</button>
       <button data-tab="fotos" class="${tab === "fotos" ? "on" : ""}">Fotografias</button>
-      ${can("executar") && tab !== "vist" && tab !== "fotos" && tab !== "pend" && !delM ? `<button id="uEdit" class="tab-act ${edU ? "on" : ""}">${edU ? "Terminar edição" : "Editar datas"}</button>` : ""}
-      ${store.user.papel === "dono" && tab !== "vist" && tab !== "fotos" && tab !== "pend" && !edU && u.acts.length ? `<button id="uDelM" class="tab-act ${delM ? "on" : ""}">${delM ? "Cancelar eliminar" : "Eliminar várias"}</button>` : ""}
+      ${can("executar") && tab !== "vist" && tab !== "sit" && tab !== "fotos" && tab !== "pend" && !delM ? `<button id="uEdit" class="tab-act ${edU ? "on" : ""}">${edU ? "Terminar edição" : "Editar datas"}</button>` : ""}
+      ${store.user.papel === "dono" && tab !== "vist" && tab !== "sit" && tab !== "fotos" && tab !== "pend" && !edU && u.acts.length ? `<button id="uDelM" class="tab-act ${delM ? "on" : ""}">${delM ? "Cancelar eliminar" : "Eliminar várias"}</button>` : ""}
     </div>
-    ${delM && tab !== "pend" && tab !== "fotos" ? `<div class="banner warn udel-bar"><span>Escolha as atividades de ${esc(u.id)} que quer eliminar. <b class="num" id="uDelN">${delSel.size ? `${delSel.size} escolhida${delSel.size === 1 ? "" : "s"}` : "Nenhuma escolhida"}</b></span>
+    ${delM && tab !== "pend" && tab !== "fotos" && tab !== "sit" ? `<div class="banner warn udel-bar"><span>Escolha as atividades de ${esc(u.id)} que quer eliminar. <b class="num" id="uDelN">${delSel.size ? `${delSel.size} escolhida${delSel.size === 1 ? "" : "s"}` : "Nenhuma escolhida"}</b></span>
       <span class="row" style="gap:6px"><button class="btn sm" id="uDelTodas">${visiveis.length && visiveis.every((a) => delSel.has(a.id)) ? "Tirar todas" : "Escolher todas as que estão à vista"}</button><button class="btn sm warn" id="uDelOk" ${delSel.size ? "" : "disabled"}>Eliminar ${delSel.size || ""} ${delSel.size === 1 ? "atividade" : "atividades"}</button><button class="btn sm ghost" id="uDelNao">Cancelar</button></span></div>` : ""}
     ${edU && tab === "ativ" ? `<div class="banner">Altere as datas e a percentagem de cada atividade, ou toque no estado para a iniciar ou concluir hoje. Cada alteração fica guardada logo e as atividades seguintes acertam-se sozinhas.</div>` : ""}
     ${tab === "vist" && fiscal ? `<section class="pd-vist ${pendVist.length ? "" : "vazio"}"><div class="card-h"><h2>Pendentes deste apartamento <span class="note num">${pendVist.length}</span></h2>
@@ -192,6 +208,11 @@ export function unidadeView(id) {
       <div class="row" style="justify-content:flex-end"><button class="btn sm" data-relhoje>${corrDia ? `Ver o relatório de ${fd(corrDia)}` : "Ver o relatório de hoje"}</button></div>
       <div class="vbar"><span class="vb-l"><b class="num" id="vvis">Vistas ${nVistas} de ${visiveis.length}</b>${nVistas < visiveis.length ? `<button class="btn sm ghost vb-seg" id="vseg" title="Ir para a próxima especialidade por ver">Seguinte ›</button>` : ""}</span>
         <button class="btn pri" id="vsave" ${nChg ? "" : "disabled"}>${nChg ? `${corrDia ? "Guardar correção" : "Guardar"} (${nChg})` : "Nada por guardar"}</button></div>`
+      : tab === "sit" && sitOK ? `<p class="note" style="margin:0">Toque no estado de cada atividade. Em curso: escolha a percentagem. Concluída fica concluída hoje. No fim carregue em Guardar, que grava tudo de uma vez.</p>
+        ${barraConc}
+        <div class="sitrows">${rowsSit || `<div class="empty">${u.acts.length ? "Tudo concluído nesta fração. Desligue \"Esconder concluídas\" para ver as concluídas." : "Esta fração ainda não tem atividades."}</div>`}</div>
+        <div class="vbar sitbar"><span class="vb-l"><b class="num">${nSit ? `${nSit} por guardar` : "Nada por guardar"}</b>${nSit ? `<button class="btn sm ghost vb-seg" id="sitDesf">Desfazer</button>` : ""}</span>
+          <span class="sitbar-b">${segSit ? `<button class="btn sm ghost vb-seg" id="sitSeg" title="Ir para a fração seguinte">${esc(segSit)} ›</button>` : ""}<button class="btn pri" id="sitSave" ${nSit ? "" : "disabled"}>${nSit ? `Guardar (${nSit})` : "Guardar"}</button></span></div>`
       : tab === "pend" ? `<p class="note" style="margin:0">Pontos por resolver nesta fração, à vista de todos. O empreiteiro marca como resolvido e o fiscal verifica na vistoria seguinte.</p>
         ${pendFormHTML(u.id)}
         <div class="pd-lista">${pendListaHTML(pendDe(u.id))}</div>`
@@ -200,6 +221,7 @@ export function unidadeView(id) {
          <p class="note">Barra: previsão. Traço vermelho: hoje. E e F: percentagem declarada pelo empreiteiro e verificada pelo fiscal. Passe o rato por cima de uma linha para ver o detalhe.</p>`}
     ${store.user.papel === "dono" && tab !== "vist" ? `<div class="perigo">${ui.delUnit && ui.delUnit.id === u.id ? delUnidadeHTML(u) : `<button class="btn sm ghost perigo-b" id="delU">Eliminar esta fração</button><span class="note">Apaga a fração e todas as suas atividades. ${u.teste ? "Pede o código para confirmar." : "Pede confirmação três vezes."}</span>`}</div>` : ""}`;
   if (tab === "vist" && !fiscal) ui.unidadeTab = "ativ";
+  if (tab === "sit" && !sitOK) ui.unidadeTab = "ativ";
   return { html, bind: () => bindUnidade(u) };
 }
 export function bindUnidade(u) {
@@ -208,11 +230,12 @@ export function bindUnidade(u) {
   bindDelUnidade(u);
   const ue = $("#uEdit"); if (ue) ue.onclick = () => { ui.unitEdit = !ui.unitEdit; render(); };
   bindEliminarVarias(u);
+  if (ui.unidadeTab === "sit") bindSit(u);
   const usc = $("#uSemConc"); if (usc) usc.onchange = () => { ui.uSemConc = usc.checked; render(); };
   bindDateInputs(document.querySelector("#view") || document);
   bindEstadoPct(document.querySelector("#view") || document);
   document.querySelectorAll("[data-tab]").forEach((b) => (b.onclick = () => { ui.unidadeTab = b.dataset.tab; render(); }));
-  bindPctCtl(document.querySelector("#view") || document,
+  if (ui.unidadeTab !== "sit") bindPctCtl(document.querySelector("#view") || document,
     (id) => { const v = ui.vistoria[id], a = S.acts[id]; return v && v.pct != null ? v.pct : a.pctFiscal != null ? Math.round(a.pctFiscal) : Math.round(a.pctEmp ?? 0); },
     (id, val) => { ui.vistoria[id] = { ...(ui.vistoria[id] || { unidade: u.id }), unidade: u.id, pct: val, confirmado: false }; render(); });
   const vist = (id) => (ui.vistoria[id] = { ...(ui.vistoria[id] || { unidade: u.id }), unidade: u.id });
@@ -584,5 +607,87 @@ function bindEliminarVarias(u) {
       await store.addAtividades(copia, null, { tipo: "anular", texto: `Anulou a eliminação de ${copia.length} ${copia.length === 1 ? "atividade" : "atividades"} de ${u.id}` });
       toast("Eliminação anulada: as atividades voltaram", { anular: false });
     } } });
+  };
+}
+
+/* ============================================================ ponto de situação do empreiteiro */
+/** Estado gravado de uma atividade, nos termos do ponto de situação. */
+const sitOrig = (a) => { const r = S.res.get(a.id); return { est: r && r.estado === "concluida" ? "conc" : a.realInicio ? "curso" : "por", pct: Math.round(Number(a.pctEmp) || 0) }; };
+const sitAtual = (a) => { const o = sitOrig(a), m = ui.sit && ui.sit[a.id]; return m ? { est: m.est, pct: m.pct } : o; };
+const sitMudou = (a) => { const o = sitOrig(a), m = ui.sit && ui.sit[a.id]; return !!m && (m.est !== o.est || (m.est === "curso" && m.pct !== o.pct)); };
+const visiveisSit = (u) => Object.values(S.acts).filter((a) => a.unidade === u.id);
+/** Grava o ponto de situação de uma fração: cada atividade mudada fica com o seu registo no histórico; um só Anular desfaz tudo. */
+async function guardarSit(u) {
+  const lista = visiveisSit(u).filter((a) => sitMudou(a));
+  const hoje = S.hoje, agora = new Date().toISOString();
+  for (const a of lista) {
+    const r = S.res.get(a.id), o = sitOrig(a), m = ui.sit[a.id], N = nomeAtiv(a) + " em " + a.unidade;
+    let patch, reg;
+    if (m.est === "conc") {
+      const ini = a.realInicio || (r.prevIni && r.prevIni <= hoje ? r.prevIni : hoje);
+      patch = { realInicio: ini, realFim: hoje, concluido: true, pctEmp: 100, empEm: agora };
+      reg = { tipo: "conclusao", texto: `${N} concluída a ${fd(hoje)} (ponto de situação)` };
+    } else if (m.est === "curso") {
+      patch = { pctEmp: m.pct, empEm: agora };
+      if (!a.realInicio) patch.realInicio = hoje;
+      if (o.est === "conc") Object.assign(patch, { realFim: null, concluido: false });
+      reg = o.est === "por" ? { tipo: "inicio", texto: `${N} iniciada a ${fd(hoje)}, ${m.pct}% feito (ponto de situação)` }
+        : o.est === "conc" ? { tipo: "reabrir", texto: `Reabriu ${N}: ${m.pct}% feito (ponto de situação)` }
+        : { tipo: "progresso", texto: `${N}: ${m.pct}% feito (empreiteiro)` };
+    } else {
+      patch = { realInicio: null, realFim: null, concluido: false, pctEmp: 0, empEm: agora };
+      reg = { tipo: "correcao", texto: `${N} voltou a não iniciada (ponto de situação)` };
+    }
+    await store.updateAtividade(a.id, patch, reg);
+    delete ui.sit[a.id];
+  }
+  return lista.length;
+}
+function bindSit(u) {
+  ui.sit = ui.sit || {};
+  const view = document.querySelector("#view"); if (!view) return;
+  const muda = (id, est, pct) => {
+    const a = S.acts[id], o = sitOrig(a);
+    if (est === "conc") pct = 100; else if (est === "por") pct = 0;
+    if (est === o.est && (est !== "curso" || pct === o.pct)) delete ui.sit[id];
+    else ui.sit[id] = { unidade: u.id, est, pct };
+    render();
+  };
+  view.querySelectorAll("[data-sit]").forEach((b) => (b.onclick = () => {
+    const [id, k] = b.dataset.sit.split("|"), a = S.acts[id], cur = sitAtual(a), o = sitOrig(a);
+    if (k !== "curso") return muda(id, k);
+    // em curso: mantém a percentagem que tinha; se ainda não tinha começado, 5%; se estava concluída, 90%
+    muda(id, "curso", cur.est === "curso" ? cur.pct : o.est === "curso" ? o.pct : o.est === "conc" ? 90 : Math.max(5, Math.min(95, o.pct)));
+  }));
+  bindPctCtl(view, (key) => { const a = S.acts[key.slice(2)]; return a ? sitAtual(a).pct : 0; }, (key, val) => {
+    const id = key.slice(2);
+    if (val >= 100) muda(id, "conc"); else muda(id, "curso", val);
+  });
+  const desf = $("#sitDesf");
+  if (desf) desf.onclick = () => { for (const [id, m] of Object.entries(ui.sit)) if (m.unidade === u.id) delete ui.sit[id]; render(); };
+  const sv = $("#sitSave");
+  const guardar = async () => {
+    if (sv) sv.disabled = true;
+    try {
+      const n = await guardarSit(u);
+      if (n) toast(`Ponto de situação de ${u.id} guardado: ${n} ${n === 1 ? "atividade" : "atividades"}`);
+      return true;
+    } catch (e) { toast("Não foi possível guardar: " + erroSimples(e), { anular: false }); if (sv && sv.isConnected) sv.disabled = false; return false; }
+  };
+  if (sv) sv.onclick = guardar;
+  const sg = $("#sitSeg");
+  if (sg) sg.onclick = async () => {
+    const seg = vizinhas(u.id).seg; if (!seg) return;
+    const n = visiveisSit(u).filter((a) => sitMudou(a)).length;
+    if (n) {
+      const k = await perguntar({ titulo: `Guardar o ponto de situação de ${esc(u.id)}?`, texto: `<p>Tem ${n} ${n === 1 ? "alteração" : "alterações"} por guardar nesta fração.</p>`,
+        opcoes: [{ k: "sim", l: "Guardar e seguir", estilo: "pri" }, { k: "nao", l: "Seguir sem guardar" }, { k: "c", l: "Ficar aqui" }] });
+      if (k === "c" || !k) return render();
+      if (k === "sim" && !(await guardar())) return;
+      if (k === "nao") for (const [id, m] of Object.entries(ui.sit)) if (m.unidade === u.id) delete ui.sit[id];
+    }
+    ui.lastUnit = seg; ui.unidadeTab = "sit"; // a fração seguinte abre também no ponto de situação
+    location.hash = "#u-" + seg;
+    window.scrollTo(0, 0);
   };
 }

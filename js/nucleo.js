@@ -277,7 +277,7 @@ export function routeView() {
   if (!h) h = navItems()[0].id;
   if (h.startsWith("u-")) {
     const uid = h.slice(2);
-    if (ui.lastUnit !== uid) { ui.lastUnit = uid; ui.unidadeTab = store.user.papel === "fiscal" ? "vist" : "ativ"; }
+    if (ui.lastUnit !== uid) { ui.lastUnit = uid; ui.unidadeTab = store.user.papel === "fiscal" ? "vist" : store.user.papel === "empreiteiro" ? "sit" : "ativ"; }
     return { nav: "unidades", ...unidadeView(uid) };
   }
   if (h === "equipa" && store.user.papel !== "dono") h = "painel";

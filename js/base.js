@@ -129,7 +129,7 @@ export function reporFiltros() {
   ui.delUnit = null;
   ui.uDel = null;
   ui.lastUnit = null;
-  ui.unidadeTab = store.user && store.user.papel === "fiscal" ? "vist" : "ativ";
+  ui.unidadeTab = store.user && store.user.papel === "fiscal" ? "vist" : store.user && store.user.papel === "empreiteiro" ? "sit" : "ativ";
   window.scrollTo(0, 0);
   render();
   toast("Filtros limpos");

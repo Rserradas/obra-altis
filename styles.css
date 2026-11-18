@@ -1571,3 +1571,32 @@ input.fq-n { border: 1px solid var(--line); border-radius: 6px; background: var(
 .arow.linha.udel-on { background: color-mix(in srgb, var(--crit) 8%, var(--surface)); }
 .arow.linha .udel-ck { width: 18px; height: 18px; flex: 0 0 auto; margin: 0 4px 0 0; accent-color: var(--crit); align-self: center; cursor: pointer; }
 .udel-bar { position: sticky; top: 8px; z-index: 5; flex-wrap: wrap; gap: 8px; }
+
+/* Apartamento: ponto de situação do empreiteiro */
+.sitrows { display: flex; flex-direction: column; border: 1px solid var(--line); border-radius: var(--r); background: var(--surface); overflow: hidden; }
+.sitrow { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px 14px; padding: 12px 14px; border-top: 1px solid var(--line); align-items: center; }
+.sitrow:first-child { border-top: 0; }
+.sitrow.mudou { background: color-mix(in srgb, var(--accent-soft) 60%, var(--surface)); }
+.sitrow.espera .sit-nm b { color: var(--muted); }
+.sit-nm { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.sit-nm b { font-weight: 700; overflow-wrap: anywhere; }
+.sit-nm small { color: var(--muted); font-size: .8rem; }
+.sit-alt { color: var(--accent); font-weight: 700; }
+.sit-est { display: flex; gap: 6px; }
+.sit-est .sb { min-height: 44px; padding: 0 12px; border: 1px solid var(--line); background: var(--surface); border-radius: 8px; font: 600 .92rem var(--f-body); color: var(--ink); cursor: pointer; white-space: nowrap; }
+.sit-est .sb:hover { border-color: var(--accent); }
+.sit-est .sb-por.on { background: var(--surface-2); border-color: var(--muted); color: var(--ink); }
+.sit-est .sb-curso.on { background: var(--curso); border-color: var(--curso); color: #fff; }
+.sit-est .sb-conc.on { background: var(--ok); border-color: var(--ok); color: #fff; }
+.sit-pct { grid-column: 1 / -1; }
+.sitbar .sitbar-b { display: flex; gap: 8px; align-items: center; }
+.sitbar .vb-l { display: flex; gap: 8px; align-items: center; }
+@media (max-width: 640px) {
+  .sitrow { grid-template-columns: minmax(0, 1fr); padding: 12px 10px; }
+  .sit-est { display: grid; grid-template-columns: repeat(3, 1fr); }
+  .sit-est .sb { padding: 0 4px; font-size: .86rem; white-space: normal; line-height: 1.1; }
+  .sit-pct .pctc .pb { min-width: 0; flex: 1 1 0; }
+  .sit-pct .pctc .psep { display: none; }
+}
+.sitbar .vb-seg, .sitbar .btn.pri { white-space: nowrap; }
+@media (max-width: 400px) { .sitbar { padding: 8px 10px; gap: 8px; } .sitbar .vb-l b { font-size: .85rem; } }
