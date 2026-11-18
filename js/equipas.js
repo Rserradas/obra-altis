@@ -1,11 +1,11 @@
 // Equipas de trabalho e plano das equipas.
-import { addDays, diffDays, schedule } from "../engine.js";
-import { $, EQF_PADRAO, ESTADO, MESES, PLANO_PADRAO, casaPesquisa, deltaHTML, eqfAtivo, esc, fd, semAcento, termosPesquisa, toast, ui } from "./base.js";
+import { addDays, diffDays, duracaoDe, schedule } from "../engine.js";
+import { $, EQF_PADRAO, ESTADO, MESES, PLANO_PADRAO, can, casaPesquisa, deltaHTML, eqfAtivo, esc, fd, semAcento, termosPesquisa, toast, ui } from "./base.js";
 import { espAp, frentesDe, nomeAtiv, optsMotor } from "./calculo.js";
 import { defTabs } from "./definicoes.js";
 import { S, store } from "./estado.js";
 import { render } from "./nucleo.js";
-import { confirmar, perguntar } from "./plano.js";
+import { confirmar, dataCompleta, perguntar } from "./plano.js";
 import { bindCommon } from "./previsao.js";
 import { ORD_BLOCOS, grupoBloco, pl, rotuloAlvo } from "./segurar.js";
 
@@ -281,6 +281,10 @@ export function planEquipaView() {
   const nFrentes = frentesDe(nome);
   const filtrado = visF.length !== vis.length;
   const visIds = visF.map((a) => a.id);
+  // editar as datas de vários trabalhos da fila de uma vez: nada muda até carregar em Gravar
+  if (ui.fqDatas && ui.fqDatas.eq !== nome) ui.fqDatas = null;
+  const edD = !!ui.fqDatas && can("executar"), mud = edD ? ui.fqDatas.mud : {};
+  const nMud = Object.keys(mud).length;
   const linhas = visF.map((a) => {
     const r = S.res.get(a.id);
     const ini = r.provIni, fim = r.provFim;
@@ -296,7 +300,10 @@ export function planEquipaView() {
         ${r.ciclo ? `<span class="fq-gap mau-t" title="Esta ordem contradiz a sequência dos trabalhos">contradiz a sequência</span>` : ""}</div>
       <span class="pill st-${r.estado}">${ESTADO[r.estado]}</span>
       <div class="tl fq-tl" aria-hidden="true"><div class="fc st-${r.estado}" style="left:${pos(ini)}%;width:${Math.max(1, pos(fim) - pos(ini))}%"></div>${S.hoje >= t0 && S.hoje <= t1 ? `<div class="today" style="left:${pos(S.hoje)}%"></div>` : ""}</div>
-      <span class="fq-d mono num">${fd(ini)} a ${fd(fim)}</span>
+      ${edD && r.estado !== "concluida" ? (() => { const m = mud[a.id] || {}, segue = r.segueGrupo, arr = !!a.realInicio;
+        const tIni = arr ? `Já começou a ${fd(a.realInicio)}: o início real muda-se na ficha` : segue ? "Começa com o primeiro do grupo (Junto): mude a data do primeiro" : "Previsão de início";
+        return `<span class="fq-d fq-ded ${mud[a.id] ? "mudou" : ""}"><input class="inp dt-in" type="date" data-fqdi="${a.id}" value="${m.ini || ini}" data-orig="${ini}" ${arr || segue ? "disabled" : ""} title="${esc(tIni)}" aria-label="Início de ${esc(nomeAtiv(a) + " " + a.unidade)}"><span class="note">a</span><input class="inp dt-in" type="date" data-fqdf="${a.id}" value="${m.fim || fim}" data-orig="${fim}" title="Previsão de fim" aria-label="Fim de ${esc(nomeAtiv(a) + " " + a.unidade)}"></span>`; })()
+        : `<span class="fq-d mono num">${fd(ini)} a ${fd(fim)}</span>`}
       <span class="fq-dv">${deltaHTML(r.atraso)}</span>
       <span class="fq-ac"><button class="btn sm" data-fqx="${a.id}" title="Sai da fila, mas continua atribuído à equipa">Tirar da fila</button><button class="btn sm tira-b" data-fqrem="${a.id}" title="Deixa de ser desta equipa e sai da fila">× Tirar da equipa</button></span>
     </div>`;
@@ -326,9 +333,11 @@ export function planEquipaView() {
     ${filtrosEqHTML(fq, daPagina, true)}
     ${ep.vista === "gantt" ? ganttEquipasHTML(nome, passa) : `<section class="card">
       <div class="card-h"><h2>Fila da ${esc(nome)}</h2><div class="row">${nConc ? `<label class="check"><input type="checkbox" id="fqConc" ${ep.conc ? "checked" : ""}><span>Mostrar os já feitos</span></label>` : ""}
-        <label class="f fq-fr" title="Quantos trabalhos esta equipa faz ao mesmo tempo">Frentes<select class="inp" id="fqFrentes">${[1, 2, 3, 4, 5, 6, 8, 10].map((n) => `<option value="${n}" ${n === nFrentes ? "selected" : ""}>${n === 1 ? "1 (um trabalho de cada vez)" : n + " ao mesmo tempo"}</option>`).join("")}</select></label></div></div>
+        <label class="f fq-fr" title="Quantos trabalhos esta equipa faz ao mesmo tempo">Frentes<select class="inp" id="fqFrentes">${[1, 2, 3, 4, 5, 6, 8, 10].map((n) => `<option value="${n}" ${n === nFrentes ? "selected" : ""}>${n === 1 ? "1 (um trabalho de cada vez)" : n + " ao mesmo tempo"}</option>`).join("")}</select></label>
+        ${can("executar") && vis.some((a) => S.res.get(a.id).estado !== "concluida") ? edD ? `<button class="btn" id="fqDCancel">Cancelar</button><button class="btn pri" id="fqDGrava" ${nMud ? "" : "disabled"}>Gravar ${nMud ? `${nMud} ${nMud === 1 ? "alteração" : "alterações"}` : "datas"}</button>` : `<button class="btn" id="fqDEd" title="Torna todas as datas da fila editáveis; grava tudo de uma vez">Editar datas</button>` : ""}</div></div>
+      ${edD ? `<div class="banner fq-edn"><span>Mude as datas de início e de fim que quiser e carregue em <b>Gravar</b>. Nada muda até gravar. Os trabalhos que já começaram só mudam o fim; os que estão Junto começam com o de cima.</span></div>` : ""}
       ${nFrentes > 1 ? `<p class="note fq-frn">Com ${nFrentes} frentes, a equipa faz ${nFrentes} trabalhos ao mesmo tempo: cada um começa quando acaba o que está ${nFrentes} lugares acima. Os trabalhos juntos com "Ao mesmo tempo que o de cima" contam como um só lugar.</p>` : ""}
-      ${visF.length ? `<p class="note" style="margin:0">${filtrado ? `A mostrar ${visF.length} de ${vis.length} trabalhos da fila. O número é a posição na fila completa; as setas trocam com o trabalho visível de cima ou de baixo.` : "Para mudar a ordem, arraste as linhas, use as setas ou escreva o lugar na caixa do número e carregue em Enter. Marque Junto para a equipa fazer o trabalho ao mesmo tempo que o de cima."}</p><div class="fq">${linhas}</div>` : vis.length ? `<div class="empty">Nenhum trabalho da fila corresponde aos filtros.</div>` : `<div class="empty">A fila está vazia. Junte trabalhos em baixo.</div>`}
+      ${visF.length ? `<p class="note" style="margin:0">${filtrado ? `A mostrar ${visF.length} de ${vis.length} trabalhos da fila. O número é a posição na fila completa; as setas trocam com o trabalho visível de cima ou de baixo.` : "Para mudar a ordem, arraste as linhas, use as setas ou escreva o lugar na caixa do número e carregue em Enter. Marque Junto para a equipa fazer o trabalho ao mesmo tempo que o de cima."}</p><div class="fq ${edD ? "ed" : ""}">${linhas}</div>${edD ? `<div class="fq-edbar"><span class="note" id="fqDN">${nMud ? `${nMud} ${nMud === 1 ? "trabalho alterado" : "trabalhos alterados"}, por gravar` : "Nenhuma data alterada"}</span><button class="btn" data-fqdc>Cancelar</button><button class="btn pri" data-fqdg ${nMud ? "" : "disabled"}>Gravar</button></div>` : ""}` : vis.length ? `<div class="empty">Nenhum trabalho da fila corresponde aos filtros.</div>` : `<div class="empty">A fila está vazia. Junte trabalhos em baixo.</div>`}
     </section>`}
     <section class="card">
       <div class="card-h"><h2>Trabalhos da equipa ainda sem lugar na fila</h2>${porOrdenarF.length > 1 ? `<button class="btn sm pri" id="fqTodas">${porOrdenarF.length < porOrdenar.length ? `Pôr estes ${porOrdenarF.length} na fila` : "Pôr todos na fila"}</button>` : ""}</div>
@@ -407,6 +416,7 @@ export function planEquipaView() {
       gravarFila(nome, ids, c.checked ? `${nomeAtiv(a)} em ${a.unidade} passa a ser feito ao mesmo tempo que ${nomeAtiv(ant)} em ${ant.unidade}` : `${nomeAtiv(a)} em ${a.unidade} deixa de ser feito ao mesmo tempo que o anterior`, {}, [], c.checked ? { juntar: new Set([id]) } : { soltar: new Set([id]) });
     }));
     const fr = $("#fqFrentes"); if (fr) fr.onchange = () => mudarFrentes(nome, Number(fr.value));
+    bindDatasFila(nome);
     document.querySelectorAll("[data-fqx]").forEach((b) => (b.onclick = async () => {
       const a = S.acts[b.dataset.fqx];
       if (!(await confirmar("Tirar da fila?", `<p>${esc(nomeAtiv(a))} em ${esc(a.unidade)} sai da fila da ${esc(nome)}. Continua atribuído à equipa, mas a app deixa de contar com a disponibilidade dela para este trabalho: deixa de esperar pelo anterior da fila, e o seguinte deixa de esperar por ele.</p>`, "Sim, tirar da fila"))) return;
@@ -741,4 +751,74 @@ export function openEquipa(nome, opts = {}) {
     if (ids.length) await store.updateMuitas(ids, null);
     toast(`«${orig.nome}» eliminada`);
   };
+}
+
+/* ---- editar as datas da fila de uma vez */
+function bindDatasFila(nome) {
+  const ed = $("#fqDEd"); if (ed) ed.onclick = () => { ui.fqDatas = { eq: nome, mud: {} }; render(); };
+  const sair = async () => {
+    const n = ui.fqDatas ? Object.keys(ui.fqDatas.mud).length : 0;
+    if (n && !(await confirmar("Sair sem gravar?", `<p>${n === 1 ? "Há 1 trabalho com datas alteradas" : `Há ${n} trabalhos com datas alteradas`} que se perdem.</p>`, "Sair sem gravar"))) return;
+    ui.fqDatas = null; render();
+  };
+  document.querySelectorAll("#fqDCancel, [data-fqdc]").forEach((b) => (b.onclick = sair));
+  document.querySelectorAll("#fqDGrava, [data-fqdg]").forEach((b) => (b.onclick = () => gravarDatasFila(nome)));
+  if (!ui.fqDatas) return;
+  const mud = ui.fqDatas.mud;
+  const conta = () => {
+    const n = Object.keys(mud).length, txt = n ? `${n} ${n === 1 ? "trabalho alterado" : "trabalhos alterados"}, por gravar` : "Nenhuma data alterada";
+    const el = $("#fqDN"); if (el) el.textContent = txt;
+    document.querySelectorAll("#fqDGrava, [data-fqdg]").forEach((b) => { b.disabled = !n; if (b.id === "fqDGrava") b.textContent = n ? `Gravar ${n} ${n === 1 ? "alteração" : "alterações"}` : "Gravar datas"; });
+  };
+  document.querySelectorAll("[data-fqdi], [data-fqdf]").forEach((inp) => (inp.onchange = () => {
+    const id = inp.dataset.fqdi || inp.dataset.fqdf, k = inp.dataset.fqdi ? "ini" : "fim", v = inp.value;
+    if (v && !dataCompleta(v)) return; // ainda a escrever o ano
+    const m = mud[id] || {};
+    if (!v || v === inp.dataset.orig) delete m[k]; else m[k] = v;
+    if (Object.keys(m).length) mud[id] = m; else delete mud[id];
+    const caixa = inp.closest(".fq-ded"); if (caixa) caixa.classList.toggle("mudou", !!mud[id]);
+    conta();
+  }));
+}
+async function gravarDatasFila(nome) {
+  const est = ui.fqDatas; if (!est) return;
+  const lista = [], erros = [], quer = new Map();
+  const durPadrao = (a) => duracaoDe({ ...a, duracaoManual: null }, S.cfg.duracoes || {});
+  for (const [id, m] of Object.entries(est.mud)) {
+    const a = S.acts[id], r = S.res.get(id);
+    if (!a || !r || r.estado === "concluida") continue;
+    const ini = !a.realInicio && !r.segueGrupo && m.ini ? m.ini : null;
+    const iniV = ini || r.provIni, fimV = m.fim || null;
+    if (fimV && fimV < (a.realInicio || iniV)) { erros.push(`${nomeAtiv(a)} em ${a.unidade}: o fim (${fd(fimV)}) é antes do início (${fd(a.realInicio || iniV)})`); continue; }
+    let patch;
+    if (a.realInicio) { if (!fimV) continue; patch = { fimPrevisto: fimV, dataOk: true }; }
+    else {
+      // o prazo: o que se escreveu, ou o que tinha (mudar só o início muda o trabalho inteiro de sítio)
+      const d = fimV ? diffDays(iniV, fimV) : diffDays(r.provIni, r.provFim);
+      patch = { fimPrevisto: null, duracaoManual: d === durPadrao(a) ? null : d, dataOk: true, ...(ini ? { inicioPrevisto: ini } : {}) };
+    }
+    lista.push({ id, patch });
+    quer.set(id, { ini, fim: fimV });
+  }
+  if (erros.length) {
+    await perguntar({ titulo: "Há datas por corrigir", texto: `<p>Nada foi gravado. Corrija ${erros.length === 1 ? "esta data" : "estas datas"} e grave outra vez:</p><ul>${erros.map((e) => `<li>${esc(e)}</li>`).join("")}</ul>`, opcoes: [{ k: "ok", l: "Percebi", estilo: "pri" }] });
+    return;
+  }
+  if (!lista.length) { ui.fqDatas = null; render(); return; }
+  await store.updateMuitas(lista, { tipo: "previsao", texto: `Mudou as datas de ${lista.length} ${lista.length === 1 ? "trabalho" : "trabalhos"} da fila da ${nome}` });
+  ui.fqDatas = null;
+  toast(`Datas gravadas: ${lista.length} ${lista.length === 1 ? "trabalho" : "trabalhos"}`);
+  render();
+  // as que ficaram mais tarde do que se escreveu, porque esperam por outros trabalhos
+  setTimeout(() => {
+    if (!S) return;
+    const mais = [];
+    for (const [id, q] of quer) {
+      const a = S.acts[id], r = S.res.get(id); if (!a || !r || !q.ini || r.provIni <= q.ini) continue;
+      const pr = (r.preds || []).map((d) => ({ d, x: S.res.get(d.id) })).filter(({ x }) => x && x.estado !== "concluida").sort((p1, p2) => (p2.x.provFim || "").localeCompare(p1.x.provFim || ""))[0];
+      const qa = pr && S.acts[pr.d.id];
+      mais.push(`<li><b>${esc(nomeAtiv(a))}</b> <span class="mono">${esc(a.unidade)}</span>: escreveu ${fd(q.ini)}, fica a ${fd(r.provIni)}${qa ? `, porque ${pr.d.fonte === "equipa" ? "a equipa só acaba" : "espera por"} ${esc(nomeAtiv(qa))} em ${esc(qa.unidade)} a ${fd(pr.x.provFim)}` : ""}.</li>`);
+    }
+    if (mais.length) perguntar({ titulo: mais.length === 1 ? "Um trabalho ficou mais tarde" : `${mais.length} trabalhos ficaram mais tarde`, texto: `<p>As datas foram gravadas, mas ${mais.length === 1 ? "este trabalho só pode começar" : "estes trabalhos só podem começar"} depois de outros acabarem:</p><ul>${mais.join("")}</ul><p class="note">Para começarem antes, mude a ordem da fila ou as datas dos trabalhos de que esperam.</p>`, opcoes: [{ k: "ok", l: "Percebi", estilo: "pri" }] });
+  }, 400);
 }

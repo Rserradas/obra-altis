@@ -1551,3 +1551,17 @@ input.fq-n { border: 1px solid var(--line); border-radius: 6px; background: var(
   .fq-row .fq-ac { grid-column: 1 / -1; }
 }
 .fq-row { border-left: 3px solid transparent; }
+
+/* fila das equipas: editar as datas de vários trabalhos de uma vez */
+.fq.ed .fq-row { grid-template-columns: 30px 48px 62px minmax(0, 1.6fr) 100px 300px 70px auto; }
+.fq.ed .fq-row .fq-tl { display: none; }
+.fq.ed .fq-row.fq-po { grid-template-columns: 0 0 0 minmax(0, 1fr) auto; }
+.fq-ded { display: flex; align-items: center; gap: 4px; }
+.fq-ded .dt-in { width: 136px; min-height: 32px; padding: 3px 6px; font-size: .84rem; }
+.fq-ded.mudou .dt-in:not(:disabled) { border-color: var(--accent); background: var(--accent-soft); }
+.fq-ded .dt-in:disabled { opacity: .55; }
+.fq-edbar { position: sticky; bottom: 0; display: flex; justify-content: flex-end; align-items: center; gap: 8px; padding: 10px 4px; background: var(--surface); border-top: 1px solid var(--line); z-index: 3; }
+.fq-edbar .note { margin-right: auto; }
+.fq-edn { margin: 4px 0 6px; }
+@media (max-width: 1150px) { .fq.ed .fq-row { grid-template-columns: 30px 48px 62px minmax(0, 1fr) auto; } .fq.ed .fq-row .fq-d { grid-column: 2 / 5; } }
+@media (max-width: 640px) { .fq.ed .fq-row { grid-template-columns: 30px 44px auto minmax(0, 1fr); } .fq.ed .fq-row .fq-d { grid-column: 1 / -1; } .fq-ded .dt-in { width: auto; flex: 1; } }
