@@ -6,6 +6,7 @@ import { atribuirEquipa, openEquipa } from "./equipas.js";
 import { S, store } from "./estado.js";
 import { openSheet, patchTirarLigacao } from "./ficha.js";
 import { render } from "./nucleo.js";
+import { filtroGrupo, grupoSelectHTML, nomeGrupo } from "./grupos.js";
 import { pendAberto, pendDe } from "./pendentes.js";
 import { bindCommon } from "./previsao.js";
 
@@ -36,6 +37,7 @@ export function planoView() {
       default: return true;
     }
   };
+  const noGrupo = filtroGrupo(p.grupo);
   const qt = termosPesquisa(p.q); // várias palavras: todas têm de aparecer, sem ligar a acentos nem aos hífens dos códigos
   // filtros de "onde" e "o quê" (os estados contam-se sobre este conjunto)
   const base = Object.values(S.acts).map((a) => ({ a, r: S.res.get(a.id) })).filter(({ a, r }) => {
@@ -46,6 +48,7 @@ export function planoView() {
     if (p.tipo && u.tipo !== p.tipo) return false;
     if (p.unidade && a.unidade !== p.unidade) return false;
     if (p.ativ && nomeAtiv(a) !== p.ativ) return false;
+    if (!noGrupo(a)) return false;
     if (p.equipa === "_sem" ? !!a.equipa : p.equipa && a.equipa !== p.equipa) return false;
     if (p.soAtr && !r.atrasada) return false;
     if (esconde && concluida(a, r)) return false;
@@ -55,7 +58,7 @@ export function planoView() {
   const conta = Object.fromEntries(ESTADOS.map(([k]) => [k, base.filter(({ r }) => testa(k, r)).length]));
   if (esconde) conta.concluida = Object.values(S.acts).filter((a) => {
     const u = S.uMap[a.unidade], r = S.res.get(a.id);
-    return u && (!p.bloco || u.bloco === p.bloco) && (!p.tipo || u.tipo === p.tipo) && (!p.unidade || a.unidade === p.unidade) && (!p.ativ || nomeAtiv(a) === p.ativ) && (!p.equipa || a.equipa === p.equipa) && concluida(a, r);
+    return u && (!p.bloco || u.bloco === p.bloco) && (!p.tipo || u.tipo === p.tipo) && (!p.unidade || a.unidade === p.unidade) && (!p.ativ || nomeAtiv(a) === p.ativ) && noGrupo(a) && (!p.equipa || a.equipa === p.equipa) && concluida(a, r);
   }).length;
   const list = base.filter(({ r }) => testa(p.f, r));
   // ordenação: por coluna escolhida (clique no título) ou a ordem natural do filtro
@@ -81,7 +84,7 @@ export function planoView() {
   } else list.sort(natural);
   const MAX = 300;
   const shown = list.slice(0, MAX);
-  const nomes = [...new Set(Object.values(S.acts).map((a) => nomeAtiv(a)))].sort((a, b) => a.localeCompare(b, "pt"));
+  const nomes = [...new Set(Object.values(S.acts).filter((a) => noGrupo(a) || nomeAtiv(a) === p.ativ).map((a) => nomeAtiv(a)))].sort((a, b) => a.localeCompare(b, "pt"));
   const ed = p.editar, dono = papel === "dono";
   const atr = !!p.atribuir && can("executar");
   if (atr) p.selec = p.selec || new Set();
@@ -130,6 +133,7 @@ export function planoView() {
       if (p.tipo) r.push((TIPOS.find(([k]) => k === p.tipo) || [, p.tipo])[1]);
       if (p.unidade) r.push(p.unidade);
       if (p.ativ) r.push(p.ativ);
+      if (p.grupo && nomeGrupo(p.grupo)) r.push("Grupo " + nomeGrupo(p.grupo));
       if (p.equipa) r.push(p.equipa === "_sem" ? "Sem equipa" : "Equipa " + p.equipa);
       if (p.f && p.f !== "todas") r.push((ESTADOS.find(([k]) => k === p.f) || [, p.f])[1]);
       if (p.soAtr) r.push("Só atrasadas");
@@ -146,6 +150,7 @@ export function planoView() {
         return us.length ? `<optgroup label="${g === "Geral" ? "Geral" : "Bloco " + g}">${us.map((u) => `<option value="${esc(u.id)}" ${p.unidade === u.id ? "selected" : ""}>${esc(u.tipo === "Apartamento" || /-L\d+$/.test(u.id) ? u.id : u.nome)}</option>`).join("")}</optgroup>` : "";
       }).join("")}${S.unidadesTeste.length ? `<optgroup label="Teste">${S.unidadesTeste.map((u) => `<option value="${esc(u.id)}" ${p.unidade === u.id ? "selected" : ""}>${esc(u.id)}</option>`).join("")}</optgroup>` : ""}</select></label>
       <label class="f">Atividade<select class="inp" id="pa"><option value="">Todas</option>${nomes.map((n) => `<option ${p.ativ === n ? "selected" : ""}>${esc(n)}</option>`).join("")}</select></label>
+      ${grupoSelectHTML("pg", p.grupo)}
       <label class="f">Equipa<select class="inp" id="pe"><option value="">Todas</option><option value="_sem" ${p.equipa === "_sem" ? "selected" : ""}>Sem equipa</option>${S.equipasTodas.map((e) => `<option ${p.equipa === e ? "selected" : ""}>${esc(e)}</option>`).join("")}</select></label>
       <label class="f" style="flex:1;min-width:180px">Procurar<input class="inp" id="pq" value="${esc(p.q)}" placeholder="Ex.: B-F503, louças, 2#10"></label>
       <label class="check" style="align-self:center"><input type="checkbox" id="psa" ${p.soAtr ? "checked" : ""}><span>Só atrasadas</span></label>
@@ -196,6 +201,7 @@ export function planoView() {
       $("#pt").onchange = (e) => { p.tipo = e.target.value; render(); };
       $("#pu").onchange = (e) => { p.unidade = e.target.value; render(); };
       $("#pa").onchange = (e) => { p.ativ = e.target.value; render(); };
+      const pg = $("#pg"); if (pg) pg.onchange = (e) => { p.grupo = e.target.value; render(); };
       $("#pe").onchange = (e) => { p.equipa = e.target.value; render(); };
       $("#psa").onchange = (e) => { p.soAtr = e.target.checked; render(); };
       $("#psc").onchange = (e) => { p.semConc = e.target.checked; render(); };

@@ -6,6 +6,7 @@ import { S } from "./estado.js";
 import { openSheet } from "./ficha.js";
 import { render } from "./nucleo.js";
 import { bindDateInputs, dataCompleta, dateInput, editarData } from "./plano.js";
+import { filtroGrupo, grupoSelectHTML, nomeGrupo } from "./grupos.js";
 import { bindCommon } from "./previsao.js";
 
 /* ============================================================ gantt */
@@ -29,6 +30,7 @@ export function ganttView() {
         <div class="msel-p"><div class="row" style="gap:6px;margin-bottom:6px"><input class="inp" id="gaQ" type="search" placeholder="Procurar atividade" style="flex:1;min-width:0"><button class="btn sm" id="gaT" type="button">Todas</button><button class="btn sm" id="gaN" type="button">Nenhuma</button></div>
         <div class="msel-l2">${nomes.map((n) => `<label class="check" data-gan="${esc(semAcentos(n))}"><input type="checkbox" value="${esc(n)}" ${g.ativs.includes(n) ? "checked" : ""}><span>${esc(n)}</span></label>`).join("")}</div>
         <button class="btn sm pri" id="gaOk" type="button" style="margin-top:8px;width:100%">Aplicar</button></div></details></div>
+      ${grupoSelectHTML("gg", g.grupo)}
       <label class="f">Equipa<select class="inp" id="ge"><option value="">Todas</option><option value="_sem" ${g.equipa === "_sem" ? "selected" : ""}>Sem equipa</option>${S.equipasTodas.map((e) => `<option ${g.equipa === e ? "selected" : ""}>${esc(e)}</option>`).join("")}</select></label>
       <label class="f">Procurar<input class="inp" id="gq" type="search" value="${esc(g.q)}" placeholder="Ex.: louças B-F503"></label>
       <label class="f gper">Mostrar de<input class="inp" type="date" id="gde" value="${g.de}"></label>
@@ -66,6 +68,7 @@ export function bindGantt() {
   document.querySelectorAll("[data-gest]").forEach((b) => (b.onclick = () => { g.estado = b.dataset.gest; render(); }));
   $("#gt").onchange = (e) => { g.tipo = e.target.value; if (g.unidade && S.uMap[g.unidade] && g.tipo && S.uMap[g.unidade].tipo !== g.tipo) g.unidade = ""; render(); };
   $("#ge").onchange = (e) => { g.equipa = e.target.value; render(); };
+  const gg = $("#gg"); if (gg) gg.onchange = (e) => { g.grupo = e.target.value; render(); };
   let tq; $("#gq").oninput = (e) => { clearTimeout(tq); tq = setTimeout(() => { g.q = e.target.value; render(); const i = $("#gq"); if (i) { i.focus(); const n = i.value.length; try { i.setSelectionRange(n, n); } catch {} } }, 300); };
   const per = (sel, k) => { const el = $(sel); el.onchange = () => { const v = el.value; if (v && !dataCompleta(v)) return; g[k] = v; if (g.de && g.ate && g.ate < g.de) { toast("A data final não pode ser antes da inicial.", { anular: false }); g[k] = ""; } render(); }; };
   per("#gde", "de"); per("#gate", "ate");
@@ -108,12 +111,13 @@ export function ganttNomesAtiv(bloco) {
 }
 export function ganttFiltrado() {
   const g = ui.gantt || {};
-  return !!((g.ativs && g.ativs.length) || g.estado || g.equipa || g.tipo || g.unidade || (g.q || "").trim() || g.de || g.ate);
+  return !!((g.ativs && g.ativs.length) || g.grupo || g.estado || g.equipa || g.tipo || g.unidade || (g.q || "").trim() || g.de || g.ate);
 }
 export function ganttResumoFiltros() {
   const g = ui.gantt, r = [];
   if (g.tipo) r.push({ Apartamento: "Apartamentos", Loja: "Lojas", "Zona comum": "Zonas comuns", Geral: "Geral" }[g.tipo] || g.tipo);
   if (g.unidade) r.push(g.unidade);
+  if (g.grupo && nomeGrupo(g.grupo)) r.push("Grupo " + nomeGrupo(g.grupo));
   if (g.ativs && g.ativs.length) r.push(g.ativs.length <= 3 ? g.ativs.join(", ") : g.ativs.length + " atividades");
   if (g.estado) r.push((GANTT_EST.find(([k]) => k === g.estado) || [, ""])[1]);
   if (g.equipa) r.push(g.equipa === "_sem" ? "Sem equipa" : g.equipa);
@@ -125,6 +129,7 @@ export function ganttResumoFiltros() {
 export function ganttPassa(a, r) {
   const g = ui.gantt;
   if (g.ativs.length && !g.ativs.includes(nomeAtiv(a))) return false;
+  if (g.grupo && !filtroGrupo(g.grupo)(a)) return false;
   if (g.equipa === "_sem" ? !!a.equipa : g.equipa && a.equipa !== g.equipa) return false;
   const conc = r.estado === "concluida";
   if (g.estado === "concluida") { if (!conc) return false; }

@@ -12,7 +12,7 @@ import { hora } from "./vistorias.js";
 
 /* ============================================================ definições: sequência + equipa */
 export function defTabs(atual) {
-  const t = [["regras", "Sequência e durações"]];
+  const t = [["regras", "Sequência e durações"], ["grupos", "Grupos"]];
   if (can("executar")) t.push(["equipas", "Equipas de trabalho"], ["planequipa", "Plano das equipas"]);
   if (store.user.papel === "dono") t.push(["equipa", "Acessos"]);
   t.push(["copia", "Cópia de segurança"]); // todos fazem e repõem cópias

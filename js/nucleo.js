@@ -4,6 +4,7 @@ import { abrirGuia, ajudaEcra } from "./ajuda.js";
 import { $, ICON, PAPEL, VERSAO, VISTAS, avisoErroEscrita, can, erroSimples, esc, filtrosAlterados, guardarFiltros, instalarAnular, lerFiltros, mudarVista, reporFiltros, toast, ui, vistaSelHTML } from "./base.js";
 import { compute } from "./calculo.js";
 import { copiaView, equipaView, regrasView } from "./definicoes.js";
+import { gruposView } from "./grupos.js";
 import { equipasView, planEquipaView } from "./equipas.js";
 import { S, importando, lastView, setImportando, setLastView, setStore, setVersaoNova, store, versaoNova } from "./estado.js";
 import { closeSheet, renderSheet } from "./ficha.js";
@@ -283,9 +284,9 @@ export function routeView() {
   }
   if (h === "equipa" && store.user.papel !== "dono") h = "painel";
   if (h === "equipas" && !can("executar")) h = "painel";
-  const v = { pendentes: pendentesView, painel: painelView, unidades: unidadesView, plano: planoView, regras: regrasView, equipa: equipaView, copia: copiaView, equipas: equipasView, gantt: ganttView, semana: semanaView, relatorio: relatorioView, vistorias: vistoriasView, relvist: relVistView, previsao: previsaoView, planequipa: planEquipaView, segurar: segurarView }[h] || painelView;
+  const v = { pendentes: pendentesView, painel: painelView, unidades: unidadesView, plano: planoView, regras: regrasView, equipa: equipaView, copia: copiaView, equipas: equipasView, gantt: ganttView, semana: semanaView, relatorio: relatorioView, vistorias: vistoriasView, relvist: relVistView, previsao: previsaoView, planequipa: planEquipaView, segurar: segurarView, grupos: gruposView }[h] || painelView;
   if (h === "planequipa" && !can("executar")) h = "painel";
-  const navDe = { equipa: "regras", copia: "regras", equipas: "regras", planequipa: "regras", relatorio: "painel", relvist: "vistorias", segurar: "painel" };
+  const navDe = { equipa: "regras", copia: "regras", grupos: "regras", equipas: "regras", planequipa: "regras", relatorio: "painel", relvist: "vistorias", segurar: "painel" };
   return { nav: navDe[h] || (h in { painel: 1, unidades: 1, plano: 1, regras: 1, gantt: 1, semana: 1, vistorias: 1, previsao: 1, pendentes: 1 } ? h : "painel"), ...v() };
 }
 

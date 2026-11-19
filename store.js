@@ -82,7 +82,7 @@ export class DemoStore extends Emitter {
   }
   _save() {
     const c = this.state.config;
-    const data = { config: { regras: c.regras, duracoes: c.duracoes, especialidades: c.especialidades, unidades: c.unidades, correcaoExpiradas: c.correcaoExpiradas }, patches: this.patches,
+    const data = { config: { regras: c.regras, duracoes: c.duracoes, especialidades: c.especialidades, unidades: c.unidades, correcaoExpiradas: c.correcaoExpiradas, gruposEsp: c.gruposEsp }, patches: this.patches,
       novas: this.novas.filter((a) => this.state.atividades[a.id]), removidas: this.removidas,
       registos: this.state.registos.filter((r) => !r.sim).slice(-500), utilizadores: this.state.utilizadores, pendentes: this.state.pendentes };
     try {

@@ -73,15 +73,15 @@ export const casaPesquisa = (texto, termos) => {
 };
 export const EQF_PADRAO = () => ({ bloco: "", fr: "", esp: "", estado: "", q: "" });
 export const eqfAtivo = (f) => !!(f && (f.bloco || f.fr || f.esp || f.estado || f.q));
-export const PLANO_PADRAO = () => ({ f: "todas", bloco: "", tipo: "", unidade: "", ativ: "", equipa: "", q: "", soAtr: false, semConc: true, sort: null, editar: false, atribuir: false, atrEq: "", selec: null });
+export const PLANO_PADRAO = () => ({ f: "todas", bloco: "", tipo: "", unidade: "", ativ: "", grupo: "", equipa: "", q: "", soAtr: false, semConc: true, sort: null, editar: false, atribuir: false, atrEq: "", selec: null });
 export const VERSAO = "18.11.2026 V4"; // dia da publicação e versão do dia; mudar também em versao.json e no CACHE de sw.js (na raiz)
 export const ui = { bloco: "todos", plano: PLANO_PADRAO(), unidadeTab: "ativ", vistoria: {}, sheet: null };
 /** Há algum filtro diferente do padrão? */
 export function filtrosAlterados() {
   const p = ui.plano, d = PLANO_PADRAO(), g = ui.gantt;
-  const planoMudou = ["bloco", "tipo", "unidade", "ativ", "equipa", "q", "soAtr", "editar", "atribuir"].some((k) => !!p[k] !== !!d[k]) || p.semConc === false || !!p.sort || (p.f || "todas") !== "todas";
+  const planoMudou = ["bloco", "tipo", "unidade", "ativ", "grupo", "equipa", "q", "soAtr", "editar", "atribuir"].some((k) => !!p[k] !== !!d[k]) || p.semConc === false || !!p.sort || (p.f || "todas") !== "todas";
   if (ui.regSort || ui.regQ) return true;
-  const ganttMudou = g && (g.bloco || g.unidade || g.ativ || (g.ativs && g.ativs.length) || g.estado || g.equipa || g.tipo || g.q || g.de || g.ate || g.abertas === false || g.ligacoes === false || g.zoom !== "semana" || (g.abertosB && g.abertosB.size) || (g.abertos && g.abertos.size) || g.sel);
+  const ganttMudou = g && (g.bloco || g.unidade || g.ativ || (g.ativs && g.ativs.length) || g.grupo || g.estado || g.equipa || g.tipo || g.q || g.de || g.ate || g.abertas === false || g.ligacoes === false || g.zoom !== "semana" || (g.abertosB && g.abertosB.size) || (g.abertos && g.abertos.size) || g.sel);
   const vl = ui.vistLista, vistMudou = !!(vl && vl.por);
   return !!(planoMudou || ganttMudou || vistMudou || eqfAtivo(ui.eqF) || ui.soModelo || ui.bloco !== "todos" || ui.unitEdit || ui.uSemConc === false || !!ui.porVist || !!ui.comPend);
 }
@@ -107,8 +107,8 @@ export function lerFiltros() {
 }
 export function guardarFiltros() {
   if (filtrosDe !== chaveFiltros()) return;
-  const { bloco, tipo, unidade, ativ, equipa, q, soAtr, semConc, sort, f } = ui.plano;
-  try { localStorage.setItem(filtrosDe, JSON.stringify({ plano: { bloco, tipo, unidade, ativ, equipa, q, soAtr, semConc, sort, f }, semana: ui.semana || null, bloco: ui.bloco, porVist: !!ui.porVist, comPend: !!ui.comPend, eqF: eqfAtivo(ui.eqF) ? ui.eqF : null })); } catch (e) {}
+  const { bloco, tipo, unidade, ativ, grupo, equipa, q, soAtr, semConc, sort, f } = ui.plano;
+  try { localStorage.setItem(filtrosDe, JSON.stringify({ plano: { bloco, tipo, unidade, ativ, grupo, equipa, q, soAtr, semConc, sort, f }, semana: ui.semana || null, bloco: ui.bloco, porVist: !!ui.porVist, comPend: !!ui.comPend, eqF: eqfAtivo(ui.eqF) ? ui.eqF : null })); } catch (e) {}
 }
 /** Volta todos os ecrãs aos filtros com que a aplicação abre (as vistorias por guardar mantêm-se). */
 export function reporFiltros() {
