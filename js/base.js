@@ -74,7 +74,7 @@ export const casaPesquisa = (texto, termos) => {
 export const EQF_PADRAO = () => ({ bloco: "", fr: "", esp: "", estado: "", q: "" });
 export const eqfAtivo = (f) => !!(f && (f.bloco || f.fr || f.esp || f.estado || f.q));
 export const PLANO_PADRAO = () => ({ f: "todas", bloco: "", tipo: "", unidade: "", ativ: "", grupo: "", equipa: "", q: "", soAtr: false, semConc: true, sort: null, editar: false, atribuir: false, atrEq: "", selec: null });
-export const VERSAO = "18.11.2026 V4"; // dia da publicação e versão do dia; mudar também em versao.json e no CACHE de sw.js (na raiz)
+export const VERSAO = "19.11.2026 V1"; // dia da publicação e versão do dia; mudar também em versao.json e no CACHE de sw.js (na raiz)
 export const ui = { bloco: "todos", plano: PLANO_PADRAO(), unidadeTab: "ativ", vistoria: {}, sheet: null };
 /** Há algum filtro diferente do padrão? */
 export function filtrosAlterados() {
