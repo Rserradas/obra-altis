@@ -1582,7 +1582,7 @@ input.fq-n { border: 1px solid var(--line); border-radius: 6px; background: var(
 
 /* Apartamento: ponto de situação do empreiteiro */
 .sitrows { display: flex; flex-direction: column; border: 1px solid var(--line); border-radius: var(--r); background: var(--surface); overflow: hidden; }
-.sitrow { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px 14px; padding: 12px 14px; border-top: 1px solid var(--line); align-items: center; }
+.sitrow { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 8px 14px; padding: 12px 14px; border-top: 1px solid var(--line); align-items: center; }
 .sitrow:first-child { border-top: 0; }
 .sitrow.mudou { background: color-mix(in srgb, var(--accent-soft) 60%, var(--surface)); }
 .sitrow.espera .sit-nm b { color: var(--muted); }
@@ -1597,11 +1597,16 @@ input.fq-n { border: 1px solid var(--line); border-radius: 6px; background: var(
 .sit-est .sb-curso.on { background: var(--curso); border-color: var(--curso); color: #fff; }
 .sit-est .sb-conc.on { background: var(--ok); border-color: var(--ok); color: #fff; }
 .sit-pct { grid-column: 1 / -1; }
+.sit-fx { display: flex; gap: 6px; align-items: center; justify-content: flex-end; }
+.sit-fx .fpick .btn.sm { min-height: 40px; min-width: 44px; justify-content: center; }
+.sit-fx .vf-slot:empty { display: none; }
+.sit-fotos { grid-column: 1 / -1; display: flex; flex-direction: column; gap: 6px; }
+.sit-fotos .pend { margin: 0; }
 .sitbar .sitbar-b { display: flex; gap: 8px; align-items: center; }
 .sitbar .vb-l { display: flex; gap: 8px; align-items: center; }
 @media (max-width: 640px) {
-  .sitrow { grid-template-columns: minmax(0, 1fr); padding: 12px 10px; }
-  .sit-est { display: grid; grid-template-columns: repeat(3, 1fr); }
+  .sitrow { grid-template-columns: minmax(0, 1fr) auto; padding: 12px 10px; }
+  .sit-est { display: grid; grid-template-columns: repeat(3, 1fr); grid-column: 1 / -1; }
   .sit-est .sb { padding: 0 4px; font-size: .86rem; white-space: normal; line-height: 1.1; }
   .sit-pct .pctc .pb { min-width: 0; flex: 1 1 0; }
   .sit-pct .pctc .psep { display: none; }

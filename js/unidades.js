@@ -115,16 +115,19 @@ export function unidadeView(id) {
       ${edU ? `<div class="pcts ed">${estadoEdHTML(a, r)}${pctEdHTML(a)}</div>` : `<div class="pcts" title="Empreiteiro / Fiscal"><span class="vf-slot" data-vfotos="${a.id}"></span>E <b>${Math.round(pe)}%</b> · F <b>${pf == null ? "s/v" : Math.round(pf) + "%"}</b></div>`}
     </div>`;
   }).join("");
-  const nSit = sitOK ? visiveisSit(u).filter((a) => sitMudou(a)).length : 0;
+  const nSit = sitOK ? visiveisSit(u).filter((a) => sitMudou(a) || sitFotosDe(a.id).fotos.length).length : 0;
   const rowsSit = sitOK && tab === "sit" ? visiveis.map((a) => {
     const r = S.res.get(a.id), s = sitAtual(a), mud = sitMudou(a), o = sitOrig(a);
     const espera = r.estado === "bloqueada" ? [...new Set(r.bloqueadaPor.map((pid) => S.acts[pid]).filter(Boolean).map((x) => nomeAtiv(x) + (x.unidade !== a.unidade ? " (" + x.unidade + ")" : "")))] : [];
     const bt = (k, l) => `<button type="button" class="sb sb-${k} ${s.est === k ? "on" : ""}" data-sit="${a.id}|${k}" aria-pressed="${s.est === k}">${l}</button>`;
     const agora = o.est === "conc" ? "concluída" : o.est === "curso" ? `em curso, ${o.pct}%` : espera.length ? `à espera de ${espera[0]}${espera.length > 1 ? " +" + (espera.length - 1) : ""}` : "não iniciada";
-    return `<div class="sitrow ${espera.length && s.est === "por" ? "espera" : ""} ${mud ? "mudou" : ""}" id="sr-${a.id}">
-      <div class="sit-nm"><b>${esc(nomeAtiv(a))}</b><small>${mud ? `<span class="sit-alt">Por guardar</span> · era ` : "Agora: "}${esc(agora)}</small></div>
+    const sf = sitFotosDe(a.id), nf = sf.fotos.length;
+    return `<div class="sitrow ${espera.length && s.est === "por" ? "espera" : ""} ${mud || nf ? "mudou" : ""}" id="sr-${a.id}">
+      <div class="sit-nm"><b>${esc(nomeAtiv(a))}</b><small>${mud ? `<span class="sit-alt">Por guardar</span> · era ` : nf ? `<span class="sit-alt">${nf === 1 ? "1 fotografia" : nf + " fotografias"} por guardar</span> · ` : "Agora: "}${esc(agora)}</small></div>
+      <div class="sit-fx"><span class="vf-slot" data-vfotos="${a.id}"></span>${can("foto") ? fotoPickerHTML("f~" + a.id, nf) : ""}</div>
       <div class="sit-est" role="group" aria-label="Estado de ${esc(nomeAtiv(a))}">${bt("por", "Não iniciada")}${bt("curso", "Em curso")}${bt("conc", "Concluída")}</div>
       ${s.est === "curso" ? `<div class="sit-pct">${pctCtlHTML("s~" + a.id, s.pct, mud && s.pct !== o.pct)}</div>` : ""}
+      ${nf ? `<div class="sit-fotos">${pendentesHTML("f~" + a.id, sf.fotos)}<input class="inp" data-sfn="${a.id}" value="${esc(sf.nota || "")}" placeholder="Nota das fotografias (opcional): o que mostram"></div>` : ""}
     </div>`;
   }).join("") : "";
   const segSit = vizinhas(u.id).seg;
@@ -208,7 +211,7 @@ export function unidadeView(id) {
       <div class="row" style="justify-content:flex-end"><button class="btn sm" data-relhoje>${corrDia ? `Ver o relatório de ${fd(corrDia)}` : "Ver o relatório de hoje"}</button></div>
       <div class="vbar"><span class="vb-l"><b class="num" id="vvis">Vistas ${nVistas} de ${visiveis.length}</b>${nVistas < visiveis.length ? `<button class="btn sm ghost vb-seg" id="vseg" title="Ir para a próxima especialidade por ver">Seguinte ›</button>` : ""}</span>
         <button class="btn pri" id="vsave" ${nChg ? "" : "disabled"}>${nChg ? `${corrDia ? "Guardar correção" : "Guardar"} (${nChg})` : "Nada por guardar"}</button></div>`
-      : tab === "sit" && sitOK ? `<p class="note" style="margin:0">Toque no estado de cada atividade. Em curso: escolha a percentagem. Concluída fica concluída hoje. No fim carregue em Guardar, que grava tudo de uma vez.</p>
+      : tab === "sit" && sitOK ? `<p class="note" style="margin:0">Toque no estado de cada atividade. Em curso: escolha a percentagem. Concluída fica concluída hoje. Com o botão da câmara junta fotografias de cada atividade, tiradas na hora ou da galeria. No fim carregue em Guardar, que grava tudo de uma vez.</p>
         ${barraConc}
         <div class="sitrows">${rowsSit || `<div class="empty">${u.acts.length ? "Tudo concluído nesta fração. Desligue \"Esconder concluídas\" para ver as concluídas." : "Esta fração ainda não tem atividades."}</div>`}</div>
         <div class="vbar sitbar"><span class="vb-l"><b class="num">${nSit ? `${nSit} por guardar` : "Nada por guardar"}</b>${nSit ? `<button class="btn sm ghost vb-seg" id="sitDesf">Desfazer</button>` : ""}</span>
@@ -616,10 +619,23 @@ const sitOrig = (a) => { const r = S.res.get(a.id); return { est: r && r.estado 
 const sitAtual = (a) => { const o = sitOrig(a), m = ui.sit && ui.sit[a.id]; return m ? { est: m.est, pct: m.pct } : o; };
 const sitMudou = (a) => { const o = sitOrig(a), m = ui.sit && ui.sit[a.id]; return !!m && (m.est !== o.est || (m.est === "curso" && m.pct !== o.pct)); };
 const visiveisSit = (u) => Object.values(S.acts).filter((a) => a.unidade === u.id);
+/** Fotografias do ponto de situação ainda por guardar, por atividade: { unidade, fotos: [dataURL], nota }. */
+const sitFotosDe = (id) => (ui.sitFotos && ui.sitFotos[id]) || { fotos: [], nota: "" };
+const limparSitFotos = (uid) => { for (const [id, f] of Object.entries(ui.sitFotos || {})) if (f.unidade === uid) delete ui.sitFotos[id]; };
 /** Grava o ponto de situação de uma fração: cada atividade mudada fica com o seu registo no histórico; um só Anular desfaz tudo. */
 async function guardarSit(u) {
   const lista = visiveisSit(u).filter((a) => sitMudou(a));
   const hoje = S.hoje, agora = new Date().toISOString();
+  // fotografias primeiro (não dependem do estado): ficam na galeria da fração, ligadas à atividade
+  let nFotos = 0;
+  for (const a of visiveisSit(u)) {
+    const sf = ui.sitFotos && ui.sitFotos[a.id];
+    if (!sf || !sf.fotos.length) continue;
+    const m = ui.sit && ui.sit[a.id], est = m && sitMudou(a) ? m : sitOrig(a);
+    const nota = (sf.nota || "").trim() || `Ponto de situação: ${est.est === "conc" ? "concluída" : est.est === "curso" ? `em curso, ${est.pct}%` : "não iniciada"}`;
+    for (const f of sf.fotos) { await store.addFoto(a.id, u.id, f, nota); nFotos++; }
+    delete ui.sitFotos[a.id];
+  }
   for (const a of lista) {
     const r = S.res.get(a.id), o = sitOrig(a), m = ui.sit[a.id], N = nomeAtiv(a) + " em " + a.unidade;
     let patch, reg;
@@ -641,7 +657,7 @@ async function guardarSit(u) {
     await store.updateAtividade(a.id, patch, reg);
     delete ui.sit[a.id];
   }
-  return lista.length;
+  return { n: lista.length, nFotos };
 }
 function bindSit(u) {
   ui.sit = ui.sit || {};
@@ -664,13 +680,30 @@ function bindSit(u) {
     if (val >= 100) muda(id, "conc"); else muda(id, "curso", val);
   });
   const desf = $("#sitDesf");
-  if (desf) desf.onclick = () => { for (const [id, m] of Object.entries(ui.sit)) if (m.unidade === u.id) delete ui.sit[id]; render(); };
+  if (desf) desf.onclick = () => { for (const [id, m] of Object.entries(ui.sit)) if (m.unidade === u.id) delete ui.sit[id]; limparSitFotos(u.id); render(); };
+  // fotografias por atividade (câmara ou galeria), guardadas com o resto
+  ui.sitFotos = ui.sitFotos || {};
+  bindFotoPickers(view, (key, fotos) => {
+    const id = key.slice(2), cur = ui.sitFotos[id] || { unidade: u.id, fotos: [], nota: "" };
+    ui.sitFotos[id] = { ...cur, unidade: u.id, fotos: cur.fotos.concat(fotos) };
+    render();
+  });
+  view.querySelectorAll("[data-prm]").forEach((b) => (b.onclick = () => {
+    const [key, i] = b.dataset.prm.split("|"), id = key.slice(2), sf = ui.sitFotos[id];
+    if (!sf) return;
+    sf.fotos.splice(+i, 1);
+    if (!sf.fotos.length) delete ui.sitFotos[id];
+    render();
+  }));
+  view.querySelectorAll("[data-sfn]").forEach((inp) => (inp.oninput = () => { const sf = ui.sitFotos[inp.dataset.sfn]; if (sf) sf.nota = inp.value; }));
   const sv = $("#sitSave");
   const guardar = async () => {
     if (sv) sv.disabled = true;
     try {
-      const n = await guardarSit(u);
-      if (n) toast(`Ponto de situação de ${u.id} guardado: ${n} ${n === 1 ? "atividade" : "atividades"}`);
+      const { n, nFotos } = await guardarSit(u);
+      const fts = nFotos ? `${nFotos} ${nFotos === 1 ? "fotografia" : "fotografias"}` : "";
+      if (n) toast(`Ponto de situação de ${u.id} guardado: ${n} ${n === 1 ? "atividade" : "atividades"}${fts ? " e " + fts : ""}${fts ? ". O Anular não apaga as fotografias" : ""}`);
+      else if (nFotos) { toast(`${u.id}: ${fts} ${nFotos === 1 ? "guardada" : "guardadas"} na galeria da fração`, { anular: false }); render(); }
       return true;
     } catch (e) { toast("Não foi possível guardar: " + erroSimples(e), { anular: false }); if (sv && sv.isConnected) sv.disabled = false; return false; }
   };
@@ -678,13 +711,13 @@ function bindSit(u) {
   const sg = $("#sitSeg");
   if (sg) sg.onclick = async () => {
     const seg = vizinhas(u.id).seg; if (!seg) return;
-    const n = visiveisSit(u).filter((a) => sitMudou(a)).length;
+    const n = visiveisSit(u).filter((a) => sitMudou(a) || sitFotosDe(a.id).fotos.length).length;
     if (n) {
       const k = await perguntar({ titulo: `Guardar o ponto de situação de ${esc(u.id)}?`, texto: `<p>Tem ${n} ${n === 1 ? "alteração" : "alterações"} por guardar nesta fração.</p>`,
         opcoes: [{ k: "sim", l: "Guardar e seguir", estilo: "pri" }, { k: "nao", l: "Seguir sem guardar" }, { k: "c", l: "Ficar aqui" }] });
       if (k === "c" || !k) return render();
       if (k === "sim" && !(await guardar())) return;
-      if (k === "nao") for (const [id, m] of Object.entries(ui.sit)) if (m.unidade === u.id) delete ui.sit[id];
+      if (k === "nao") { for (const [id, m] of Object.entries(ui.sit)) if (m.unidade === u.id) delete ui.sit[id]; limparSitFotos(u.id); }
     }
     ui.lastUnit = seg; ui.unidadeTab = "sit"; // a fração seguinte abre também no ponto de situação
     location.hash = "#u-" + seg;
