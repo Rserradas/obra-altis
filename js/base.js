@@ -47,6 +47,7 @@ export const ICON = {
   mais: '<svg viewBox="0 0 24 24"><circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/></svg>',
   vistorias: '<svg viewBox="0 0 24 24"><rect x="5" y="4" width="14" height="17" rx="2"/><path d="M9 4V3h6v1"/><path d="m8.5 12 2 2 4-4M8.5 17h7"/></svg>',
   semana: '<svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/><path d="m8.5 15 2.2 2.2 4.8-4.8"/></svg>',
+  proximas: '<svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/><path d="M8 15h6M12 12l3 3-3 3"/></svg>',
   painel: '<svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/></svg>',
   unidades: '<svg viewBox="0 0 24 24"><path d="M4 21V5l8-3 8 3v16"/><path d="M9 21v-4h6v4M8 8h2M14 8h2M8 12h2M14 12h2"/></svg>',
   plano: '<svg viewBox="0 0 24 24"><path d="M3 6h8M3 12h12M3 18h6"/><rect x="13" y="4" width="8" height="4" rx="1"/><rect x="17" y="10" width="4" height="4" rx="1"/><rect x="11" y="16" width="8" height="4" rx="1"/></svg>',
@@ -83,7 +84,8 @@ export function filtrosAlterados() {
   if (ui.regSort || ui.regQ) return true;
   const ganttMudou = g && (g.bloco || g.unidade || g.ativ || (g.ativs && g.ativs.length) || g.grupo || g.estado || g.equipa || g.tipo || g.q || g.de || g.ate || g.abertas === false || g.ligacoes === false || g.zoom !== "semana" || (g.abertosB && g.abertosB.size) || (g.abertos && g.abertos.size) || g.sel);
   const vl = ui.vistLista, vistMudou = !!(vl && vl.por);
-  return !!(planoMudou || ganttMudou || vistMudou || eqfAtivo(ui.eqF) || ui.soModelo || ui.bloco !== "todos" || ui.unitEdit || ui.uSemConc === false || !!ui.porVist || !!ui.comPend);
+  const px = ui.prox, proxMudou = !!(px && (px.bloco || px.equipa || px.grupo || px.ver));
+  return !!(proxMudou || planoMudou || ganttMudou || vistMudou || eqfAtivo(ui.eqF) || ui.soModelo || ui.bloco !== "todos" || ui.unitEdit || ui.uSemConc === false || !!ui.porVist || !!ui.comPend);
 }
 /* Os filtros de Trabalhos, A minha semana e Apartamentos ficam guardados neste dispositivo, por utilizador. */
 
@@ -126,6 +128,7 @@ export function reporFiltros() {
   ui.vistLista = null;
   if (ui.semana) ui.semana = { equipa: "", bloco: "", ver: "" };
   ui.semana = null;
+  ui.prox = null;
   ui.delUnit = null;
   ui.uDel = null;
   ui.lastUnit = null;

@@ -14,6 +14,7 @@ import { painelView } from "./painel.js";
 import { pendentesView } from "./pendentes.js";
 import { perguntar, planoView } from "./plano.js";
 import { previsaoView } from "./previsao.js";
+import { proximasView } from "./proximas.js";
 import { segurarView } from "./segurar.js";
 import { abrirPesquisaMovel, ligarPesquisa, pesquisaHTML, relatorioView, semanaView } from "./semana.js";
 import { unidadeView, unidadesView } from "./unidades.js";
@@ -271,9 +272,10 @@ export function navItems() {
   const vist = { id: "vistorias", label: "Relatórios de vistoria", short: "Relatórios" };
   const pend = { id: "pendentes", label: "Pendentes", short: "Pendentes" };
   const prev = { id: "previsao", label: "Fim da obra", short: "Fim" };
-  if (p === "empreiteiro") return [{ id: "semana", label: "A minha semana", short: "Semana" }, pend, items[2], items[4], items[1], { ...items[0], soLado: true }, { ...prev, soLado: true }, { ...vist, soLado: true }, { ...items[3], soLado: true }];
-  if (p === "fiscal") return [items[1], pend, vist, items[0], items[2], { ...prev, soLado: true }, { ...items[4], soLado: true }, { ...items[3], soLado: true }];
-  return [items[0], prev, items[1], items[2], { ...pend, soLado: true }, { ...items[4], soLado: true }, { ...vist, soLado: true }, items[3]];
+  const prox = { id: "proximas", label: "Próximas semanas", short: "Próximas" };
+  if (p === "empreiteiro") return [{ id: "semana", label: "A minha semana", short: "Semana" }, prox, pend, items[2], items[1], { ...items[4], soLado: true }, { ...items[0], soLado: true }, { ...prev, soLado: true }, { ...vist, soLado: true }, { ...items[3], soLado: true }];
+  if (p === "fiscal") return [items[1], pend, vist, items[0], items[2], { ...prox, soLado: true }, { ...prev, soLado: true }, { ...items[4], soLado: true }, { ...items[3], soLado: true }];
+  return [items[0], prev, items[1], items[2], { ...prox, soLado: true }, { ...pend, soLado: true }, { ...items[4], soLado: true }, { ...vist, soLado: true }, items[3]];
 }
 export function routeView() {
   let h = location.hash.replace("#", "");
@@ -286,10 +288,10 @@ export function routeView() {
   }
   if (h === "equipa" && store.user.papel !== "dono") h = "painel";
   if (h === "equipas" && !can("executar")) h = "painel";
-  const v = { pendentes: pendentesView, painel: painelView, unidades: unidadesView, plano: planoView, regras: regrasView, equipa: equipaView, copia: copiaView, equipas: equipasView, gantt: ganttView, semana: semanaView, relatorio: relatorioView, vistorias: vistoriasView, relvist: relVistView, previsao: previsaoView, planequipa: planEquipaView, segurar: segurarView, grupos: gruposView }[h] || painelView;
+  const v = { pendentes: pendentesView, painel: painelView, unidades: unidadesView, plano: planoView, regras: regrasView, equipa: equipaView, copia: copiaView, equipas: equipasView, gantt: ganttView, semana: semanaView, relatorio: relatorioView, vistorias: vistoriasView, relvist: relVistView, previsao: previsaoView, proximas: proximasView, planequipa: planEquipaView, segurar: segurarView, grupos: gruposView }[h] || painelView;
   if (h === "planequipa" && !can("executar")) h = "painel";
   const navDe = { equipa: "regras", copia: "regras", grupos: "regras", equipas: "regras", planequipa: "regras", relatorio: "painel", relvist: "vistorias", segurar: "painel" };
-  return { nav: navDe[h] || (h in { painel: 1, unidades: 1, plano: 1, regras: 1, gantt: 1, semana: 1, vistorias: 1, previsao: 1, pendentes: 1 } ? h : "painel"), ...v() };
+  return { nav: navDe[h] || (h in { painel: 1, unidades: 1, plano: 1, regras: 1, gantt: 1, semana: 1, vistorias: 1, previsao: 1, pendentes: 1, proximas: 1 } ? h : "painel"), ...v() };
 }
 
 /* ============================================================ login */

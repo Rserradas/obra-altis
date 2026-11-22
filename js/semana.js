@@ -9,6 +9,7 @@ import { atencaoHTML, bindAtencao } from "./painel.js";
 import { filtroGrupo, grupoSelectHTML, nomeGrupo } from "./grupos.js";
 import { concluirHoje, editarData } from "./plano.js";
 import { bindCommon } from "./previsao.js";
+import { impAbertos } from "./proximas.js";
 import { ORD_BLOCOS, analiseSegurar, ganhoEm, ordenarSeg, pl, rotuloAlvo } from "./segurar.js";
 import { ultimaVistoria } from "./unidades.js";
 
@@ -46,10 +47,11 @@ export function semanaView() {
   const linha = ({ a, r }, tipo0) => {
     const tipo = tipo0 === "auto" ? tipoDe(r) : tipo0;
     const pct = Math.round(a.pctEmp ?? 0);
+    const nImp = tipo === "curso" ? 0 : impAbertos(a).length;
     const esperaPor = tipo === "espera" ? [...new Set(r.bloqueadaPor.map((id) => S.acts[id]).filter(Boolean).map((x) => nomeAtiv(x) + (x.unidade !== a.unidade ? " (" + x.unidade + ")" : "")))] : [];
     return `<div class="srow ${r.atrasada ? "atr" : ""}">
       <span class="mono su">${esc(a.unidade)}</span>
-      <button class="lnk-b sn" data-a="${a.id}"><b>${esc(nomeAtiv(a))}</b>${a.equipa || esperaPor.length ? `<span class="sx">${a.equipa ? `<small>${esc(a.equipa)}</small>` : ""}${esperaPor.length ? `<small class="wait1">à espera de ${esc(esperaPor.slice(0, 2).join(", "))}${esperaPor.length > 2 ? "..." : ""}</small>` : ""}</span>` : ""}</button>
+      <button class="lnk-b sn" data-a="${a.id}"><b>${esc(nomeAtiv(a))}</b>${a.equipa || esperaPor.length || nImp ? `<span class="sx">${nImp ? `<small class="impx" title="Tem impedimentos por resolver: veja em Próximas semanas ou na ficha">${nImp === 1 ? "1 impedimento" : nImp + " impedimentos"}</small>` : ""}${a.equipa ? `<small>${esc(a.equipa)}</small>` : ""}${esperaPor.length ? `<small class="wait1">à espera de ${esc(esperaPor.slice(0, 2).join(", "))}${esperaPor.length > 2 ? "..." : ""}</small>` : ""}</span>` : ""}</button>
       <div class="si">${tipo === "curso" ? `<div class="sbar"><i style="width:${pct}%"></i></div><span class="num mono">${pct}%</span><span class="note">${r.fim === hoje ? "acaba hoje" : "até " + fd(r.fim)}</span>`
         : `<span class="note">${r.inicio < hoje ? `devia ter começado a ${fd(r.inicio)}` : `${tipo === "espera" ? "pode começar" : "começa"} ${r.inicio === hoje ? "hoje" : fd(r.inicio)}`}${w.ver === "acabhoje" ? ", devia acabar hoje" : ""}</span>`}${deltaHTML(r.atraso)}</div>
       <div class="sa">${tipo === "curso" ? `<button class="btn sm" data-q="mais|${a.id}" ${pct >= 95 ? "disabled" : ""}>+10%</button><button class="btn sm ok" data-q="fim|${a.id}">Concluir</button>`
@@ -62,7 +64,7 @@ export function semanaView() {
       : `<div class="empty">${w.equipa || w.bloco || w.grupo ? `Nada nesta lista com estes filtros. <button class="btn sm" data-repor>Limpar filtros</button>` : "Nada nesta lista."}</div>`}
   </section>`;
   const html = `
-    <div class="card-h"><h1>A minha semana</h1><span class="note">De hoje, ${fd(hoje)}, a ${fd(lim)}</span></div>
+    <div class="card-h"><h1>A minha semana</h1><span class="note">De hoje, ${fd(hoje)}, a ${fd(lim)} · <a href="#proximas">Ver as próximas semanas</a></span></div>
     <div class="kpis kpis3">
       <button class="kpi k-curso ${w.ver === "curso" ? "sel" : ""}" data-sver="curso" aria-pressed="${w.ver === "curso"}" title="Mostrar só as em curso"><b>${emCurso.length}</b><span>Em curso, ${acabar} acabam esta semana</span></button>
       <button class="kpi k-ok ${w.ver === "comecar" ? "sel" : ""}" data-sver="comecar" aria-pressed="${w.ver === "comecar"}" title="Mostrar só as para começar"><b>${comecar.length}</b><span>Para começar até ${fd(lim)}</span></button>

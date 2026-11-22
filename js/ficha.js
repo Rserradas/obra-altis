@@ -5,6 +5,7 @@ import { nomeAtiv } from "./calculo.js";
 import { atribuirEquipa, openEquipa } from "./equipas.js";
 import { S, store } from "./estado.js";
 import { closeNova, openNova, ordenaUnidades } from "./nova.js";
+import { bindImp, impFichaHTML } from "./proximas.js";
 import { bindPendentes, pendAberto, pendDe, pendFormHTML, pendListaHTML } from "./pendentes.js";
 import { bindDateInputs, bindDepPicker, concluirHoje, confirmar, dateInput, depPickerHTML, editarData, inicioRecalc, perguntar, recalcularFim, recalcularInicio, rotuloAt } from "./plano.js";
 import { bindFotoPickers, bindPctCtl, fotoPickerHTML, loadFotos, pctCtlHTML, pendentesHTML } from "./unidades.js";
@@ -117,6 +118,7 @@ export function renderSheet() {
       ${r.atrasada ? `<div class="banner warn">A previsão de fim (${fd(r.prevFim)}) já passou há ${r.atraso} dias sem a atividade estar concluída.${can("executar") ? " Se já acabou, escreva o fim real; se não, indique uma nova previsão." : ""}${r.provFim > r.prevFim ? ` As seguintes já contam com o fim a ${fd(r.provFim)}.` : ""}</div>` : ""}
       ${a.motivo ? `<div class="note"><b>Motivo do atraso:</b> ${esc(a.motivo)}</div>` : ""}
       ${a.obs ? `<div class="note"><b>Observações:</b> ${esc(a.obs)}</div>` : ""}
+      ${impFichaHTML(a, r)}
       ${can("criar") ? `<div class="row" style="gap:6px"><button class="btn sm" id="bNovaU" title="Criar uma atividade nova em ${esc(a.unidade)}">+ Nova atividade nesta fração</button><button class="btn sm" id="bNovaSeg" title="Criar uma atividade nova que só começa quando esta acabar">+ Nova atividade a seguir a esta</button><button class="btn sm" id="bCopiar" title="Criar esta mesma atividade noutros apartamentos, lojas, zonas comuns ou no geral">Copiar para outras frações</button></div>
         ${can("executar") ? `<details class="formbox" id="mudaBox"><summary><b>Mudar para outra fração</b> <span class="note">apartamento, loja, zona comum ou geral</span></summary>
           <div style="display:flex;flex-direction:column;gap:10px;margin-top:10px">
@@ -205,6 +207,7 @@ export function renderSheet() {
     sh.querySelector(".sheet-b").scrollTop = 0;
   }));
   bindPendentes(sh);
+  bindImp(sh);
   sh.querySelectorAll("[data-irpend]").forEach((b) => (b.onclick = () => { ui.lastUnit = b.dataset.irpend; ui.unidadeTab = store.user.papel === "fiscal" ? "vist" : "pend"; closeSheet(); }));
   $('.scrim[data-dw="ativ"]').onclick = () => fecharFicha();
   $(".x", sh).onclick = () => fecharFicha();
