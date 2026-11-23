@@ -1718,3 +1718,54 @@ button.pchip:hover { border-color: currentColor; }
   .prow .pchip { flex: 0 0 auto; }
   .prow .pchip.dep, .prow .pchip.imp[data-impv] { flex: 0 1 auto; min-width: 60px; }
 }
+/* relatório de vistoria: avanço das frações e Gantt de cada fração */
+.rv-fv { line-height: 1.6; } .rv-fv small { color: #5b635e; }
+.rg-av { display: flex; flex-direction: column; gap: 5px; }
+.rg-l { display: grid; grid-template-columns: 210px minmax(0, 1fr) 92px; align-items: center; gap: 10px; break-inside: avoid; }
+.rg-n { display: flex; flex-direction: column; line-height: 1.15; min-width: 0; }
+.rg-n b { font-size: 13px; } .rg-n small { font-size: 11px; color: #5b635e; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.rg-bar { position: relative; height: 16px; background: #eceee9; border-radius: 3px; }
+.rg-bar i { position: absolute; left: 0; top: 0; bottom: 0; background: #1E4D8C; border-radius: 3px; }
+.rg-bar em { position: absolute; top: -3px; bottom: -3px; width: 0; border-left: 2px dashed #A86A12; }
+.rg-v { display: flex; align-items: baseline; gap: 6px; } .rg-v b { font-size: 14px; min-width: 38px; text-align: right; } .rg-v small { font-size: 11px; color: #5b635e; white-space: nowrap; }
+.rg-eixo { margin-top: -2px; } .rg-esc { display: flex; justify-content: space-between; font-size: 10px; color: #9aa39d; }
+.rg-leg { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; margin-top: 6px; }
+.rg-k { display: inline-block; width: 14px; height: 9px; border-radius: 2px; vertical-align: middle; }
+.rg-k-av { background: #1E4D8C; } .rg-k-med { width: 0; height: 12px; border-left: 2px dashed #A86A12; border-radius: 0; }
+.rg-k.conc, .rg-b.conc { background: #2E7D4F; }
+.rg-k.curso, .rg-b.curso { background: #BFD6EE; } .rg-b.curso i { background: #1E6FB8; }
+.rg-k.atr, .rg-b.atr { background: #F2C4BD; } .rg-b.atr i { background: #BE3A2B; } .rg-k.atr { background: #BE3A2B; }
+.rg-k.bloq, .rg-b.bloq { background: #C9BFE3; }
+.rg-k.ini, .rg-b.ini { background: #fff; border: 1px solid #8a928d; } .rg-b.ini i, .rg-b.bloq i { background: #6f7a74; }
+.rg-k.prev { height: 3px; background: #9aa39d; }
+.rg-g { margin: 4px 0 10px; }
+.rg-g-l { display: grid; grid-template-columns: 170px minmax(0, 1fr) 40px; align-items: center; gap: 8px; min-height: 15px; }
+.rg-g-n { font-size: 11.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: #3d4440; }
+.rg-g-l.vista .rg-g-n { font-weight: 700; color: #1a1e1c; }
+.rg-g-l.vista { background: #f1f5fb; }
+.rg-g-t { position: relative; height: 15px; }
+.rg-g-p { font-size: 10.5px; color: #5b635e; text-align: right; }
+.rg-g-cab { border-bottom: 1px solid #d5d9d4; min-height: 18px; }
+.rg-g-cab .rg-g-n { font-size: 10.5px; text-transform: uppercase; letter-spacing: .04em; color: #5b635e; }
+.rg-g-ax { height: 18px; }
+.rg-g-ax span { position: absolute; bottom: 2px; font-size: 10px; color: #5b635e; white-space: nowrap; padding-left: 3px; border-left: 1px solid #c4c9c2; line-height: 1.1; }
+.rg-g-c { position: relative; }
+.rg-g-c::after { content: ""; position: absolute; top: 0; bottom: 0; width: 0; border-left: 2px solid #BE3A2B; left: calc(170px + 8px + (100% - 170px - 40px - 16px) * var(--hoje) / 100); pointer-events: none; }
+.rg-g-c .rg-g-l + .rg-g-l { border-top: 1px solid #f0f1ee; }
+.rg-b { position: absolute; top: 3px; height: 8px; border-radius: 2px; overflow: hidden; box-sizing: border-box; }
+.rg-b i { position: absolute; left: 0; top: 0; bottom: 0; }
+.rg-g-t s { position: absolute; top: 12px; height: 2px; background: #9aa39d; text-decoration: none; }
+.rg-leg-g { margin-bottom: 4px; }
+@media (max-width: 640px) {
+  .rg-l { grid-template-columns: 78px minmax(0, 1fr) 44px; gap: 6px; } .rg-n small, .rg-v small { display: none; }
+  .rg-g-l { grid-template-columns: 96px minmax(0, 1fr) 30px; gap: 5px; }
+  .rg-g-c::after { left: calc(96px + 5px + (100% - 96px - 30px - 10px) * var(--hoje) / 100); }
+  .rg-g-ax span:nth-child(even) { display: none; }
+}
+.rg-av, .rg-g, .rg-leg { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+@media print {
+  .rg-g { break-inside: avoid; }
+  .rg-l { grid-template-columns: 170px minmax(0, 1fr) 118px; }
+  .rg-g-l { grid-template-columns: 150px minmax(0, 1fr) 34px; }
+  .rg-g-c::after { left: calc(150px + 8px + (100% - 150px - 34px - 16px) * var(--hoje) / 100); }
+}

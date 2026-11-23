@@ -7,6 +7,7 @@ import { render } from "./nucleo.js";
 import { PEND_ACAO, pendEstadoEm, pendRegVivo, pendTodos } from "./pendentes.js";
 import { perguntar } from "./plano.js";
 import { bindCommon } from "./previsao.js";
+import { avancoFracoesHTML, ganttFracaoHTML, legendaGanttHTML } from "./relgraf.js";
 import { pl } from "./segurar.js";
 import { abrirGaleria } from "./unidades.js";
 
@@ -150,6 +151,7 @@ export function relVistView() {
       for (const l of linhas) { const k = l.unidade || "?"; (porU.get(k) || porU.set(k, []).get(k)).push(l); }
       const visitadas = new Set([...porU.keys(), ...sel.filter((r) => r.pend && r.unidade).map((r) => r.unidade)]);
       const ordemU = ordenaUnidades([...porU.keys()].map((id) => S.uMap[id] || { id, bloco: "?", piso: 99 })).map((u) => u.id);
+      const ordemV = ordenaUnidades([...visitadas].map((id) => S.uMap[id] || { id, bloco: "?", piso: 99 })).map((u) => u.id);
       const pctTxt = (v) => (v == null ? "s/v" : v + "%");
       const nomeU = (id) => { const u = S.uMap[id]; return u ? (u.tipo === "Apartamento" || /-L\d+$/.test(u.id) ? u.id : u.nome) : id; };
       const descU = (id) => { const u = S.uMap[id]; if (!u) return ""; return [u.tipo, u.bloco && u.bloco !== "Geral" ? "Bloco " + u.bloco : "", u.tipo === "Apartamento" ? "Piso " + u.piso : ""].filter(Boolean).join(" · "); };
@@ -192,6 +194,7 @@ export function relVistView() {
         <table class="rv-id"><tbody>
           <tr><th>${dias.length === 1 ? "Data" : "Datas"}</th><td>${dias.length === 1 ? diaNome(dias[0]) : dias.map((d) => diaNome(d)).join("; ")}</td><th>Fiscal</th><td>${esc(fiscais.join(", "))}</td></tr>
           <tr><th>Horário</th><td>${horario.join("<br>")}</td><th>Emitido</th><td>${fdt(new Date().toISOString())}, por ${esc(store.user.nome)}</td></tr>
+          <tr><th>${ordemV.length === 1 ? "Fração vistoriada" : "Frações vistoriadas"}</th><td colspan="3" class="rv-fv">${ordemV.map((id) => `<span class="mono">${esc(nomeU(id))}</span>`).join(", ")} <small>(${pl(ordemV.length, "fração", "frações")})</small></td></tr>
         </tbody></table>
         <div class="rv-res num">
           <div><b>${visitadas.size}</b><span>${visitadas.size === 1 ? "fração visitada" : "frações visitadas"}</span></div>
@@ -201,6 +204,11 @@ export function relVistView() {
           <div class="${parado.length ? "aviso" : ""}"><b>${parado.length}</b><span>sem avanço desde a vistoria anterior</span></div>
           <div class="${nPendAb ? "aviso" : ""}"><b>${nPendAb}</b><span>${nPendAb === 1 ? "pendente por resolver" : "pendentes por resolver"}</span></div>
         </div>
+
+        <section class="rv-sec rv-avs"><h2>${++sec}. Avanço das frações vistoriadas</h2>
+          <p class="rv-nota">Percentagem de acabamento de cada fração visitada nestes dias. O traço vertical é a média da obra.</p>
+          ${avancoFracoesHTML(ordemV, nomeU, descU)}
+        </section>
 
         <section class="rv-sec"><h2>${++sec}. Pontos de atenção</h2>
           <h3 class="rv-sub">Diferenças entre o fiscal e o empreiteiro</h3>
@@ -227,8 +235,10 @@ export function relVistView() {
         </section>
 
         <section class="rv-sec"><h2>${++sec}. Registo por fração</h2>
-          <p class="rv-nota">"Vistoria anterior" é a última vistoria antes deste período; "Agora" é a percentagem verificada no fim do período; "Evolução" é a diferença entre as duas, em pontos percentuais (pp). Por baixo de cada especialidade estão as observações e as fotografias dessa especialidade; toque numa fotografia para a ver em grande.</p>
-          ${ordemU.map((uid) => `<div class="rv-u"><h3><span class="mono">${esc(nomeU(uid))}</span><small>${esc(descU(uid))}</small></h3>
+          <p class="rv-nota">"Vistoria anterior" é a última vistoria antes deste período; "Agora" é a percentagem verificada no fim do período; "Evolução" é a diferença entre as duas, em pontos percentuais (pp). Por baixo de cada especialidade estão as observações e as fotografias dessa especialidade; toque numa fotografia para a ver em grande. Cada fração começa com o seu Gantt, com todas as atividades.</p>
+          ${legendaGanttHTML()}
+          ${ordemU.map((uid) => `<div class="rv-u"><h3><span class="mono">${esc(nomeU(uid))}</span><small>${esc(descU(uid))}${S.uMap[uid] ? ` · avanço ${S.uMap[uid].pct}%` : ""}</small></h3>
+            ${ganttFracaoHTML(uid, new Set(porU.get(uid).map((l) => l.ativ).filter(Boolean)))}
             <table class="rv-t"><thead><tr><th>Especialidade</th><th class="n">Vistoria anterior</th><th class="n">Agora</th><th class="n">Evolução</th><th class="n">Empreiteiro</th></tr></thead>
             ${porU.get(uid).map((l) => { const at = atencao.includes(l) ? "at" : "", figs = fotosDe(l.ativ, l.nome, l.notas), notas = l.notas.map((t) => esc(t)).join(" · ");
               const obs = l.confirmado || notas || figs ? `<tr class="rv-obs ${at}"><td colspan="5">${l.confirmado || notas ? `<div>${l.confirmado ? `<span class="rv-conf">Confirmado sem alteração</span> ` : ""}${notas}</div>` : ""}${figs ? `<div class="rv-fl">${figs}</div>` : ""}</td></tr>` : "";

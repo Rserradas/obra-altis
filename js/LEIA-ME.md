@@ -19,6 +19,7 @@ A aplicação abre em `app.js`, que só arranca o resto. O código de cada ecrã
 | `plano.js` | Trabalhos: lista, escolha em massa, datas e gravação com as seguintes. | 895 |
 | `previsao.js` | Fim da obra. | 242 |
 | `proximas.js` | Próximas semanas e impedimentos (o que falta para cada trabalho poder arrancar). | 330 |
+| `relgraf.js` | Gráficos do relatório de vistoria: avanço de cada fração vistoriada e Gantt de cada fração. | 85 |
 | `segurar.js` | O que está a segurar a obra. | 202 |
 | `semana.js` | A minha semana, relatório para reunião e pesquisa rápida. | 206 |
 | `unidades.js` | Apartamentos, página da fração, vistoria e fotografias. | 534 |
