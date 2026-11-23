@@ -1,13 +1,13 @@
 // A minha semana, relatório para reunião e pesquisa rápida.
 import { addDays, pctEfetiva } from "../engine.js";
-import { $, ESTADO, PLANO_PADRAO, casaPesquisa, semAcento, deltaHTML, esc, fd, termosPesquisa, toast, ui } from "./base.js";
+import { $, ESTADO, PLANO_PADRAO, can, casaPesquisa, semAcento, deltaHTML, esc, fd, termosPesquisa, toast, ui } from "./base.js";
 import { actsObra, modeloTag, nomeAtiv } from "./calculo.js";
 import { S, store } from "./estado.js";
 import { openSheet } from "./ficha.js";
 import { render } from "./nucleo.js";
 import { atencaoHTML, bindAtencao } from "./painel.js";
 import { filtroGrupo, grupoSelectHTML, nomeGrupo } from "./grupos.js";
-import { concluirHoje, editarData } from "./plano.js";
+import { concluirHoje, concluirVarias, editarData, iniciarVarias } from "./plano.js";
 import { bindCommon } from "./previsao.js";
 import { impAbertos } from "./proximas.js";
 import { ORD_BLOCOS, analiseSegurar, ganhoEm, ordenarSeg, pl, rotuloAlvo } from "./segurar.js";
@@ -43,28 +43,44 @@ export function semanaView() {
   const aviso = AVISOS.find(([k]) => k === w.ver);
   const VER = [["", "Tudo"], ["curso", "Em curso"], ["comecar", "Para começar"], ["espera", "À espera de outras"]];
   const MAX = aviso ? 200 : 60;
+  // escolher várias: marca-se na lista e regista-se tudo de uma vez, com data de início e de fim
+  const esc0 = !!ui.semEsc && can("executar");
+  if (!(ui.semSel instanceof Set)) ui.semSel = new Set();
+  const sel = ui.semSel;
+  for (const id of [...sel]) if (!S.acts[id] || S.res.get(id).estado === "concluida") sel.delete(id);
   const tipoDe = (r) => (r.estado === "em_curso" ? "curso" : r.estado === "bloqueada" ? "espera" : "comecar");
   const linha = ({ a, r }, tipo0) => {
     const tipo = tipo0 === "auto" ? tipoDe(r) : tipo0;
     const pct = Math.round(a.pctEmp ?? 0);
     const nImp = tipo === "curso" ? 0 : impAbertos(a).length;
     const esperaPor = tipo === "espera" ? [...new Set(r.bloqueadaPor.map((id) => S.acts[id]).filter(Boolean).map((x) => nomeAtiv(x) + (x.unidade !== a.unidade ? " (" + x.unidade + ")" : "")))] : [];
-    return `<div class="srow ${r.atrasada ? "atr" : ""}">
+    const marc = esc0 && sel.has(a.id);
+    const nomeTag = esc0 ? `<span class="sn"` : `<button class="lnk-b sn" data-a="${a.id}"`;
+    return `<div class="srow ${r.atrasada ? "atr" : ""} ${esc0 ? "esc" : ""} ${marc ? "sel" : ""}" ${esc0 ? `data-srow="${a.id}"` : ""}>
       <span class="mono su">${esc(a.unidade)}</span>
-      <button class="lnk-b sn" data-a="${a.id}"><b>${esc(nomeAtiv(a))}</b>${a.equipa || esperaPor.length || nImp ? `<span class="sx">${nImp ? `<small class="impx" title="Tem impedimentos por resolver: veja em Próximas semanas ou na ficha">${nImp === 1 ? "1 impedimento" : nImp + " impedimentos"}</small>` : ""}${a.equipa ? `<small>${esc(a.equipa)}</small>` : ""}${esperaPor.length ? `<small class="wait1">à espera de ${esc(esperaPor.slice(0, 2).join(", "))}${esperaPor.length > 2 ? "..." : ""}</small>` : ""}</span>` : ""}</button>
+      ${nomeTag}><b>${esc(nomeAtiv(a))}</b>${a.equipa || esperaPor.length || nImp ? `<span class="sx">${nImp ? `<small class="impx" title="Tem impedimentos por resolver: veja em Próximas semanas ou na ficha">${nImp === 1 ? "1 impedimento" : nImp + " impedimentos"}</small>` : ""}${a.equipa ? `<small>${esc(a.equipa)}</small>` : ""}${esperaPor.length ? `<small class="wait1">à espera de ${esc(esperaPor.slice(0, 2).join(", "))}${esperaPor.length > 2 ? "..." : ""}</small>` : ""}</span>` : ""}${esc0 ? "</span>" : "</button>"}
       <div class="si">${tipo === "curso" ? `<div class="sbar"><i style="width:${pct}%"></i></div><span class="num mono">${pct}%</span><span class="note">${r.fim === hoje ? "acaba hoje" : "até " + fd(r.fim)}</span>`
         : `<span class="note">${r.inicio < hoje ? `devia ter começado a ${fd(r.inicio)}` : `${tipo === "espera" ? "pode começar" : "começa"} ${r.inicio === hoje ? "hoje" : fd(r.inicio)}`}${w.ver === "acabhoje" ? ", devia acabar hoje" : ""}</span>`}${deltaHTML(r.atraso)}</div>
-      <div class="sa">${tipo === "curso" ? `<button class="btn sm" data-q="mais|${a.id}" ${pct >= 95 ? "disabled" : ""}>+10%</button><button class="btn sm ok" data-q="fim|${a.id}">Concluir</button>`
+      <div class="sa">${esc0 ? `<input type="checkbox" class="sck" ${marc ? "checked" : ""} tabindex="-1" aria-label="Escolher ${esc(nomeAtiv(a) + " " + a.unidade)}">` : tipo === "curso" ? `<button class="btn sm" data-q="mais|${a.id}" ${pct >= 95 ? "disabled" : ""}>+10%</button><button class="btn sm ok" data-q="fim|${a.id}">Concluir</button>`
         : tipo === "comecar" ? `<button class="btn sm pri" data-q="ini|${a.id}">Iniciar</button><button class="btn sm ok" data-q="fim|${a.id}" title="Já está feita: fica concluída hoje">Concluir</button>` : `<button class="btn sm" data-a="${a.id}">Ver ficha</button>`}</div>
     </div>`;
   };
-  const secao = (titulo, sub, lista, tipo, filtro) => `<section class="card">
-    <div class="card-h"><h2>${titulo} <span class="note num">${lista.length}</span></h2>${sub ? `<span class="note">${sub}</span>` : ""}</div>
+  const listas = {};
+  const secao = (titulo, sub, lista, tipo, filtro) => { listas[tipo] = lista.slice(0, MAX).map(({ a }) => a.id); const todas = esc0 && lista.length && listas[tipo].every((id) => sel.has(id)); return `<section class="card">
+    <div class="card-h"><h2>${titulo} <span class="note num">${lista.length}</span></h2>${sub ? `<span class="note">${sub}</span>` : ""}${esc0 && lista.length ? `<button class="btn sm ${todas ? "ghost" : ""}" data-sall="${tipo}">${todas ? "Tirar a escolha" : `Escolher ${lista.length > MAX ? "as " + MAX + " mostradas" : lista.length === 1 ? "esta" : "as " + lista.length}`}</button>` : ""}</div>
     ${lista.length ? `<div class="srows">${lista.slice(0, MAX).map((x) => linha(x, tipo)).join("")}</div>${lista.length > MAX ? (filtro ? `<a class="note" href="#plano" data-semver="${filtro}">Ver as ${lista.length} nos Trabalhos</a>` : `<p class="note">A mostrar ${MAX} de ${lista.length}. Escolha um bloco, grupo ou equipa para ver menos.</p>`) : ""}`
       : `<div class="empty">${w.equipa || w.bloco || w.grupo ? `Nada nesta lista com estes filtros. <button class="btn sm" data-repor>Limpar filtros</button>` : "Nada nesta lista."}</div>`}
-  </section>`;
+  </section>`; };
+  const nSel = sel.size, dSel = nSel ? "" : "disabled";
+  const semIni = ui.semIni || hoje, semFim = ui.semFim || hoje;
+  const barra = esc0 ? `<div class="vbar sembar" id="sembar">
+      <span class="vb-l"><b class="num">${nSel ? `${nSel} escolhida${nSel === 1 ? "" : "s"}` : "Marque as atividades na lista"}</b>${nSel ? `<button class="btn sm ghost vb-seg" id="semLimpa">Limpar</button>` : ""}</span>
+      <span class="sem-d"><label>Início<input class="inp" type="date" id="semIniD" value="${semIni}" max="${hoje}"></label><label>Fim<input class="inp" type="date" id="semFimD" value="${semFim}" max="${hoje}"></label></span>
+      <span class="sitbar-b"><button class="btn" id="semIniB" ${dSel} title="Ficam em curso a partir da data de início">Iniciar</button><button class="btn ok" id="semConcB" ${dSel} title="Ficam concluídas na data de fim; as que ainda não tinham começado ficam com a data de início">Concluir</button></span>
+    </div>` : "";
   const html = `
-    <div class="card-h"><h1>A minha semana</h1><span class="note">De hoje, ${fd(hoje)}, a ${fd(lim)} · <a href="#proximas">Ver as próximas semanas</a></span></div>
+    <div class="card-h"><h1>A minha semana</h1><span class="note">De hoje, ${fd(hoje)}, a ${fd(lim)} · <a href="#proximas">Ver as próximas semanas</a></span>${can("executar") ? `<button class="btn sm ${esc0 ? "warn" : ""}" id="semEsc" title="${esc0 ? "Volta à lista normal" : "Marcar várias atividades e iniciá-las ou concluí-las de uma vez, com a data de início e de fim"}">${esc0 ? "Terminar escolha" : "Escolher várias"}</button>` : ""}</div>
+    ${esc0 ? `<p class="banner sem-dica">Toque nas atividades para as marcar (de várias frações e listas). Em baixo escolha a data de início e a de fim e carregue em Iniciar ou Concluir. Iniciar usa a data de início; Concluir usa a data de fim e, nas que ainda não tinham começado, a de início.</p>` : ""}
     <div class="kpis kpis3">
       <button class="kpi k-curso ${w.ver === "curso" ? "sel" : ""}" data-sver="curso" aria-pressed="${w.ver === "curso"}" title="Mostrar só as em curso"><b>${emCurso.length}</b><span>Em curso, ${acabar} acabam esta semana</span></button>
       <button class="kpi k-ok ${w.ver === "comecar" ? "sel" : ""}" data-sver="comecar" aria-pressed="${w.ver === "comecar"}" title="Mostrar só as para começar"><b>${comecar.length}</b><span>Para começar até ${fd(lim)}</span></button>
@@ -78,7 +94,8 @@ export function semanaView() {
     ${aviso ? secao(aviso[1], aviso[3], aviso[2], "auto", null) : ""}
     ${!w.ver || w.ver === "curso" ? secao("Em curso", "Atualize a percentagem ou conclua", emCurso, "curso", "em_curso") : ""}
     ${!w.ver || w.ver === "comecar" ? secao("Para começar", `Até ${fd(lim)}, já com as anteriores concluídas`, comecar, "comecar", "proximas") : ""}
-    ${!w.ver || w.ver === "espera" ? secao("À espera de outras", "Ainda não podem começar: falta acabar o que está indicado", espera, "espera", "bloqueada") : ""}`;
+    ${!w.ver || w.ver === "espera" ? secao("À espera de outras", "Ainda não podem começar: falta acabar o que está indicado", espera, "espera", "bloqueada") : ""}
+    ${barra}`;
   return {
     html, bind: () => {
       bindCommon(); bindAtencao();
@@ -88,6 +105,17 @@ export function semanaView() {
       $("#sEq").onchange = (e) => { w.equipa = e.target.value; render(); };
       const sg = $("#sGr"); if (sg) sg.onchange = (e) => { w.grupo = e.target.value; render(); };
       document.querySelectorAll("[data-semver]").forEach((b) => (b.onclick = () => { Object.assign(ui.plano, PLANO_PADRAO(), { f: b.dataset.semver, bloco: w.bloco, equipa: w.equipa === "_sem" ? "" : w.equipa, grupo: w.grupo || "" }); }));
+      const se = $("#semEsc"); if (se) se.onclick = () => { ui.semEsc = !esc0; if (!ui.semEsc) sel.clear(); render(); };
+      document.querySelectorAll("[data-srow]").forEach((row) => (row.onclick = (e) => { e.preventDefault(); const id = row.dataset.srow; sel.has(id) ? sel.delete(id) : sel.add(id); render(); }));
+      document.querySelectorAll("[data-sall]").forEach((b) => (b.onclick = () => { const ids = listas[b.dataset.sall] || []; const todas = ids.every((id) => sel.has(id)); ids.forEach((id) => (todas ? sel.delete(id) : sel.add(id))); render(); }));
+      if (esc0) {
+        const di = $("#semIniD"), df = $("#semFimD");
+        di.onchange = () => { ui.semIni = di.value; if (di.value && df.value && di.value > df.value) { df.value = di.value; ui.semFim = di.value; } };
+        df.onchange = () => { ui.semFim = df.value; };
+        const lp = $("#semLimpa"); if (lp) lp.onclick = () => { sel.clear(); render(); };
+        $("#semIniB").onclick = async () => { if (await iniciarVarias([...sel], di.value)) { sel.clear(); render(); } };
+        $("#semConcB").onclick = async () => { if (await concluirVarias([...sel], df.value, di.value)) { sel.clear(); render(); } };
+      }
       document.querySelectorAll("[data-q]").forEach((b) => (b.onclick = async () => {
         const [acao, id] = b.dataset.q.split("|");
         const a = S.acts[id]; const N = nomeAtiv(a) + " em " + a.unidade;

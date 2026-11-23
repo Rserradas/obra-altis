@@ -570,6 +570,28 @@ a.li { text-decoration: none; color: inherit; }
 .sbar i { display: block; height: 100%; background: var(--curso); }
 .srow .sa { display: flex; gap: 6px; justify-content: flex-end; }
 .srow .sa .btn.sm { min-height: 26px; padding: 2px 9px; font-size: .8rem; }
+.srow.esc { cursor: pointer; border-radius: 6px; }
+.srow.esc:hover { background: var(--surface-2); }
+.srow.esc.sel { background: color-mix(in srgb, var(--accent) 10%, transparent); }
+.srow .sck { width: 20px; height: 20px; accent-color: var(--accent); pointer-events: none; margin: 4px 6px; }
+.sem-dica { margin: 0 0 10px; }
+.vbar.sembar { flex-wrap: wrap; }
+.sembar .sem-d { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.sembar .sem-d label { display: flex; gap: 6px; align-items: center; font-size: .85rem; color: var(--bg); }
+.sembar .sem-d .inp { min-height: 34px; padding: 2px 8px; width: auto; color: var(--ink); background: var(--surface, #fff); }
+.sembar .sitbar-b { display: flex; gap: 8px; align-items: center; }
+.sembar .btn { white-space: nowrap; }
+.sembar .sitbar-b .btn:not(.ok) { color: var(--ink); background: var(--surface, #fff); }
+.sembar .sitbar-b .btn:disabled { opacity: .45; }
+@media (max-width: 640px) {
+  .vbar.sembar { gap: 8px; }
+  .sembar .vb-l { flex: 1 1 100%; justify-content: space-between; }
+  .sembar .sem-d { flex: 1 1 100%; display: grid; grid-template-columns: 1fr 1fr; }
+  .sembar .sem-d label { flex-direction: column; align-items: stretch; gap: 2px; }
+  .sembar .sem-d .inp { width: 100%; min-width: 0; }
+  .sembar .sitbar-b { flex: 1 1 100%; display: grid; grid-template-columns: 1fr 1fr; }
+  .sembar .sitbar-b .btn { justify-content: center; }
+}
 @media (max-width: 720px) {
   .srow { grid-template-columns: 58px minmax(0, 1fr) auto; gap: 2px 8px; padding: 5px 0; }
   .srow .sn { flex-direction: column; align-items: stretch; gap: 0; grid-column: 2 / -1; }

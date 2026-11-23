@@ -334,9 +334,11 @@ export const pctEdHTML = (a) => `<label class="pct-ed" title="Percentagem feita 
 /** Pede confirmação e conclui a atividade hoje (com os avisos das seguintes). */
 /* ---- Várias de uma vez (Trabalhos, Concluir ou atribuir várias). As seguintes acertam-se sozinhas pela sequência. */
 export const listaNomes = (xs, max = 6) => `<ul class="dlg-l">${xs.slice(0, max).map((a) => `<li>${esc(nomeAtiv(a))} em ${esc(a.unidade)}</li>`).join("")}${xs.length > max ? `<li class="note">e mais ${xs.length - max}</li>` : ""}</ul>`;
-export async function concluirVarias(ids, v) {
+export async function concluirVarias(ids, v, ini) {
   if (!dataCompleta(v)) { toast("Escolha uma data completa.", { anular: false }); return false; }
   if (v > S.hoje) { toast("A data de conclusão não pode ser no futuro.", { anular: false }); return false; }
+  if (ini && !dataCompleta(ini)) { toast("Escolha uma data de início completa.", { anular: false }); return false; }
+  if (ini && ini > v) { toast("A data de início não pode ser depois da data de fim.", { anular: false }); return false; }
   const todas = ids.map((id) => S.acts[id]).filter(Boolean);
   const ja = todas.filter((a) => S.res.get(a.id).estado === "concluida");
   const depois = todas.filter((a) => S.res.get(a.id).estado !== "concluida" && a.realInicio && a.realInicio > v);
@@ -346,6 +348,7 @@ export async function concluirVarias(ids, v) {
   const k = await perguntar({
     titulo: `Concluir ${alvo.length} atividade${alvo.length === 1 ? "" : "s"}?`,
     texto: `<p>Ficam concluídas a <b>${fd(v, true)}</b>, com 100%:</p>${listaNomes(alvo)}
+      ${ini && alvo.some((a) => !a.realInicio) ? `<p>${(() => { const n = alvo.filter((a) => !a.realInicio).length; return n === alvo.length ? "Início real" : `Início real das ${n} que ainda não tinham começado`; })()}: <b>${fd(ini, true)}</b>.${alvo.some((a) => a.realInicio) ? " As outras mantêm o início que já tinham." : ""}</p>` : ""}
       ${baixas.length ? `<div class="dlg-av">Atenção: ${baixas.length} ${baixas.length === 1 ? "está registada" : "estão registadas"} com menos de 90%.</div>` : ""}
       ${(() => { const n = alvo.filter((a) => pendDe(a.unidade, a.id).some(pendAberto)).length; return n ? `<div class="dlg-av">${n} ${n === 1 ? "tem" : "têm"} pendentes por resolver. Os pendentes continuam abertos.</div>` : ""; })()}
       ${ja.length ? `<p class="note">${ja.length} já ${ja.length === 1 ? "estava concluída e fica" : "estavam concluídas e ficam"} como ${ja.length === 1 ? "estava" : "estavam"}.</p>` : ""}
@@ -355,7 +358,7 @@ export async function concluirVarias(ids, v) {
   });
   if (k !== "sim") return false;
   const em = new Date().toISOString();
-  const lista = alvo.map((a) => { const r = S.res.get(a.id); return { id: a.id, patch: { realInicio: a.realInicio || (r.prevIni && r.prevIni <= v ? r.prevIni : v), realFim: v, concluido: true, pctEmp: 100, empEm: em } }; });
+  const lista = alvo.map((a) => { const r = S.res.get(a.id); return { id: a.id, patch: { realInicio: a.realInicio || ini || (r.prevIni && r.prevIni <= v ? r.prevIni : v), realFim: v, concluido: true, pctEmp: 100, empEm: em } }; });
   await store.updateMuitas(lista, { tipo: "conclusao", texto: `${alvo.length} atividades concluídas a ${fd(v)}: ${alvo.slice(0, 3).map((a) => nomeAtiv(a) + " em " + a.unidade).join(", ")}${alvo.length > 3 ? "..." : ""}` });
   toast(`${alvo.length} atividade${alvo.length === 1 ? "" : "s"} concluída${alvo.length === 1 ? "" : "s"} a ${fd(v)}`);
   return true;

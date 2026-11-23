@@ -127,7 +127,7 @@ export function reporFiltros() {
   ui.soModelo = false;
   ui.vistLista = null;
   if (ui.semana) ui.semana = { equipa: "", bloco: "", ver: "" };
-  ui.semana = null;
+  ui.semana = null; ui.semEsc = false; ui.semSel = null;
   ui.prox = null;
   ui.delUnit = null;
   ui.uDel = null;
