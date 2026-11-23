@@ -286,7 +286,7 @@ export function planEquipaView() {
     const pi = fila.indexOf(a), k = visIds.indexOf(a.id), junto = eJunto(a);
     return `<div class="fq-row ${r.estado === "concluida" ? "conc" : ""} ${r.ciclo ? "ciclo" : ""} ${junto ? "junto" : ""}" data-fq="${a.id}" draggable="true">
       <div class="ordb"><button class="ord-b" data-fqm="${a.id}|-1" ${k === 0 ? "disabled" : ""} title="${filtrado ? "Fazer antes do trabalho visível de cima" : "Fazer antes"}" aria-label="Fazer antes">▲</button><button class="ord-b" data-fqm="${a.id}|1" ${k === visIds.length - 1 ? "disabled" : ""} title="${filtrado ? "Fazer depois do trabalho visível de baixo" : "Fazer depois"}" aria-label="Fazer depois">▼</button></div>
-      ${r.estado === "concluida" ? `<span class="fq-n num" title="Lugar na fila">${numGrupo.get(a.id)}</span>` : `<input class="fq-n ord-n num" type="number" inputmode="numeric" min="1" max="${nGrupos}" value="${numGrupo.get(a.id)}" data-fqn="${a.id}" title="${junto ? "Ao mesmo tempo que o de cima. " : ""}Escreva o lugar na fila e carregue em Enter" aria-label="Lugar na fila de ${esc(nomeAtiv(a))} em ${esc(a.unidade)}">`}
+      ${r.estado === "concluida" ? `<span class="fq-n num" title="Lugar na fila">${numGrupo.get(a.id)}</span>` : `<input class="fq-n ord-n num" type="number" inputmode="numeric" min="1" max="${nGrupos + 1}" value="${numGrupo.get(a.id)}" data-fqn="${a.id}" title="${junto ? "Ao mesmo tempo que o de cima. " : ""}Escreva o número de um lugar e carregue em Enter: junta-se a esse lugar (ao mesmo tempo). Com ${nGrupos + 1} vai para o fim da fila." aria-label="Lugar na fila de ${esc(nomeAtiv(a))} em ${esc(a.unidade)}">`}
       ${pi > 0 && r.estado !== "concluida" ? `<label class="fq-junto" title="${filtrado ? "Tire os filtros para juntar ou separar" : "Ao mesmo tempo que o de cima: a equipa faz este trabalho ao mesmo tempo que o de cima; o seguinte espera que acabem os dois"}"><input type="checkbox" data-fqj="${a.id}" ${junto ? "checked" : ""} ${filtrado ? "disabled" : ""} aria-label="Ao mesmo tempo que o de cima"><span>Junto</span></label>` : `<span class="fq-junto"></span>`}
       <div class="fq-t"><button class="lnk-b" data-a="${a.id}" title="${esc(nomeAtiv(a))} em ${esc(a.unidade)}"><b>${esc(nomeAtiv(a))}</b></button><span class="mono">${esc(a.unidade)}</span>
         ${gap > 0 ? `<span class="fq-gap" title="Equipa parada ${gap} ${gap === 1 ? "dia" : "dias"} antes: ${esc(motivo)}">parada ${gap} d</span>` : ""}
@@ -331,7 +331,7 @@ export function planEquipaView() {
         ${can("executar") && vis.some((a) => S.res.get(a.id).estado !== "concluida") ? edD ? `<button class="btn" id="fqDCancel">Cancelar</button><button class="btn pri" id="fqDGrava" ${nMud ? "" : "disabled"}>Gravar ${nMud ? `${nMud} ${nMud === 1 ? "alteração" : "alterações"}` : "datas"}</button>` : `<button class="btn" id="fqDEd" title="Torna todas as datas da fila editáveis; grava tudo de uma vez">Editar datas</button>` : ""}</div></div>
       ${edD ? `<div class="banner fq-edn"><span>Mude as datas de início e de fim que quiser e carregue em <b>Gravar</b>. Nada muda até gravar. Os trabalhos que já começaram só mudam o fim; os que estão Junto começam com o de cima.</span></div>` : ""}
       ${nFrentes > 1 ? `<p class="note fq-frn">Com ${nFrentes} frentes, a equipa faz ${nFrentes} trabalhos ao mesmo tempo: cada um começa quando acaba o que está ${nFrentes} lugares acima. Os trabalhos juntos com "Ao mesmo tempo que o de cima" contam como um só lugar.</p>` : ""}
-      ${visF.length ? `<p class="note" style="margin:0">${filtrado ? `A mostrar ${visF.length} de ${vis.length} trabalhos da fila. O número é a posição na fila completa; as setas trocam com o trabalho visível de cima ou de baixo.` : "Para mudar a ordem, arraste as linhas, use as setas ou escreva o lugar na caixa do número e carregue em Enter. Marque Junto para a equipa fazer o trabalho ao mesmo tempo que o de cima."}</p><div class="fq ${edD ? "ed" : ""}">${linhas}</div>${edD ? `<div class="fq-edbar"><span class="note" id="fqDN">${nMud ? `${nMud} ${nMud === 1 ? "trabalho alterado" : "trabalhos alterados"}, por gravar` : "Nenhuma data alterada"}</span><button class="btn" data-fqdc>Cancelar</button><button class="btn pri" data-fqdg ${nMud ? "" : "disabled"}>Gravar</button></div>` : ""}` : vis.length ? `<div class="empty">Nenhum trabalho da fila corresponde aos filtros.</div>` : `<div class="empty">A fila está vazia. Junte trabalhos em baixo.</div>`}
+      ${visF.length ? `<p class="note" style="margin:0">${filtrado ? `A mostrar ${visF.length} de ${vis.length} trabalhos da fila. O número é a posição na fila completa; as setas trocam com o trabalho visível de cima ou de baixo.` : "Para mudar a ordem, arraste as linhas ou use as setas. Na caixa do número, escreva um lugar que já existe e carregue em Enter para juntar o trabalho a esse lugar (a equipa fá-lo ao mesmo tempo); um número a seguir ao último põe-no no fim. Marque Junto para a equipa fazer o trabalho ao mesmo tempo que o de cima."}</p><div class="fq ${edD ? "ed" : ""}">${linhas}</div>${edD ? `<div class="fq-edbar"><span class="note" id="fqDN">${nMud ? `${nMud} ${nMud === 1 ? "trabalho alterado" : "trabalhos alterados"}, por gravar` : "Nenhuma data alterada"}</span><button class="btn" data-fqdc>Cancelar</button><button class="btn pri" data-fqdg ${nMud ? "" : "disabled"}>Gravar</button></div>` : ""}` : vis.length ? `<div class="empty">Nenhum trabalho da fila corresponde aos filtros.</div>` : `<div class="empty">A fila está vazia. Junte trabalhos em baixo.</div>`}
     </section>`}
     <section class="card">
       <div class="card-h"><h2>Trabalhos da equipa ainda sem lugar na fila</h2>${porOrdenarF.length > 1 ? `<button class="btn sm pri" id="fqTodas">${porOrdenarF.length < porOrdenar.length ? `Pôr estes ${porOrdenarF.length} na fila` : "Pôr todos na fila"}</button>` : ""}</div>
@@ -378,20 +378,30 @@ export function planEquipaView() {
       l.splice(pos, 0, id);
       gravarFila(nome, l, `${nomeAtiv(S.acts[id])} em ${S.acts[id].unidade} passou para ${l.indexOf(id) + 1}.º`, {}, [], { soltar });
     }));
-    // escrever o lugar: o trabalho passa a ser o N.º da fila (sai do grupo onde estava; os grupos contam como um lugar)
+    // escrever o lugar: um número que já existe junta o trabalho a esse lugar (fica ao mesmo tempo, no fim desse grupo);
+    // um número depois do último põe-no sozinho no fim da fila. Sai sempre do grupo onde estava.
     document.querySelectorAll("[data-fqn]").forEach((inp) => {
       inp.onkeydown = (e) => { if (e.key === "Enter") { e.preventDefault(); inp.blur(); } if (e.key === "Escape") { inp.value = inp.defaultValue; inp.blur(); } };
       inp.onchange = () => {
         const id = inp.dataset.fqn, n = Math.round(Number(inp.value));
         if (!n || n === Number(inp.defaultValue)) { inp.value = inp.defaultValue; return; }
+        // os lugares como estão no ecrã (os juntos contam como um só)
+        const grupos = []; ids.forEach((x, i) => { if (i === 0 || !eJunto(S.acts[x])) grupos.push([x]); else grupos[grupos.length - 1].push(x); });
         const soltar = soltarAoMover(id, ids);
         const l = ids.filter((x) => x !== id);
-        const preso = (x) => eJunto(S.acts[x]) && !soltar.has(x);
-        const cabecas = l.map((x, i) => (i === 0 || !preso(x) ? i : -1)).filter((i) => i >= 0);
-        const alvo = Math.max(1, Math.min(n, cabecas.length + 1));
-        l.splice(alvo <= cabecas.length ? cabecas[alvo - 1] : l.length, 0, id);
+        const N = `${nomeAtiv(S.acts[id])} em ${S.acts[id].unidade}`;
         ui.focoFqn = id;
-        gravarFila(nome, l, `${nomeAtiv(S.acts[id])} em ${S.acts[id].unidade} passou para ${alvo}.º lugar na fila`, {}, [], { soltar });
+        if (n >= 1 && n <= grupos.length) {
+          const membros = grupos[n - 1].filter((x) => x !== id);
+          if (!membros.length) { inp.value = inp.defaultValue; return; }
+          const cab = S.acts[membros[0]];
+          l.splice(l.indexOf(membros[membros.length - 1]) + 1, 0, id);
+          soltar.delete(id);
+          gravarFila(nome, l, `${N} juntou-se ao ${n}.º lugar da fila, ao mesmo tempo que ${nomeAtiv(cab)} em ${cab.unidade}`, {}, [], { soltar, juntar: new Set([id]) });
+        } else {
+          l.push(id);
+          gravarFila(nome, l, `${N} passou para o fim da fila`, {}, [], { soltar });
+        }
       };
     });
     if (ui.focoFqn) { const f = document.querySelector(`[data-fqn="${ui.focoFqn}"]`); ui.focoFqn = null; if (f) f.scrollIntoView({ block: "center" }); }
