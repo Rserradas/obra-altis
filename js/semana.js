@@ -48,6 +48,7 @@ export function semanaView() {
   if (!(ui.semSel instanceof Set)) ui.semSel = new Set();
   const sel = ui.semSel;
   for (const id of [...sel]) if (!S.acts[id] || S.res.get(id).estado === "concluida") sel.delete(id);
+  const semFiltros = [w.ver, w.bloco, w.equipa, w.grupo].filter(Boolean).length;
   const tipoDe = (r) => (r.estado === "em_curso" ? "curso" : r.estado === "bloqueada" ? "espera" : "comecar");
   const linha = ({ a, r }, tipo0) => {
     const tipo = tipo0 === "auto" ? tipoDe(r) : tipo0;
@@ -69,7 +70,7 @@ export function semanaView() {
   const secao = (titulo, sub, lista, tipo, filtro) => { listas[tipo] = lista.slice(0, MAX).map(({ a }) => a.id); const todas = esc0 && lista.length && listas[tipo].every((id) => sel.has(id)); return `<section class="card">
     <div class="card-h"><h2>${titulo} <span class="note num">${lista.length}</span></h2>${sub ? `<span class="note">${sub}</span>` : ""}${esc0 && lista.length ? `<button class="btn sm ${todas ? "ghost" : ""}" data-sall="${tipo}">${todas ? "Tirar a escolha" : `Escolher ${lista.length > MAX ? "as " + MAX + " mostradas" : lista.length === 1 ? "esta" : "as " + lista.length}`}</button>` : ""}</div>
     ${lista.length ? `<div class="srows">${lista.slice(0, MAX).map((x) => linha(x, tipo)).join("")}</div>${lista.length > MAX ? (filtro ? `<a class="note" href="#plano" data-semver="${filtro}">Ver as ${lista.length} nos Trabalhos</a>` : `<p class="note">A mostrar ${MAX} de ${lista.length}. Escolha um bloco, grupo ou equipa para ver menos.</p>`) : ""}`
-      : `<div class="empty">${w.equipa || w.bloco || w.grupo ? `Nada nesta lista com estes filtros. <button class="btn sm" data-repor>Limpar filtros</button>` : "Nada nesta lista."}</div>`}
+      : `<div class="empty">${w.equipa || w.bloco || w.grupo ? `Nada nesta lista com estes filtros. <button class="btn sm" data-semtirar>Tirar filtros</button>` : "Nada nesta lista."}</div>`}
   </section>`; };
   const nSel = sel.size, dSel = nSel ? "" : "disabled";
   const semIni = ui.semIni || hoje, semFim = ui.semFim || hoje;
@@ -79,7 +80,7 @@ export function semanaView() {
       <span class="sitbar-b"><button class="btn" id="semIniB" ${dSel} title="Ficam em curso a partir da data de início">Iniciar</button><button class="btn ok" id="semConcB" ${dSel} title="Ficam concluídas na data de fim; as que ainda não tinham começado ficam com a data de início">Concluir</button></span>
     </div>` : "";
   const html = `
-    <div class="card-h"><h1>A minha semana</h1><span class="note">De hoje, ${fd(hoje)}, a ${fd(lim)} · <a href="#proximas">Ver as próximas semanas</a></span>${can("executar") ? `<button class="btn sm ${esc0 ? "warn" : ""}" id="semEsc" title="${esc0 ? "Volta à lista normal" : "Marcar várias atividades e iniciá-las ou concluí-las de uma vez, com a data de início e de fim"}">${esc0 ? "Terminar escolha" : "Escolher várias"}</button>` : ""}</div>
+    <div class="card-h"><h1>A minha semana</h1><span class="note">De hoje, ${fd(hoje)}, a ${fd(lim)} · <a href="#proximas">Ver as próximas semanas</a></span><span class="sem-hb">${semFiltros ? `<button class="btn sm warn sem-tirar" id="semTirar" title="Mostrar tudo: todos os blocos, equipas e grupos">Tirar filtros (${semFiltros})</button>` : ""}${can("executar") ? `<button class="btn sm ${esc0 ? "warn" : ""}" id="semEsc" title="${esc0 ? "Volta à lista normal" : "Marcar várias atividades e iniciá-las ou concluí-las de uma vez, com a data de início e de fim"}">${esc0 ? "Terminar escolha" : "Escolher várias"}</button>` : ""}</span></div>
     ${esc0 ? `<p class="banner sem-dica">Toque nas atividades para as marcar (de várias frações e listas). Em baixo escolha a data de início e a de fim e carregue em Iniciar ou Concluir. Iniciar usa a data de início; Concluir usa a data de fim e, nas que ainda não tinham começado, a de início.</p>` : ""}
     <div class="kpis kpis3">
       <button class="kpi k-curso ${w.ver === "curso" ? "sel" : ""}" data-sver="curso" aria-pressed="${w.ver === "curso"}" title="Mostrar só as em curso"><b>${emCurso.length}</b><span>Em curso, ${acabar} acabam esta semana</span></button>
@@ -105,6 +106,9 @@ export function semanaView() {
       $("#sEq").onchange = (e) => { w.equipa = e.target.value; render(); };
       const sg = $("#sGr"); if (sg) sg.onchange = (e) => { w.grupo = e.target.value; render(); };
       document.querySelectorAll("[data-semver]").forEach((b) => (b.onclick = () => { Object.assign(ui.plano, PLANO_PADRAO(), { f: b.dataset.semver, bloco: w.bloco, equipa: w.equipa === "_sem" ? "" : w.equipa, grupo: w.grupo || "" }); }));
+      const tirar = () => { Object.assign(w, { equipa: "", bloco: "", ver: "", grupo: "" }); render(); toast("Filtros da Minha semana tirados", { anular: false }); };
+      const st = $("#semTirar"); if (st) st.onclick = tirar;
+      document.querySelectorAll("[data-semtirar]").forEach((b) => (b.onclick = tirar));
       const se = $("#semEsc"); if (se) se.onclick = () => { ui.semEsc = !esc0; if (!ui.semEsc) sel.clear(); render(); };
       document.querySelectorAll("[data-srow]").forEach((row) => (row.onclick = (e) => { e.preventDefault(); const id = row.dataset.srow; sel.has(id) ? sel.delete(id) : sel.add(id); render(); }));
       document.querySelectorAll("[data-sall]").forEach((b) => (b.onclick = () => { const ids = listas[b.dataset.sall] || []; const todas = ids.every((id) => sel.has(id)); ids.forEach((id) => (todas ? sel.delete(id) : sel.add(id))); render(); }));

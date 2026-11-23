@@ -575,6 +575,7 @@ a.li { text-decoration: none; color: inherit; }
 .srow.esc.sel { background: color-mix(in srgb, var(--accent) 10%, transparent); }
 .srow .sck { width: 20px; height: 20px; accent-color: var(--accent); pointer-events: none; margin: 4px 6px; }
 .sem-dica { margin: 0 0 10px; }
+.sem-hb { display: flex; gap: 8px; flex-wrap: wrap; }
 .vbar.sembar { flex-wrap: wrap; }
 .sembar .sem-d { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
 .sembar .sem-d label { display: flex; gap: 6px; align-items: center; font-size: .85rem; color: var(--bg); }

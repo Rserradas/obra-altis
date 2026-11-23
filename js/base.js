@@ -84,8 +84,9 @@ export function filtrosAlterados() {
   if (ui.regSort || ui.regQ) return true;
   const ganttMudou = g && (g.bloco || g.unidade || g.ativ || (g.ativs && g.ativs.length) || g.grupo || g.estado || g.equipa || g.tipo || g.q || g.de || g.ate || g.abertas === false || g.ligacoes === false || g.zoom !== "semana" || (g.abertosB && g.abertosB.size) || (g.abertos && g.abertos.size) || g.sel);
   const vl = ui.vistLista, vistMudou = !!(vl && vl.por);
+  const sm = ui.semana, semMudou = !!(sm && (sm.bloco || sm.equipa || sm.grupo || sm.ver));
   const px = ui.prox, proxMudou = !!(px && (px.bloco || px.equipa || px.grupo || px.ver));
-  return !!(proxMudou || planoMudou || ganttMudou || vistMudou || eqfAtivo(ui.eqF) || ui.soModelo || ui.bloco !== "todos" || ui.unitEdit || ui.uSemConc === false || !!ui.porVist || !!ui.comPend);
+  return !!(semMudou || proxMudou || planoMudou || ganttMudou || vistMudou || eqfAtivo(ui.eqF) || ui.soModelo || ui.bloco !== "todos" || ui.unitEdit || ui.uSemConc === false || !!ui.porVist || !!ui.comPend);
 }
 /* Os filtros de Trabalhos, A minha semana e Apartamentos ficam guardados neste dispositivo, por utilizador. */
 
