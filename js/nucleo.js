@@ -230,6 +230,7 @@ export function chaveVersao(v) {
   return `${m[3]}${m[2].padStart(2, "0")}${m[1].padStart(2, "0")}-${m[4].padStart(3, "0")}`;
 }
 export const NOVIDADES = [
+  ["23.11.2026 V6", ["Plano das equipas: escrever na caixa do número um lugar que já existe junta o trabalho a esse lugar (fica ao mesmo tempo, com Junto); um número a seguir ao último põe-no no fim da fila.", "Plano das equipas: marque vários trabalhos nas listas de baixo e ponha-os na fila de uma vez, juntos no mesmo lugar no fim da fila, ou separados no fim."]],
   ["23.11.2026 V5", ["Últimas alterações: novo botão com a seta para trás (na barra lateral e, no telemóvel, na barra de cima) que mostra o que gravou nesta sessão e deixa anular cada alteração, mesmo depois de o aviso com Anular desaparecer. Se a mesma atividade voltou a mudar depois, pergunta antes de anular."]],
   ["23.11.2026 V4", ["Filas das equipas: quando um trabalho entra na fila de uma equipa, vai sempre para o fim. Se entrarem vários de uma vez, ficam no fim pela data em que podem começar.", "Folha da semana impressa: sem a percentagem do fiscal nem o aviso sem equipa, e com a data de início e a de conclusão em destaque."]],
   ["23.11.2026 V3", ["Folha da semana: cada linha ficou mais curta, sem a descrição, as observações e a referência."]],
