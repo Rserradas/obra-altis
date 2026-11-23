@@ -615,9 +615,9 @@ function bindEliminarVarias(u) {
 
 /* ============================================================ ponto de situação do empreiteiro */
 /** Estado gravado de uma atividade, nos termos do ponto de situação. */
-const sitOrig = (a) => { const r = S.res.get(a.id); return { est: r && r.estado === "concluida" ? "conc" : a.realInicio ? "curso" : "por", pct: Math.round(Number(a.pctEmp) || 0) }; };
-const sitAtual = (a) => { const o = sitOrig(a), m = ui.sit && ui.sit[a.id]; return m ? { est: m.est, pct: m.pct } : o; };
-const sitMudou = (a) => { const o = sitOrig(a), m = ui.sit && ui.sit[a.id]; return !!m && (m.est !== o.est || (m.est === "curso" && m.pct !== o.pct)); };
+export const sitOrig = (a) => { const r = S.res.get(a.id); return { est: r && r.estado === "concluida" ? "conc" : a.realInicio ? "curso" : "por", pct: Math.round(Number(a.pctEmp) || 0) }; };
+export const sitAtual = (a) => { const o = sitOrig(a), m = ui.sit && ui.sit[a.id]; return m ? { est: m.est, pct: m.pct } : o; };
+export const sitMudou = (a) => { const o = sitOrig(a), m = ui.sit && ui.sit[a.id]; return !!m && (m.est !== o.est || (m.est === "curso" && m.pct !== o.pct)); };
 const visiveisSit = (u) => Object.values(S.acts).filter((a) => a.unidade === u.id);
 /** Fotografias do ponto de situação ainda por guardar, por atividade: { unidade, fotos: [dataURL], nota }. */
 const sitFotosDe = (id) => (ui.sitFotos && ui.sitFotos[id]) || { fotos: [], nota: "" };
@@ -625,7 +625,6 @@ const limparSitFotos = (uid) => { for (const [id, f] of Object.entries(ui.sitFot
 /** Grava o ponto de situação de uma fração: cada atividade mudada fica com o seu registo no histórico; um só Anular desfaz tudo. */
 async function guardarSit(u) {
   const lista = visiveisSit(u).filter((a) => sitMudou(a));
-  const hoje = S.hoje, agora = new Date().toISOString();
   // fotografias primeiro (não dependem do estado): ficam na galeria da fração, ligadas à atividade
   let nFotos = 0;
   for (const a of visiveisSit(u)) {
@@ -636,6 +635,12 @@ async function guardarSit(u) {
     for (const f of sf.fotos) { await store.addFoto(a.id, u.id, f, nota); nFotos++; }
     delete ui.sitFotos[a.id];
   }
+  await gravarSit(lista);
+  return { n: lista.length, nFotos };
+}
+/** Grava as mudanças de estado e percentagem (ui.sit) destas atividades; cada uma fica com o seu registo e um só Anular desfaz tudo. */
+export async function gravarSit(lista, origem = "ponto de situação") {
+  const hoje = S.hoje, agora = new Date().toISOString();
   for (const a of lista) {
     const r = S.res.get(a.id), o = sitOrig(a), m = ui.sit[a.id], N = nomeAtiv(a) + " em " + a.unidade;
     let patch, reg;
@@ -654,10 +659,10 @@ async function guardarSit(u) {
       patch = { realInicio: null, realFim: null, concluido: false, pctEmp: 0, empEm: agora };
       reg = { tipo: "correcao", texto: `${N} voltou a não iniciada (ponto de situação)` };
     }
+    if (origem !== "ponto de situação") reg.texto = reg.texto.replace("(ponto de situação)", `(${origem})`).replace("(empreiteiro)", `(empreiteiro, ${origem})`);
     await store.updateAtividade(a.id, patch, reg);
     delete ui.sit[a.id];
   }
-  return { n: lista.length, nFotos };
 }
 function bindSit(u) {
   ui.sit = ui.sit || {};

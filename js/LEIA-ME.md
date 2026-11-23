@@ -11,6 +11,7 @@ A aplicação abre em `app.js`, que só arranca o resto. O código de cada ecrã
 | `equipas.js` | Equipas de trabalho e plano das equipas. | 719 |
 | `estado.js` | Estado partilhado pela aplicação. Só se muda através das funções set...(), para todos os módulos verem o valor novo. | 19 |
 | `ficha.js` | Ficha da atividade. | 407 |
+| `folha.js` | Folha da semana: atividades da semana por bloco e andar, grupo e atividade, para mexer e imprimir. | 170 |
 | `gantt.js` | Gantt e caminho crítico. | 465 |
 | `nova.js` | Criar e eliminar frações; nova atividade. | 427 |
 | `nucleo.js` | Arranque, versão, desenho principal da página e login. | 355 |
