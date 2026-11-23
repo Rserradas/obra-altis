@@ -32,17 +32,11 @@ export function soltarAoMover(id, ids) {
   if (!eJunto(S.acts[id]) && i >= 0 && ids[i + 1] && eJunto(S.acts[ids[i + 1]])) s.add(ids[i + 1]);
   return s;
 }
-/** Põe os trabalhos na fila da equipa, cada um na posição da data em que pode começar. Devolve a nova ordem (ids). */
+/** Põe os trabalhos no fim da fila da equipa (se forem vários, entre si pela data em que podem começar). Devolve a nova ordem (ids). */
 export function ordemComNovos(nome, novos, base = null) {
   const ini = (id) => (S.res.get(id) && S.res.get(id).provIni) || "9";
   const ord = (base || filaEquipa(nome).map((a) => a.id)).filter((id) => !novos.includes(id));
-  for (const id of [...novos].sort((x, y) => ini(x).localeCompare(ini(y)))) {
-    let k = ord.findIndex((o) => S.res.get(o) && S.res.get(o).estado !== "concluida" && ini(o) > ini(id));
-    if (k < 0) k = ord.length;
-    while (k < ord.length && eJunto(S.acts[ord[k]])) k++; // não parte um grupo
-    ord.splice(k, 0, id);
-  }
-  return ord;
+  return ord.concat([...novos].sort((x, y) => ini(x).localeCompare(ini(y)) || String(x).localeCompare(String(y))));
 }
 /** Simula patches e diz o efeito. */
 export function efeitoDe(lista) {
@@ -60,7 +54,7 @@ export async function atribuirEquipa(ids, nome) {
   const lista = [];
   if (nome) {
     const ord = ordemComNovos(nome, muda.filter((id) => S.res.get(id).estado !== "concluida"));
-    const ords = ordensFila(ord);
+    const ords = ordensFila(ord, { soltar: new Set(muda) }); // quem chega de outra equipa não fica "ao mesmo tempo" que o de cima
     ord.forEach((id) => { const v = ords.get(id); const a = S.acts[id]; const p = {}; if (a.eqOrdem !== v) p.eqOrdem = v; if (a.equipa !== nome) p.equipa = nome; if (Object.keys(p).length) lista.push({ id, patch: p }); });
     for (const id of muda) if (!ord.includes(id)) lista.push({ id, patch: { equipa: nome, eqOrdem: null } }); // concluídas: só o nome
   } else for (const id of muda) lista.push({ id, patch: { equipa: null, eqOrdem: null } });
@@ -119,7 +113,7 @@ export async function filasTodas() {
   if (!pl.total) return;
   const k = await perguntar({
     titulo: `Pôr ${pl.total} trabalhos nas filas das equipas?`,
-    texto: `<p>Cada trabalho entra na fila da sua equipa pela data em que pode começar. A partir daí, cada equipa só faz um trabalho de cada vez.</p>
+    texto: `<p>Cada trabalho entra no fim da fila da sua equipa (se forem vários, pela data em que podem começar). A partir daí, cada equipa só faz um trabalho de cada vez.</p>
       <ul class="dlg-l">${pl.porEq.map((e) => `<li><b>${esc(e.nome)}</b>: ${e.n} trabalhos; acabava a ${fd(e.antes)}, passa a acabar a <b>${fd(e.depois, true)}</b></li>`).join("")}</ul>
       <p>${pl.mudam} atividades mudam de datas. A obra ${pl.fim !== S.tot.fim ? `passa a acabar a <b>${fd(pl.fim, true)}</b> (era ${fd(S.tot.fim, true)})` : `continua a acabar a ${fd(pl.fim, true)}`}.</p>
       ${pl.fora ? `<div class="dlg-av">${pl.fora} ${pl.fora === 1 ? "trabalho fica" : "trabalhos ficam"} fora da fila, porque a ordem das datas contradiz a sequência. Ficam na lista "sem lugar na fila" para os pôr à mão.</div>` : ""}
@@ -320,7 +314,7 @@ export function planEquipaView() {
     ${defTabs("planequipa")}
     <div class="card-h"><h1>Plano das equipas</h1>
       <label class="f" ${ep.vista === "todas" ? "hidden" : ""}>Equipa<select class="inp" id="fqEq">${eqs.map((e) => `<option ${e.nome === nome ? "selected" : ""}>${esc(e.nome)}</option>`).join("")}</select></label></div>
-    <p>Ponha os trabalhos da equipa pela ordem em que os vai fazer: por exemplo, primeiro os azulejos do A-F101, depois os do A-F102. Cada trabalho só começa quando a equipa acaba o anterior, e as datas de tudo o que vem a seguir acertam-se sozinhas. Se a equipa fizer vários trabalhos ao mesmo tempo, mude as Frentes ou marque Ao mesmo tempo que o de cima. Quando atribui uma equipa a um trabalho, ele entra logo na fila dela, pela data em que pode começar.</p>
+    <p>Ponha os trabalhos da equipa pela ordem em que os vai fazer: por exemplo, primeiro os azulejos do A-F101, depois os do A-F102. Cada trabalho só começa quando a equipa acaba o anterior, e as datas de tudo o que vem a seguir acertam-se sozinhas. Se a equipa fizer vários trabalhos ao mesmo tempo, mude as Frentes ou marque Ao mesmo tempo que o de cima. Quando atribui uma equipa a um trabalho, ele entra logo no fim da fila dela.</p>
     ${(() => { const n = Object.values(S.acts).filter((a) => a.equipa && S.equipas.includes(a.equipa) && (a.eqOrdem == null || a.eqOrdem === "") && S.res.get(a.id).estado !== "concluida").length; return n ? `<div class="banner warn no-print"><span><b>${n} trabalhos com equipa ainda não estão em fila nenhuma.</b> Enquanto não estiverem, a app não sabe que a equipa não pode fazê-los ao mesmo tempo.</span><button class="btn sm pri" id="fqTodasEq">Pôr nas filas</button></div>` : ""; })()}
     <div class="seg-v no-print">${[["lista", "Fila"], ["gantt", "Gantt da equipa"], ["todas", "Gantt de todas as equipas"]].map(([k, l]) => `<button class="${(ep.vista || "lista") === k ? "on" : ""}" data-fqv="${k}">${l}</button>`).join("")}</div>
     ${ep.vista === "todas" ? filtrosEqHTML(fq, Object.values(S.acts).filter((a) => a.equipa && S.res.get(a.id).estado !== "concluida"), false) + ganttEquipasHTML(null, passa) : `
@@ -429,13 +423,13 @@ export function planEquipaView() {
     }));
     document.querySelectorAll("[data-fqadd]").forEach((b) => (b.onclick = () => { const a = S.acts[b.dataset.fqadd]; gravarFila(nome, ordemComNovos(nome, [a.id], ids), `${nomeAtiv(a)} em ${a.unidade} entrou na fila`); }));
     const ft = $("#fqTodas"); if (ft) ft.onclick = async () => {
-      if (!(await confirmar(`Pôr ${porOrdenarF.length} trabalhos na fila?`, `<p>Entram na fila da ${esc(nome)}, cada um na posição da data em que pode começar. Depois pode mudar a ordem.</p>`, "Sim, pôr na fila"))) return;
+      if (!(await confirmar(`Pôr ${porOrdenarF.length} trabalhos na fila?`, `<p>Entram no fim da fila da ${esc(nome)}, entre si pela data em que podem começar. Depois pode mudar a ordem.</p>`, "Sim, pôr na fila"))) return;
       gravarFila(nome, ordemComNovos(nome, porOrdenarF.map((a) => a.id), ids), `${porOrdenarF.length} trabalhos entraram na fila`);
     };
     document.querySelectorAll("[data-eqed2]").forEach((b) => (b.onclick = () => openEquipa(b.dataset.eqed2)));
     document.querySelectorAll("[data-fqpot]").forEach((b) => (b.onclick = async () => {
       const a = S.acts[b.dataset.fqpot];
-      if (a.equipa && S.equipas.includes(a.equipa) && !(await confirmar("Mudar de equipa?", `<p>${esc(nomeAtiv(a))} em ${esc(a.unidade)} está com a ${esc(a.equipa)}. Passa para a ${esc(nome)} e entra na fila dela, pela data em que pode começar.</p>`, "Sim, passar"))) return;
+      if (a.equipa && S.equipas.includes(a.equipa) && !(await confirmar("Mudar de equipa?", `<p>${esc(nomeAtiv(a))} em ${esc(a.unidade)} está com a ${esc(a.equipa)}. Passa para a ${esc(nome)} e entra no fim da fila dela.</p>`, "Sim, passar"))) return;
       gravarFila(nome, ordemComNovos(nome, [a.id], ids), `${nomeAtiv(a)} em ${a.unidade} entrou na fila`);
     }));
     const sf = $("#fqFr"), sa = $("#fqAt"), bj = $("#fqJunta");
@@ -443,7 +437,7 @@ export function planEquipaView() {
     sa.onchange = () => { bj.disabled = !sa.value; };
     bj.onclick = async () => {
       const a = S.acts[sa.value]; if (!a) return;
-      if (a.equipa && a.equipa !== nome && !(await confirmar("Mudar de equipa?", `<p>${esc(nomeAtiv(a))} em ${esc(a.unidade)} está com a ${esc(a.equipa)}. Passa para a ${esc(nome)} e entra na fila dela, pela data em que pode começar.</p>`, "Sim, passar"))) return;
+      if (a.equipa && a.equipa !== nome && !(await confirmar("Mudar de equipa?", `<p>${esc(nomeAtiv(a))} em ${esc(a.unidade)} está com a ${esc(a.equipa)}. Passa para a ${esc(nome)} e entra no fim da fila dela.</p>`, "Sim, passar"))) return;
       ep.fr = "";
       gravarFila(nome, ordemComNovos(nome, [a.id], ids), `${nomeAtiv(a)} em ${a.unidade} entrou na fila`);
     };
@@ -638,7 +632,7 @@ export function openEquipa(nome, opts = {}) {
     const n = e0.esp.length ? semEqDe().length : 0;
     q("#eqPot").innerHTML = e0.esp.length ? `Pode fazer <b>${pot.length}</b> trabalhos por fazer${pot.length ? `: <b>${n}</b> sem equipa e ${pot.length - n} com outras equipas` : ""}.` : "";
     q("#eqAutoW").hidden = !n;
-    q("#eqAutoT").textContent = `Atribuir já esta equipa aos ${n} trabalhos sem equipa e pô-los na fila dela, pela data de início`;
+    q("#eqAutoT").textContent = `Atribuir já esta equipa aos ${n} trabalhos sem equipa e pô-los no fim da fila dela, pela data de início`;
   };
   sh.querySelectorAll("[data-eqe]").forEach((b) => (b.onclick = () => {
     const k = b.dataset.eqe;
