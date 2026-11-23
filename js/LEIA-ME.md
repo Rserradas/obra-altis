@@ -23,6 +23,7 @@ A aplicação abre em `app.js`, que só arranca o resto. O código de cada ecrã
 | `relgraf.js` | Gráficos do relatório de vistoria: avanço de cada fração vistoriada e Gantt de cada fração. | 85 |
 | `segurar.js` | O que está a segurar a obra. | 202 |
 | `semana.js` | A minha semana, relatório para reunião e pesquisa rápida. | 206 |
+| `ultimas.js` | Últimas alterações: lista do que se gravou nesta sessão, para anular depois de o aviso desaparecer. | 120 |
 | `unidades.js` | Apartamentos, página da fração, vistoria e fotografias. | 534 |
 | `vistorias.js` | Relatórios de vistoria. | 258 |
 

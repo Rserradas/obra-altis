@@ -44,7 +44,7 @@ export function ajudaEcra() {
   caixa.querySelector("button").onclick = () => muda(false);
 }
 /* ============================================================ guia de primeira utilização */
-export const AJUDA_PASSO = ["Ajuda sempre à mão", "Em cada ecrã, o ? ao lado do título explica para que serve. Em Ajuda (o ? lá em cima) volta a ver este guia e confirma a versão da aplicação. Quando houver uma versão nova, aparece um aviso com o botão Atualizar agora."];
+export const AJUDA_PASSO = ["Ajuda sempre à mão", "Em cada ecrã, o ? ao lado do título explica para que serve. Enganou-se? Em Últimas alterações (a seta para trás) anula o que gravou nesta sessão. Em Ajuda (o ? lá em cima) volta a ver este guia e confirma a versão da aplicação. Quando houver uma versão nova, aparece um aviso com o botão Atualizar agora."];
 export const GUIA = {
   dono: [
     ["O ponto de situação", "No Painel vê o fim previsto da obra, o avanço de cada bloco e, em Precisa de atenção, as atividades esquecidas ou paradas que estão a atrasar outras. Toque num número para ver a lista correspondente."],
@@ -57,7 +57,7 @@ export const GUIA = {
     ["A minha semana", "Ao entrar vê o que está em curso, o que deve começar nos próximos 7 dias e o que está à espera de outras atividades. Os botões Iniciar, +10% e Concluir gravam logo."],
     ["Precisa de atenção", "No topo aparecem os pendentes por resolver, as atividades em curso com o fim já passado e as que podiam já ter começado. Quando resolver um pendente, carregue em Já está resolvido: o fiscal verifica depois."],
     ["Mais detalhe", "Toque no nome de uma atividade para abrir a ficha: datas, equipa, motivo de atraso, ligações, fotografias e histórico. Em Trabalhos, com Concluir ou atribuir várias, trata várias atividades de uma vez."],
-    ["Enganou-se? Sem rede?", "Depois de guardar aparece Anular em baixo, durante alguns segundos. A aplicação funciona sem rede: guarda tudo no telemóvel e envia quando houver ligação."],
+    ["Enganou-se? Sem rede?", "Depois de guardar aparece Anular em baixo, durante alguns segundos. Se já desapareceu, carregue em Últimas alterações (a seta para trás) e anule a que quiser. A aplicação funciona sem rede: guarda tudo no telemóvel e envia quando houver ligação."],
     AJUDA_PASSO,
   ],
   fiscal: [

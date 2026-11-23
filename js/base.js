@@ -5,6 +5,7 @@ import { closeSheet } from "./ficha.js";
 import { closeNova } from "./nova.js";
 import { render } from "./nucleo.js";
 import { perguntar } from "./plano.js";
+import { marcarAnulada, registarUltima } from "./ultimas.js";
 
 /* ============================================================ utilidades */
 export const $ = (s, el = document) => el.querySelector(s);
@@ -226,6 +227,7 @@ export function toast(msg, opts = {}) {
   const lote = loteAnular; setLoteAnular([]);
   const snap = snapDatas; setSnapDatas(null);
   const podeAnular = opts.anular !== false && lote.length > 0;
+  const entrada = podeAnular ? registarUltima(msg, lote) : null; // fica também em Últimas alterações
   const t = document.createElement("div");
   t.className = "toast";
   t.setAttribute("role", "status");
@@ -248,7 +250,7 @@ export function toast(msg, opts = {}) {
   t.onclick = async (e) => {
     const b = e.target.closest("[data-t]"); if (!b) return;
     clearTimeout(tempo); t.remove();
-    if (b.dataset.t === "anular") { await anularLote(lote); setLoteAnular([]); toast("Alteração anulada", { anular: false }); }
+    if (b.dataset.t === "anular") { await anularLote(lote); marcarAnulada(entrada); setLoteAnular([]); toast("Alteração anulada", { anular: false }); }
     else if (opts.acao) opts.acao.fn();
   };
 }

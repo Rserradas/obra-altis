@@ -18,6 +18,7 @@ import { proximasView } from "./proximas.js";
 import { segurarView } from "./segurar.js";
 import { abrirPesquisaMovel, ligarPesquisa, pesquisaHTML, relatorioView, semanaView } from "./semana.js";
 import { unidadeView, unidadesView } from "./unidades.js";
+import { abrirUltimas, ultimasBtnHTML } from "./ultimas.js";
 import { relVistView, vistoriasView } from "./vistorias.js";
 
 /* ============================================================ arranque */
@@ -156,13 +157,14 @@ export function render() {
         <div id="syncA"></div>
         <div class="who"><b>${esc(store.user.nome)}</b><span class="role">${store.admin ? "Administrador" : PAPEL[store.user.papel]}</span></div>
         ${store.admin ? vistaSelHTML("vistaD") : ""}
+        ${ultimasBtnHTML(false)}
         <button class="btn sm" data-ajuda>Ajuda e versão</button>
         <button class="btn sm ${filtrosAlterados() ? "repor-on" : ""}" data-repor title="Voltar todos os ecrãs aos filtros padrão">Limpar filtros</button>
         <button class="btn sm" data-sair>Sair</button>
       </div>
     </aside>
     ${store.admin ? `<div class="vista-band">A ver como <b>${PAPEL[store.user.papel]}</b>${vistaSelHTML("vistaM")}</div>` : ""}
-    <header class="topbar">${brandHTML(true)}<div class="row" style="gap:4px"><div id="syncB"></div><button class="btn sm repor-on" data-repor data-repor-top title="Há filtros ativos: limpar" ${filtrosAlterados() ? "" : "hidden"}>Limpar filtros</button><button class="btn sm ghost" data-psqm aria-label="Procurar" title="Procurar">${ICON.lupa}</button><button class="btn sm ghost" data-ajuda aria-label="Ajuda" title="Ajuda">?</button><button class="btn sm ghost" data-sair>Sair</button></div></header>
+    <header class="topbar">${brandHTML(true)}<div class="row" style="gap:4px"><div id="syncB"></div><button class="btn sm repor-on" data-repor data-repor-top title="Há filtros ativos: limpar" ${filtrosAlterados() ? "" : "hidden"}>Limpar filtros</button>${ultimasBtnHTML(true)}<button class="btn sm ghost" data-psqm aria-label="Procurar" title="Procurar">${ICON.lupa}</button><button class="btn sm ghost" data-ajuda aria-label="Ajuda" title="Ajuda">?</button><button class="btn sm ghost" data-sair>Sair</button></div></header>
     <main class="main"><div class="main-in" id="view">${view.html}</div></main>
     <nav class="tabbar">${nav.filter((n) => !n.soLado).map((n) => `<a href="#${n.id}" class="${view.nav === n.id ? "on" : ""}">${ICON[n.id]}<span>${n.short || n.label}</span></a>`).join("")}${nav.some((n) => n.soLado) ? `<button type="button" class="tb-mais ${nav.some((n) => n.soLado && view.nav === n.id) ? "on" : ""}" data-mais aria-haspopup="menu" aria-expanded="false">${ICON.mais}<span>Mais</span></button>` : ""}</nav>
     ${nav.some((n) => n.soLado) ? `<div class="mais-m" hidden role="menu" data-maism>${nav.filter((n) => n.soLado).map((n) => `<a href="#${n.id}" role="menuitem" class="${view.nav === n.id ? "on" : ""}">${ICON[n.id]}<span>${n.label}</span></a>`).join("")}</div>` : ""}
@@ -176,6 +178,7 @@ export function render() {
   ["#vistaD", "#vistaM"].forEach((id) => { const sl = $(id); if (sl) sl.onchange = () => mudarVista(sl.value); });
   app.querySelectorAll("[data-repor]").forEach((b) => (b.onclick = reporFiltros));
   app.querySelectorAll("[data-ajuda]").forEach((b) => (b.onclick = abrirAjuda));
+  app.querySelectorAll("[data-ultimas]").forEach((b) => (b.onclick = abrirUltimas));
   app.querySelectorAll("[data-ver]").forEach((b) => (b.onclick = abrirNovidades));
   const pd = $("#psqD"); if (pd && S) ligarPesquisa(pd);
   app.querySelectorAll("[data-psqm]").forEach((b) => (b.onclick = abrirPesquisaMovel));

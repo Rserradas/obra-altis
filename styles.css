@@ -1880,3 +1880,15 @@ details.fs-d[open] > summary::before { transform: rotate(90deg); }
   .fs-d1 b { font-size: 10.5pt; font-weight: 800; color: #000; }
   .fs-d1 small, .fs-eq { font-size: 7.5pt; color: #444; }
 }
+/* ============================================================ últimas alterações */
+.ult-b { display: inline-flex; align-items: center; gap: 6px; }
+.ult-b svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; flex: 0 0 auto; }
+.ult-n { background: var(--accent); color: #fff; border-radius: 99px; font-size: .7rem; padding: 0 6px; min-width: 18px; text-align: center; line-height: 1.5; }
+.side-foot .ult-b { justify-content: flex-start; }
+.ult-dlg { max-width: 560px; width: calc(100vw - 32px); }
+.ult-l { display: flex; flex-direction: column; max-height: 55vh; overflow-y: auto; margin: 8px 0 4px; border-top: 1px solid var(--line); }
+.ult-i { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 9px 2px; border-bottom: 1px solid var(--line); }
+.ult-t { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.ult-t b { font-weight: 600; font-size: .9rem; overflow-wrap: anywhere; }
+.ult-i.anulada .ult-t b { text-decoration: line-through; color: var(--muted); }
+.ult-i .btn { flex: 0 0 auto; }
