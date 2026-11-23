@@ -1825,7 +1825,6 @@ details.fs-d[open] > summary::before { transform: rotate(90deg); }
 .fs-l2.wait1 { color: var(--bloq); }
 .fs-sem { color: var(--warn, #9a6a00); font-weight: 600; }
 .fs-al { color: var(--crit); font-weight: 700; }
-.fs-desc { color: var(--ink); opacity: .8; }
 .fs-alt { color: var(--accent); }
 .fs-a { display: flex; flex-direction: column; align-items: flex-end; gap: 6px; }
 .fs-a .sit-est .sb { min-height: 34px; padding: 0 10px; font-size: .84rem; }
