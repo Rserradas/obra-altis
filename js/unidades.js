@@ -123,7 +123,7 @@ export function unidadeView(id) {
     const agora = o.est === "conc" ? "concluída" : o.est === "curso" ? `em curso, ${o.pct}%` : espera.length ? `à espera de ${espera[0]}${espera.length > 1 ? " +" + (espera.length - 1) : ""}` : "não iniciada";
     const sf = sitFotosDe(a.id), nf = sf.fotos.length;
     return `<div class="sitrow ${espera.length && s.est === "por" ? "espera" : ""} ${mud || nf ? "mudou" : ""}" id="sr-${a.id}">
-      <div class="sit-nm"><b>${esc(nomeAtiv(a))}</b><small>${mud ? `<span class="sit-alt">Por guardar</span> · era ` : nf ? `<span class="sit-alt">${nf === 1 ? "1 fotografia" : nf + " fotografias"} por guardar</span> · ` : "Agora: "}${esc(agora)}</small></div>
+      <div class="sit-nm"><button class="lnk-b" data-a="${a.id}" title="Abrir a ficha da atividade"><b>${esc(nomeAtiv(a))}</b></button><small>${mud ? `<span class="sit-alt">Por guardar</span> · era ` : nf ? `<span class="sit-alt">${nf === 1 ? "1 fotografia" : nf + " fotografias"} por guardar</span> · ` : "Agora: "}${esc(agora)}</small></div>
       <div class="sit-fx"><span class="vf-slot" data-vfotos="${a.id}"></span>${can("foto") ? fotoPickerHTML("f~" + a.id, nf) : ""}</div>
       <div class="sit-est" role="group" aria-label="Estado de ${esc(nomeAtiv(a))}">${bt("por", "Não iniciada")}${bt("curso", "Em curso")}${bt("conc", "Concluída")}</div>
       ${s.est === "curso" ? `<div class="sit-pct">${pctCtlHTML("s~" + a.id, s.pct, mud && s.pct !== o.pct)}</div>` : ""}

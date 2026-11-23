@@ -1588,6 +1588,7 @@ input.fq-n { border: 1px solid var(--line); border-radius: 6px; background: var(
 .sitrow.espera .sit-nm b { color: var(--muted); }
 .sit-nm { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
 .sit-nm b { font-weight: 700; overflow-wrap: anywhere; }
+.sit-nm .lnk-b { align-self: flex-start; max-width: 100%; cursor: pointer; }
 .sit-nm small { color: var(--muted); font-size: .8rem; }
 .sit-alt { color: var(--accent); font-weight: 700; }
 .sit-est { display: flex; gap: 6px; }
