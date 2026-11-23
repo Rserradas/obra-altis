@@ -54,13 +54,13 @@ function linha({ a, r }, podeMexer) {
   const espera = r.estado === "bloqueada" ? [...new Set(r.bloqueadaPor.map((id) => S.acts[id]).filter(Boolean).map((x) => nomeAtiv(x) + (x.unidade !== a.unidade ? " (" + x.unidade + ")" : "")))] : [];
   const nImp = impAbertos(a).length, nPend = pendDe(a.unidade, a.id).filter(pendAberto).length;
   const ini = r.prevIni || r.inicio, fim = r.prevFim || r.fim;
-  const datas = [`prev. ${fd(ini)} a ${fd(fim)}`, a.realInicio ? `começou a ${fd(a.realInicio)}` : "", r.estado === "em_curso" && r.provFim && r.provFim !== fim ? `fim provável ${fd(r.provFim)}` : ""].filter(Boolean).join(" · ");
+  const iniV = a.realInicio || ini, provDif = r.estado === "em_curso" && r.provFim && r.provFim !== fim;
   const novo = s.est === "conc" ? "concluída hoje" : s.est === "curso" ? `em curso, ${s.pct}%` : "não iniciada";
   const bt = (k, l) => `<button type="button" class="sb sb-${k} ${s.est === k ? "on" : ""}" data-fsit="${a.id}|${k}" aria-pressed="${s.est === k}">${l}</button>`;
   return `<div class="fs-row ${mud ? "mudou" : ""} ${r.atrasada ? "atr" : ""}" id="fs-${a.id}">
     <div class="fs-i">
-      <div class="fs-l1"><button class="lnk-b mono fs-u" data-a="${a.id}" title="Abrir a ficha">${esc(a.unidade)}</button><span class="pill st-${r.estado}">${ESTADO[r.estado]}</span>${deltaHTML(r.atraso)}<span class="fs-pct num" title="Percentagem do empreiteiro e da última vistoria do fiscal"><b>${pe}%</b> <span class="note">fiscal ${pf == null ? "s/v" : pf + "%"}</span></span><span class="fs-bar" aria-hidden="true"><i style="width:${pe}%"></i></span></div>
-      <div class="fs-l2">${esc(datas)} · ${a.equipa ? esc(a.equipa) : `<span class="fs-sem">sem equipa</span>`}</div>
+      <div class="fs-l1"><button class="lnk-b mono fs-u" data-a="${a.id}" title="Abrir a ficha">${esc(a.unidade)}</button><span class="pill st-${r.estado}">${ESTADO[r.estado]}</span>${deltaHTML(r.atraso)}<span class="fs-pct num" title="Percentagem do empreiteiro e da última vistoria do fiscal"><b>${pe}%</b> <span class="note fs-fis">fiscal ${pf == null ? "s/v" : pf + "%"}</span></span><span class="fs-bar" aria-hidden="true"><i style="width:${pe}%"></i></span></div>
+      <div class="fs-dt"><span class="fs-d1"><small>Início</small> <b class="num">${fd(iniV)}</b>${a.realInicio ? ` <small>(começou)</small>` : ""}</span><span class="fs-d1"><small>Conclusão</small> <b class="num">${fd(fim)}</b>${provDif ? ` <small class="fs-prov">(provável ${fd(r.provFim)})</small>` : ""}</span>${a.equipa ? `<span class="fs-eq">${esc(a.equipa)}</span>` : `<span class="fs-sem">sem equipa</span>`}</div>
       ${espera.length ? `<div class="fs-l2 wait1">à espera de ${esc(espera.slice(0, 3).join(", "))}${espera.length > 3 ? ` e mais ${espera.length - 3}` : ""}</div>` : ""}
       ${nImp || nPend ? `<div class="fs-l2 fs-al">${[nImp ? pl(nImp, "impedimento", "impedimentos") : "", nPend ? pl(nPend, "pendente por resolver", "pendentes por resolver") : ""].filter(Boolean).join(" · ")}</div>` : ""}
       ${mud ? `<div class="fs-l2 fs-alt"><b>Por guardar:</b> ${esc(novo)} (era ${o.est === "conc" ? "concluída" : o.est === "curso" ? `em curso, ${o.pct}%` : "não iniciada"})</div>` : ""}

@@ -1824,6 +1824,10 @@ details.fs-d[open] > summary::before { transform: rotate(90deg); }
 .fs-l2 { font-size: .82rem; color: var(--muted); overflow-wrap: anywhere; }
 .fs-l2.wait1 { color: var(--bloq); }
 .fs-sem { color: var(--warn, #9a6a00); font-weight: 600; }
+.fs-dt { display: flex; gap: 4px 16px; flex-wrap: wrap; align-items: baseline; font-size: .86rem; }
+.fs-d1 b { font-size: .98rem; color: var(--ink); }
+.fs-d1 small, .fs-eq { color: var(--muted); font-size: .8rem; }
+.fs-prov { color: var(--crit) !important; }
 .fs-al { color: var(--crit); font-weight: 700; }
 .fs-alt { color: var(--accent); }
 .fs-a { display: flex; flex-direction: column; align-items: flex-end; gap: 6px; }
@@ -1871,4 +1875,8 @@ details.fs-d[open] > summary::before { transform: rotate(90deg); }
   .fs-p i.fs-pn { height: 22px; }
   .fs-u { color: #000; }
   .fs-pct b { font-size: 9pt; }
+  .fs-fis, .fs-sem { display: none !important; }
+  .fs-dt { gap: 2px 14px; font-size: 8pt; }
+  .fs-d1 b { font-size: 10.5pt; font-weight: 800; color: #000; }
+  .fs-d1 small, .fs-eq { font-size: 7.5pt; color: #444; }
 }
