@@ -230,6 +230,7 @@ export function chaveVersao(v) {
   return `${m[3]}${m[2].padStart(2, "0")}${m[1].padStart(2, "0")}-${m[4].padStart(3, "0")}`;
 }
 export const NOVIDADES = [
+  ["23.11.2026 V5", ["Últimas alterações: novo botão com a seta para trás (na barra lateral e, no telemóvel, na barra de cima) que mostra o que gravou nesta sessão e deixa anular cada alteração, mesmo depois de o aviso com Anular desaparecer. Se a mesma atividade voltou a mudar depois, pergunta antes de anular."]],
   ["23.11.2026 V4", ["Filas das equipas: quando um trabalho entra na fila de uma equipa, vai sempre para o fim. Se entrarem vários de uma vez, ficam no fim pela data em que podem começar.", "Folha da semana impressa: sem a percentagem do fiscal nem o aviso sem equipa, e com a data de início e a de conclusão em destaque."]],
   ["23.11.2026 V3", ["Folha da semana: cada linha ficou mais curta, sem a descrição, as observações e a referência."]],
   ["23.11.2026 V2", ["Minha semana, novo separador Folha da semana: as atividades da semana agrupadas por bloco e andar, grupo e atividade, com a percentagem do empreiteiro e do fiscal, as datas, a equipa, os impedimentos e as observações. Pode mudar o estado e a percentagem e gravar tudo com Guardar, e imprimir ou guardar em PDF, com colunas em branco para preencher em obra.", "Minha semana: Escolher várias para marcar atividades e iniciá-las ou concluí-las de uma vez, com data de início e de fim.", "Minha semana: botão Tirar filtros quando há filtros ligados.", "Ponto de situação: tocar no nome da atividade abre a ficha."]],
