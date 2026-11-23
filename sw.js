@@ -1,5 +1,5 @@
 // Guarda a aplicação no dispositivo para abrir sem rede. Os dados ficam na cache do Firestore.
-const CACHE = "obra-23.11.2026-V3";
+const CACHE = "obra-23.11.2026-V4";
 const FILES = ["./", "index.html", "styles.css", "app.js", "js/ajuda.js", "js/base.js", "js/calculo.js", "js/definicoes.js", "js/equipas.js", "js/estado.js", "js/ficha.js", "js/folha.js", "js/gantt.js", "js/grupos.js", "js/nova.js", "js/nucleo.js", "js/painel.js", "js/pendentes.js", "js/plano.js", "js/previsao.js", "js/proximas.js", "js/relgraf.js", "js/segurar.js", "js/semana.js", "js/unidades.js", "js/vistorias.js", "engine.js", "store.js", "firebase.js", "config.js", "seed.json", "versao.json", "manifest.webmanifest", "icon.svg", "icon-192.png", "icon-512.png"];
 self.addEventListener("install", (e) => { e.waitUntil(caches.open(CACHE).then((c) => c.addAll(FILES)).then(() => self.skipWaiting())); });
 self.addEventListener("activate", (e) => {
