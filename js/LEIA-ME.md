@@ -12,7 +12,7 @@ A aplicação abre em `app.js`, que só arranca o resto. O código de cada ecrã
 | `estado.js` | Estado partilhado pela aplicação. Só se muda através das funções set...(), para todos os módulos verem o valor novo. | 19 |
 | `ficha.js` | Ficha da atividade. | 407 |
 | `folha.js` | Folha da semana: atividades da semana agrupadas por andar, apartamento ou atividade, filtros de andar e apartamentos, para mexer e imprimir (completa ou compacta). | 267 |
-| `gantt.js` | Gantt e caminho crítico. | 465 |
+| `gantt.js` | Gantt e caminho crítico. Níveis arrastáveis (Ver por). | 580 |
 | `nova.js` | Criar e eliminar frações; nova atividade. | 427 |
 | `nucleo.js` | Arranque, versão, desenho principal da página e login. | 355 |
 | `painel.js` | Precisa de atenção e Painel. | 158 |

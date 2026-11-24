@@ -1880,6 +1880,34 @@ details.fs-d[open] > summary::before { transform: rotate(90deg); }
   .fs-d1 b { font-size: 10.5pt; font-weight: 800; color: #000; }
   .fs-d1 small, .fs-eq { font-size: 7.5pt; color: #444; }
 }
+/* gantt: níveis (Ver por), arrastáveis */
+.gniv { display: flex; align-items: center; gap: 8px 10px; flex-wrap: wrap; padding: 8px 10px; margin-bottom: 8px; border: 1px solid var(--line); border-radius: var(--r); background: var(--surface); }
+.gniv-l { font-weight: 700; font-size: .88rem; }
+.gniv-c { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.gniv-i { display: inline-flex; align-items: center; gap: 6px; padding: 5px 6px 5px 8px; border-radius: 999px; background: var(--accent); color: #fff; font-weight: 700; font-size: .86rem; cursor: grab; user-select: none; touch-action: none; }
+.gniv-i:focus-visible { outline: 3px solid color-mix(in srgb, var(--accent) 45%, transparent); outline-offset: 2px; }
+.gniv-i.arrasta { cursor: grabbing; box-shadow: 0 6px 18px rgba(0,0,0,.25); transform: scale(1.06); }
+.gniv-c.a-arrastar .gniv-i:not(.arrasta) { opacity: .75; }
+.gniv-h { opacity: .7; font-size: .8rem; }
+.gniv-x { border: 0; background: rgba(255,255,255,.22); color: #fff; width: 20px; height: 20px; border-radius: 50%; line-height: 1; font-size: .95rem; cursor: pointer; padding: 0; }
+.gniv-x:hover { background: rgba(255,255,255,.4); }
+.gniv-s { color: var(--muted); font-weight: 700; }
+.gniv-add { display: inline-flex; gap: 6px; flex-wrap: wrap; }
+.gniv-n { border-style: dashed; }
+.gniv-v .inp { width: auto; min-width: 0; font-size: .85rem; padding-top: 5px; padding-bottom: 5px; }
+.gniv-v { margin-left: auto; }
+.grow.gn .glab, .ga.gx .glab { padding-left: calc(10px + var(--gd, 0) * 15px); }
+.ga.gx.gcrow .glab { padding-left: 12px; }
+.grow.gn.gu .glab b { font-weight: 650; }
+.ga.gx .glab .gname.mono { font-size: .8rem; }
+.ga.gx .glab .gcu { font-size: .75rem; color: var(--muted); margin-right: 6px; flex: 0 0 auto; }
+@media (max-width: 640px) {
+  .grow.gn .glab, .ga.gx .glab { padding-left: calc(6px + var(--gd, 0) * 8px); }
+  .grow.gn .glab .note { display: none; }
+  .gniv-v { margin-left: 0; width: 100%; }
+  .gniv-v .inp { width: 100%; }
+}
+@media print { .gniv { display: none !important; } }
 /* folha da semana: agrupar, filtros de andar e apartamentos, versão compacta para papel */
 .fs-agr { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin: 10px 0 2px; }
 .fs-agl { font-weight: 700; font-size: .9rem; }
