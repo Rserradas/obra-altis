@@ -9,7 +9,7 @@ import { atencaoHTML, bindAtencao } from "./painel.js";
 import { filtroGrupo, grupoSelectHTML, nomeGrupo } from "./grupos.js";
 import { concluirHoje, concluirVarias, editarData, iniciarVarias } from "./plano.js";
 import { bindCommon } from "./previsao.js";
-import { bindFolha, filtrarFolha, filtrosFolhaHTML, filtrosFolhaTxt, folhaHTML, nFiltrosFolha } from "./folha.js";
+import { bindFolha, filtrarFolha, itensPeriodo, filtrosFolhaHTML, filtrosFolhaTxt, folhaHTML, nFiltrosFolha } from "./folha.js";
 import { impAbertos } from "./proximas.js";
 import { ORD_BLOCOS, analiseSegurar, ganhoEm, ordenarSeg, pl, rotuloAlvo } from "./segurar.js";
 import { ultimaVistoria } from "./unidades.js";
@@ -50,7 +50,7 @@ export function semanaView() {
   if (!(ui.semSel instanceof Set)) ui.semSel = new Set();
   const sel = ui.semSel;
   for (const id of [...sel]) if (!S.acts[id] || S.res.get(id).estado === "concluida") sel.delete(id);
-  const fFolha = folha ? filtrarFolha([...emCurso, ...comecar, ...(ui.folhaEspera ? espera.filter(({ r }) => r.inicio <= lim) : [])], w) : null;
+  const fFolha = folha ? filtrarFolha(itensPeriodo(base, hoje), w) : null;
   const itensFolha = fFolha ? fFolha.itens : [];
   const semFiltros = [folha ? "" : w.ver, w.bloco, w.equipa, w.grupo].filter(Boolean).length + nFiltrosFolha(fFolha);
   const tipoDe = (r) => (r.estado === "em_curso" ? "curso" : r.estado === "bloqueada" ? "espera" : "comecar");

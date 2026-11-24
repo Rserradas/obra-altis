@@ -1,5 +1,5 @@
 // Folha da semana: as atividades da semana agrupadas por andar, apartamento ou atividade, para trabalhar no ecrã e imprimir (completa ou compacta).
-import { pctEfetiva } from "../engine.js";
+import { addDays, pctEfetiva } from "../engine.js";
 import { $, ESTADO, PAPEL, can, deltaHTML, erroSimples, esc, fd, toast, ui } from "./base.js";
 import { blocoLabel, nomeAtiv } from "./calculo.js";
 import { S, store } from "./estado.js";
@@ -30,6 +30,13 @@ export function opcFolha() {
     ui.folhaOpc = { agr: MODOS_FOLHA[o.agr] ? o.agr : "andar", papel: o.papel === "completa" ? "completa" : "compacta", pag: !!o.pag };
   }
   return ui.folhaOpc;
+}
+/** Período da folha: esta semana (o que está em curso e o que começa até daqui a 7 dias), mais semanas, ou todas as que faltam concluir. */
+export const PERIODOS_FOLHA = { semana: ["Esta semana", 7], sem2: ["Próximas 2 semanas", 14], mes: ["Próximo mês", 31], todas: ["Todas as não concluídas", null] };
+export const perFolha = () => (PERIODOS_FOLHA[ui.folhaPer] ? ui.folhaPer : "semana");
+export function itensPeriodo(base, hoje) {
+  const per = perFolha(), dias = PERIODOS_FOLHA[per][1], lim = dias ? addDays(hoje, dias) : null, todas = !dias;
+  return base.filter(({ r }) => r.estado === "em_curso" || (r.estado === "por_iniciar" && (todas || r.inicio <= lim)) || (r.estado === "bloqueada" && (todas || (ui.folhaEspera && r.inicio <= lim))));
 }
 const gravarOpc = () => { try { localStorage.setItem("obra-folha-opc", JSON.stringify(ui.folhaOpc)); } catch (e) {} };
 
@@ -164,25 +171,28 @@ export function folhaHTML(itens, { hoje, lim, filtrosTxt, filtros, equipaFixa })
   const no = (N, d) => (N.linhas ? bloco(N) : det(N.k, d ? "fs-grupo" : "fs-andar", `<span class="fs-t">${esc(N.l)}</span>${N.sub ? `<span class="fs-sub note">${esc(N.sub)}</span>` : ""}${resumo(N.itens)}`, N.filhos.map((F) => no(F, d + 1)).join("")));
   const corpo = arv.map((N) => no(N, 0)).join("");
   const quem = store.user && (store.user.nome || store.user.email || PAPEL[store.user.papel]);
-  const periodo = `${fd(hoje)} a ${fd(lim)}`;
+  const per = perFolha(), dias = PERIODOS_FOLHA[per][1], limF = dias ? addDays(hoje, dias) : null;
+  const periodo = dias ? `${fd(hoje)} a ${fd(limF)}` : `por concluir a ${fd(hoje)}`;
+  const titulo = per === "semana" ? "Folha da semana" : "Folha de trabalhos";
   const cmp = op.papel === "compacta";
   return `
     <div class="fs-cab print-only">
-      <div class="fs-cab1"><b>Folha da semana</b><span>${esc((S.cfg.obra && S.cfg.obra.nome) || S.cfg.nome || "ALTIS")}</span></div>
-      <div class="fs-cab2">De ${fd(hoje, true)} a ${fd(lim, true)} · agrupada por ${MODOS_FOLHA[op.agr].toLowerCase()} · ${esc(filtrosTxt || "Todos os blocos, equipas e grupos")} · ${pl(itens.length, "trabalho", "trabalhos")} · impressa a ${fd(hoje, true)}${quem ? " por " + esc(quem) : ""}</div>
+      <div class="fs-cab1"><b>${titulo}</b><span>${esc((S.cfg.obra && S.cfg.obra.nome) || S.cfg.nome || "ALTIS")}</span></div>
+      <div class="fs-cab2">${dias ? `De ${fd(hoje, true)} a ${fd(limF, true)}` : "Todas as atividades por concluir"} · agrupada por ${MODOS_FOLHA[op.agr].toLowerCase()} · ${esc(filtrosTxt || "Todos os blocos, equipas e grupos")} · ${pl(itens.length, "trabalho", "trabalhos")} · impressa a ${fd(hoje, true)}${quem ? " por " + esc(quem) : ""}</div>
     </div>
     ${filtros ? escolherUsHTML(filtros) : ""}
     <div class="fs-agr no-print"><span class="fs-agl">Agrupar por</span><div class="seg-v sm" role="group" aria-label="Agrupar por">${Object.entries(MODOS_FOLHA).map(([k, l]) => `<button type="button" data-fagr="${k}" class="${op.agr === k ? "on" : ""}" aria-pressed="${op.agr === k}">${l}</button>`).join("")}</div></div>
     <div class="fs-ops no-print">
       <span class="fs-ops-c">
-        <label class="check"><input type="checkbox" id="fsEsp" ${ui.folhaEspera ? "checked" : ""}><span>Incluir as à espera de outras</span></label>
+        <label class="f fs-papel">Período<select class="inp" id="fsPer">${Object.entries(PERIODOS_FOLHA).map(([k, [l]]) => `<option value="${k}" ${per === k ? "selected" : ""}>${l}</option>`).join("")}</select></label>
+        ${dias ? `<label class="check"><input type="checkbox" id="fsEsp" ${ui.folhaEspera ? "checked" : ""}><span>Incluir as à espera de outras</span></label>` : ""}
         <label class="f fs-papel">No papel<select class="inp" id="fsPapel"><option value="compacta" ${cmp ? "selected" : ""}>Compacta, uma linha por trabalho</option><option value="completa" ${cmp ? "" : "selected"}>Completa, como no ecrã</option></select></label>
         <label class="check"><input type="checkbox" id="fsPag" ${op.pag ? "checked" : ""}><span>${PAG_LBL[op.agr]}</span></label>
       </span>
       <span class="fs-ops-b"><button class="btn sm" id="fsAbrir">${fch.size ? "Abrir tudo" : "Fechar tudo"}</button><button class="btn sm pri" id="fsPrint">Imprimir ou PDF</button></span>
     </div>
     <p class="note no-print fs-dica">${podeMexer ? "Mude o estado e a percentagem em cada linha e carregue em Guardar no fim: grava tudo de uma vez e pode Anular. " : ""}Toque no ${mostra === "a" ? "nome da atividade" : "código da fração"} para abrir a ficha. ${cmp ? "No papel sai a versão compacta: uma linha por trabalho, com as datas e duas colunas em branco, % em obra e Notas, para preencher na visita." : "No papel sai como no ecrã, com duas colunas em branco, % em obra e Notas, para preencher na visita."}${op.pag ? " Cada " + (op.agr === "atividade" ? "grupo" : op.agr) + " começa numa folha nova, para entregar em separado." : ""}</p>
-    ${itens.length ? `<div class="fs-wrap ${cmp ? "cmp" : ""} ${op.pag ? "pag" : ""}"><div class="fs">${corpo}</div>${cmp ? compactaHTML(tree, { comEq: !equipaFixa && itens.some(({ a }) => a.equipa), periodo, modo: op.agr }) : ""}</div>` : `<div class="empty">Nada para esta semana com estes filtros.</div>`}
+    ${itens.length ? `<div class="fs-wrap ${cmp ? "cmp" : ""} ${op.pag ? "pag" : ""}"><div class="fs">${corpo}</div>${cmp ? compactaHTML(tree, { comEq: !equipaFixa && itens.some(({ a }) => a.equipa), periodo, modo: op.agr }) : ""}</div>` : `<div class="empty">${dias ? "Nada para este período com estes filtros." : "Nada por concluir com estes filtros."}</div>`}
     ${podeMexer ? barraHTML(nMud) : ""}`;
 }
 const barraHTML = (nMud) => `<div class="vbar sitbar no-print" id="fsBar"><span class="vb-l"><b class="num">${nMud ? `${nMud} por guardar` : "Nada por guardar"}</b>${nMud ? `<button class="btn sm ghost vb-seg" id="fsDesf">Desfazer</button>` : ""}</span>
@@ -209,6 +219,7 @@ export function bindFolha(itens, w) {
   const ab = $("#fsAbrir");
   if (ab) ab.onclick = () => { const abrir = fch.size > 0; view.querySelectorAll("details.fs-d").forEach((d) => { if (abrir) fch.delete(d.dataset.fsk); else fch.add(d.dataset.fsk); }); render(); };
   const es = $("#fsEsp"); if (es) es.onchange = () => { ui.folhaEspera = es.checked; render(); };
+  const pe = $("#fsPer"); if (pe) pe.onchange = () => { ui.folhaPer = pe.value; render(); };
   // imprimir: abre tudo para o papel e volta a fechar o que estava fechado
   // (guarda o que estava fechado em ui, para resistir a um redesenho a meio da impressão)
   window.onbeforeprint = () => { if (!document.querySelector("details.fs-d") || ui.folhaPrint) return; ui.folhaPrint = new Set(fechados()); document.querySelectorAll("details.fs-d").forEach((d) => (d.open = true)); };
