@@ -9,7 +9,7 @@ import { atencaoHTML, bindAtencao } from "./painel.js";
 import { filtroGrupo, grupoSelectHTML, nomeGrupo } from "./grupos.js";
 import { concluirHoje, concluirVarias, editarData, iniciarVarias } from "./plano.js";
 import { bindCommon } from "./previsao.js";
-import { bindFolha, filtrosFolhaTxt, folhaHTML } from "./folha.js";
+import { bindFolha, filtrarFolha, filtrosFolhaHTML, filtrosFolhaTxt, folhaHTML, nFiltrosFolha } from "./folha.js";
 import { impAbertos } from "./proximas.js";
 import { ORD_BLOCOS, analiseSegurar, ganhoEm, ordenarSeg, pl, rotuloAlvo } from "./segurar.js";
 import { ultimaVistoria } from "./unidades.js";
@@ -50,8 +50,9 @@ export function semanaView() {
   if (!(ui.semSel instanceof Set)) ui.semSel = new Set();
   const sel = ui.semSel;
   for (const id of [...sel]) if (!S.acts[id] || S.res.get(id).estado === "concluida") sel.delete(id);
-  const semFiltros = [folha ? "" : w.ver, w.bloco, w.equipa, w.grupo].filter(Boolean).length;
-  const itensFolha = folha ? [...emCurso, ...comecar, ...(ui.folhaEspera ? espera.filter(({ r }) => r.inicio <= lim) : [])] : [];
+  const fFolha = folha ? filtrarFolha([...emCurso, ...comecar, ...(ui.folhaEspera ? espera.filter(({ r }) => r.inicio <= lim) : [])], w) : null;
+  const itensFolha = fFolha ? fFolha.itens : [];
+  const semFiltros = [folha ? "" : w.ver, w.bloco, w.equipa, w.grupo].filter(Boolean).length + nFiltrosFolha(fFolha);
   const tipoDe = (r) => (r.estado === "em_curso" ? "curso" : r.estado === "bloqueada" ? "espera" : "comecar");
   const linha = ({ a, r }, tipo0) => {
     const tipo = tipo0 === "auto" ? tipoDe(r) : tipo0;
@@ -83,10 +84,10 @@ export function semanaView() {
       <span class="sitbar-b"><button class="btn" id="semIniB" ${dSel} title="Ficam em curso a partir da data de início">Iniciar</button><button class="btn ok" id="semConcB" ${dSel} title="Ficam concluídas na data de fim; as que ainda não tinham começado ficam com a data de início">Concluir</button></span>
     </div>` : "";
   const blocosHTML = `<div class="chips no-print" role="group" aria-label="Bloco">${["", "A", "B", "C", "D", "Geral"].map((b) => `<button class="chip ${w.bloco === b ? "on" : ""}" data-sb="${b}">${b === "Geral" ? "Geral" : b ? "Bloco " + b : "Todos os blocos"}</button>`).join("")}</div>`;
-  const filtrosHTML = `<div class="filters no-print"><label class="f">Equipa<select class="inp" id="sEq"><option value="">Todas as equipas</option>${S.equipasTodas.map((e) => `<option ${w.equipa === e ? "selected" : ""}>${esc(e)}</option>`).join("")}<option value="_sem" ${w.equipa === "_sem" ? "selected" : ""}>Sem equipa atribuída</option></select></label>${grupoSelectHTML("sGr", w.grupo)}</div>`;
+  const filtrosHTML = `<div class="filters no-print"><label class="f">Equipa<select class="inp" id="sEq"><option value="">Todas as equipas</option>${S.equipasTodas.map((e) => `<option ${w.equipa === e ? "selected" : ""}>${esc(e)}</option>`).join("")}<option value="_sem" ${w.equipa === "_sem" ? "selected" : ""}>Sem equipa atribuída</option></select></label>${grupoSelectHTML("sGr", w.grupo)}${fFolha ? filtrosFolhaHTML(fFolha) : ""}</div>`;
   const tabsHTML = `<div class="tabs sem-tabs no-print" role="tablist"><button data-stab="lista" class="${folha ? "" : "on"}" role="tab" aria-selected="${!folha}">Lista</button><button data-stab="folha" class="${folha ? "on" : ""}" role="tab" aria-selected="${folha}">Folha da semana</button></div>`;
-  const cabHTML = `<div class="card-h no-print"><h1>A minha semana</h1><span class="note">De hoje, ${fd(hoje)}, a ${fd(lim)} · <a href="#proximas">Ver as próximas semanas</a></span><span class="sem-hb">${semFiltros ? `<button class="btn sm warn sem-tirar" id="semTirar" title="Mostrar tudo: todos os blocos, equipas e grupos">Tirar filtros (${semFiltros})</button>` : ""}${can("executar") && !folha ? `<button class="btn sm ${esc0 ? "warn" : ""}" id="semEsc" title="${esc0 ? "Volta à lista normal" : "Marcar várias atividades e iniciá-las ou concluí-las de uma vez, com a data de início e de fim"}">${esc0 ? "Terminar escolha" : "Escolher várias"}</button>` : ""}</span></div>`;
-  const html = folha ? `${cabHTML}${tabsHTML}${blocosHTML}${filtrosHTML}${folhaHTML(itensFolha, { hoje, lim, filtrosTxt: filtrosFolhaTxt(w) })}` : `${cabHTML}${tabsHTML}
+  const cabHTML = `<div class="card-h no-print"><h1>A minha semana</h1><span class="note">De hoje, ${fd(hoje)}, a ${fd(lim)} · <a href="#proximas">Ver as próximas semanas</a></span><span class="sem-hb">${semFiltros ? `<button class="btn sm warn sem-tirar" id="semTirar" title="Mostrar tudo: todos os blocos, andares, apartamentos, equipas e grupos">Tirar filtros (${semFiltros})</button>` : ""}${can("executar") && !folha ? `<button class="btn sm ${esc0 ? "warn" : ""}" id="semEsc" title="${esc0 ? "Volta à lista normal" : "Marcar várias atividades e iniciá-las ou concluí-las de uma vez, com a data de início e de fim"}">${esc0 ? "Terminar escolha" : "Escolher várias"}</button>` : ""}</span></div>`;
+  const html = folha ? `${cabHTML}${tabsHTML}${blocosHTML}${filtrosHTML}${folhaHTML(itensFolha, { hoje, lim, filtrosTxt: filtrosFolhaTxt(w, fFolha), filtros: fFolha, equipaFixa: !!w.equipa && w.equipa !== "_sem" })}` : `${cabHTML}${tabsHTML}
     ${esc0 ? `<p class="banner sem-dica">Toque nas atividades para as marcar (de várias frações e listas). Em baixo escolha a data de início e a de fim e carregue em Iniciar ou Concluir. Iniciar usa a data de início; Concluir usa a data de fim e, nas que ainda não tinham começado, a de início.</p>` : ""}
     <div class="kpis kpis3">
       <button class="kpi k-curso ${w.ver === "curso" ? "sel" : ""}" data-sver="curso" aria-pressed="${w.ver === "curso"}" title="Mostrar só as em curso"><b>${emCurso.length}</b><span>Em curso, ${acabar} acabam esta semana</span></button>
@@ -107,14 +108,14 @@ export function semanaView() {
     html, bind: () => {
       bindCommon(); bindAtencao();
       document.querySelectorAll("[data-stab]").forEach((b) => (b.onclick = () => { ui.semTab = b.dataset.stab; if (ui.semTab === "folha") { ui.semEsc = false; sel.clear(); } render(); }));
-      if (folha) bindFolha(itensFolha);
+      if (folha) bindFolha(itensFolha, w);
       document.querySelectorAll("[data-sb]").forEach((b) => (b.onclick = () => { w.bloco = b.dataset.sb; render(); }));
       document.querySelectorAll("[data-sver]").forEach((b) => (b.onclick = () => { w.ver = w.ver === b.dataset.sver ? "" : b.dataset.sver; render(); }));
       document.querySelectorAll("[data-sver2]").forEach((b) => (b.onclick = () => { w.ver = b.dataset.sver2; render(); }));
       $("#sEq").onchange = (e) => { w.equipa = e.target.value; render(); };
       const sg = $("#sGr"); if (sg) sg.onchange = (e) => { w.grupo = e.target.value; render(); };
       document.querySelectorAll("[data-semver]").forEach((b) => (b.onclick = () => { Object.assign(ui.plano, PLANO_PADRAO(), { f: b.dataset.semver, bloco: w.bloco, equipa: w.equipa === "_sem" ? "" : w.equipa, grupo: w.grupo || "" }); }));
-      const tirar = () => { Object.assign(w, { equipa: "", bloco: "", grupo: "" }, folha ? {} : { ver: "" }); render(); toast("Filtros da Minha semana tirados", { anular: false }); };
+      const tirar = () => { Object.assign(w, { equipa: "", bloco: "", grupo: "", fAndar: "", fUs: [] }, folha ? {} : { ver: "" }); ui.folhaUpick = false; render(); toast("Filtros da Minha semana tirados", { anular: false }); };
       const st = $("#semTirar"); if (st) st.onclick = tirar;
       document.querySelectorAll("[data-semtirar]").forEach((b) => (b.onclick = tirar));
       const se = $("#semEsc"); if (se) se.onclick = () => { ui.semEsc = !esc0; if (!ui.semEsc) sel.clear(); render(); };

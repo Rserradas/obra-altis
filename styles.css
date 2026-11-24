@@ -1880,6 +1880,58 @@ details.fs-d[open] > summary::before { transform: rotate(90deg); }
   .fs-d1 b { font-size: 10.5pt; font-weight: 800; color: #000; }
   .fs-d1 small, .fs-eq { font-size: 7.5pt; color: #444; }
 }
+/* folha da semana: agrupar, filtros de andar e apartamentos, versão compacta para papel */
+.fs-agr { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin: 10px 0 2px; }
+.fs-agl { font-weight: 700; font-size: .9rem; }
+.fs-ops-c { display: flex; align-items: center; gap: 8px 16px; flex-wrap: wrap; }
+label.f.fs-papel { flex-direction: row; align-items: center; gap: 8px; }
+.fs-papel .inp { width: auto; max-width: 100%; }
+.fs-usb { text-align: left; cursor: pointer; min-width: 140px; font: inherit; }
+.fs-usb.on { border-color: var(--accent); color: var(--accent); font-weight: 700; }
+.fs-upick { background: var(--surface); border: 1px solid var(--accent); border-radius: var(--r); padding: 12px 14px; margin: 8px 0; display: flex; flex-direction: column; gap: 8px; }
+.fs-uph { display: flex; align-items: center; gap: 6px 12px; flex-wrap: wrap; }
+.fs-uph .fs-ops-b { margin-left: auto; }
+.fs-upa { display: grid; grid-template-columns: 170px minmax(0, 1fr); gap: 6px 10px; align-items: start; }
+.fs-upl { font-weight: 700; font-size: .85rem; text-align: left; padding-top: 5px; }
+.fs-sub { font-size: .82rem; }
+.fs-ua { font-weight: 700; }
+.fs-cmp { display: none; }
+@media (max-width: 760px) {
+  .fs-upa { grid-template-columns: minmax(0, 1fr); gap: 4px; }
+  .fs-uph .fs-ops-b { margin-left: 0; }
+  label.f.fs-papel { flex-wrap: wrap; }
+  .fs-papel .inp { width: 100%; }
+  .fs-agr .seg-v { width: 100%; }
+  .fs-agr .seg-v button { flex: 1 1 0; padding-left: 6px; padding-right: 6px; }
+}
+@media print {
+  .fs-agr, .fs-upick { display: none !important; }
+  .fs-wrap.cmp .fs { display: none !important; }
+  .fs-wrap.cmp .fs-cmp { display: block; }
+  .fs-wrap.pag .fs > .fs-andar + .fs-andar, .fs-wrap.pag .fc-sec + .fc-sec { break-before: page; }
+  .fc-sec { margin-bottom: 8px; }
+  .fc-h { display: flex; align-items: baseline; gap: 10px; background: #1f4e8c; color: #fff; padding: 3px 8px; font-size: 10.5pt; break-after: avoid; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  .fc-h span { font-size: 8pt; }
+  .fc-h .fc-hn { margin-left: auto; }
+  .fc-t { width: 100%; border-collapse: collapse; font-size: 8pt; table-layout: fixed; }
+  .fc-t th { text-align: left; font-size: 6.5pt; text-transform: uppercase; letter-spacing: .03em; color: #555; font-weight: 600; padding: 2px 4px; border-bottom: 1px solid #1f4e8c; }
+  .fc-t td { padding: 1.5px 4px; border-bottom: 1px solid #e0e0e0; vertical-align: middle; overflow-wrap: anywhere; line-height: 1.25; }
+  .fc-t tr { break-inside: avoid; }
+  .fc-t th.fc-c-l { width: 21%; } .fc-t th.fc-c-r { width: 9%; } .fc-t th.fc-c-e { width: 13%; } .fc-t th.fc-c-f { width: 5%; }
+  .fc-t th.fc-c-i { width: 8%; } .fc-t th.fc-c-c { width: 13%; } .fc-t th.fc-c-eq { width: 10%; } .fc-t th.fc-c-po { width: 7%; }
+  .fc-t.m-a th.fc-c-l { width: 12%; } .fc-t.m-a th.fc-c-r { width: 20%; }
+  .fc-t tbody.fc-bs { break-inside: avoid; }
+  .fc-t tbody.fc-b tr:first-child td { border-top: 1px solid #8aa0bf; }
+  .fc-l { font-weight: 700; font-size: 8pt; color: #1f4e8c; vertical-align: top !important; border-right: 1px solid #d4d4d4; line-height: 1.2; }
+  .fc-l small { display: block; font-size: 6.5pt; color: #555; text-transform: uppercase; letter-spacing: .03em; font-weight: 600; }
+  .fc-q { font-weight: 700; }
+  .fc-dt b { font-size: 8.5pt; font-weight: 800; }
+  .fc-dt small, .fc-t small { font-size: 6.5pt; color: #555; font-weight: 400; }
+  .fc-atr { color: #b42318; font-size: 7pt; }
+  .fc-eq { font-size: 7.5pt; color: #333; }
+  .fc-w { border-left: 1px solid #d4d4d4; }
+  tr.atr .fc-q { text-decoration: underline; }
+}
 /* ============================================================ últimas alterações */
 .ult-b { display: inline-flex; align-items: center; gap: 6px; }
 .ult-b svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; flex: 0 0 auto; }
