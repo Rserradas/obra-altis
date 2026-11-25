@@ -135,10 +135,13 @@ export function ganttView() {
   const us = S.unidades.filter((u) => (!g.bloco || u.bloco === g.bloco) && (!g.tipo || u.tipo === g.tipo));
   const nomes = ganttNomesAtiv(g.bloco);
   const nA = g.ativs.length;
+  // avisos de hoje: contam com os outros filtros (bloco, fração, grupo, equipa...), mas não com o estado escolhido
+  const nAv = {}; { const est = g.estado; for (const [k] of GANTT_AVISOS) { g.estado = k; nAv[k] = 0; for (const u of us) if (!g.unidade || u.id === g.unidade) for (const a of u.acts) if (ganttPassa(a, S.res.get(a.id))) nAv[k]++; } g.estado = est; }
   const html = `
     <div class="card-h"><h1>Gantt</h1></div>
     <div class="chips" role="group" aria-label="Bloco">${["", ...blocos].map((b) => `<button class="chip ${g.bloco === b ? "on" : ""}" data-gb="${b}">${b ? (b === "Geral" ? "Geral" : "Bloco " + b) : "Todos os blocos"}</button>`).join("")}</div>
     <div class="chips" role="group" aria-label="Estado">${GANTT_EST.map(([k, l]) => `<button class="chip ${g.estado === k ? "on" : ""}" data-gest="${k}">${l}</button>`).join("")}</div>
+    <div class="chips avisos" role="group" aria-label="Avisos de hoje">${GANTT_AVISOS.map(([k, l, t]) => `<button class="chip aviso ${nAv[k] ? "alerta" : ""} ${g.estado === k ? "on" : ""}" data-gav="${k}" aria-pressed="${g.estado === k}" title="${esc(t)}${g.estado === k ? ". Toque outra vez para ver todas" : ""}">${l} <span class="num">${nAv[k]}</span></button>`).join("")}</div>
     <div class="filters">
       <label class="f">Frações<select class="inp" id="gt">${[["", "Todas as frações"], ["Apartamento", "Apartamentos"], ["Loja", "Lojas"], ["Zona comum", "Zonas comuns"], ["Geral", "Geral"]].map(([k, l]) => `<option value="${k}" ${g.tipo === k ? "selected" : ""}>${l}</option>`).join("")}</select></label>
       <label class="f">Apartamento ou fração<select class="inp" id="gu"><option value="">Todas${g.bloco ? " do " + (g.bloco === "Geral" ? "geral" : "bloco " + g.bloco) : ""}</option>${us.map((u) => `<option value="${esc(u.id)}" ${g.unidade === u.id ? "selected" : ""}>${esc(u.tipo === "Apartamento" || /-L\d+$/.test(u.id) ? u.id : u.nome)}</option>`).join("")}</select></label>
@@ -183,6 +186,7 @@ export function bindGantt() {
   document.querySelectorAll("[data-gz]").forEach((b) => (b.onclick = () => { g.zoom = b.dataset.gz; render(); }));
   $("#gu").onchange = (e) => { g.unidade = e.target.value; render(); };
   document.querySelectorAll("[data-gest]").forEach((b) => (b.onclick = () => { g.estado = b.dataset.gest; render(); }));
+  document.querySelectorAll("[data-gav]").forEach((b) => (b.onclick = () => { g.estado = g.estado === b.dataset.gav ? "" : b.dataset.gav; render(); }));
   $("#gt").onchange = (e) => { g.tipo = e.target.value; if (g.unidade && S.uMap[g.unidade] && g.tipo && S.uMap[g.unidade].tipo !== g.tipo) g.unidade = ""; render(); };
   $("#ge").onchange = (e) => { g.equipa = e.target.value; render(); };
   const gg = $("#gg"); if (gg) gg.onchange = (e) => { g.grupo = e.target.value; render(); };
@@ -216,6 +220,8 @@ export function bindGantt() {
   bindNiveis();
   drawGantt();
 }
+/** Avisos de hoje, como na Minha semana: o que já devia estar marcado e ainda não está (sem as Datas por confirmar). */
+export const GANTT_AVISOS = [["atrcom", "Atrasadas para começar", "Já deviam ter começado e ainda não estão marcadas como iniciadas"], ["comhoje", "Começam hoje", "Previstas para hoje e ainda não iniciadas"], ["acabhoje", "Acabam hoje", "Previstas para acabar hoje e ainda não concluídas"]];
 export const GANTT_EST = [["", "Todas"], ["proximas", "Próximas 2 semanas"], ["em_curso", "Em curso"], ["atrasada", "Atrasadas"], ["nao_iniciada", "Não iniciadas"], ["bloqueada", "Bloqueadas"], ["porconfirmar", "Datas por confirmar"], ["concluida", "Concluídas"]];
 export const semAcentos = (t) => String(t).toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
 /** Nomes das atividades pela ordem da sequência da obra. */
@@ -239,7 +245,7 @@ export function ganttResumoFiltros() {
   if (g.unidade) r.push(g.unidade);
   if (g.grupo && nomeGrupo(g.grupo)) r.push("Grupo " + nomeGrupo(g.grupo));
   if (g.ativs && g.ativs.length) r.push(g.ativs.length <= 3 ? g.ativs.join(", ") : g.ativs.length + " atividades");
-  if (g.estado) r.push((GANTT_EST.find(([k]) => k === g.estado) || [, ""])[1]);
+  if (g.estado) r.push(([...GANTT_EST, ...GANTT_AVISOS].find(([k]) => k === g.estado) || [, ""])[1]);
   if (g.equipa) r.push(g.equipa === "_sem" ? "Sem equipa" : g.equipa);
   if ((g.q || "").trim()) r.push(`procura "${g.q.trim()}"`);
   if (g.de || g.ate) r.push(`${g.de ? "de " + fd(g.de) : ""}${g.de && g.ate ? " " : ""}${g.ate ? "até " + fd(g.ate) : ""}`);
@@ -261,6 +267,9 @@ export function ganttPassa(a, r) {
     case "nao_iniciada": if (r.estado !== "por_iniciar" && r.estado !== "bloqueada") return false; break;
     case "bloqueada": if (r.estado !== "bloqueada") return false; break;
     case "porconfirmar": if (!r.semPlano || conc) return false; break;
+    case "atrcom": if (conc || a.realInicio || r.semPlano || !(r.inicio < S.hoje)) return false; break;
+    case "comhoje": if (conc || a.realInicio || r.semPlano || r.inicio !== S.hoje) return false; break;
+    case "acabhoje": if (conc || r.semPlano || r.fim !== S.hoje) return false; break;
   }
   const fim = maxD(r.fim, r.provFim);
   if (g.de && fim && fim < g.de) return false;
