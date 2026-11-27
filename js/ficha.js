@@ -1,6 +1,6 @@
 // Ficha da atividade.
 import { downstream, duracaoDe } from "../engine.js";
-import { $, ESTADO, PAPEL, can, deltaHTML, erroSimples, esc, fd, fdt, toast, ui } from "./base.js";
+import { $, ESTADO, ICON, PAPEL, can, deltaHTML, erroSimples, esc, fd, fdt, toast, ui } from "./base.js";
 import { nomeAtiv } from "./calculo.js";
 import { atribuirEquipa, openEquipa } from "./equipas.js";
 import { S, store } from "./estado.js";
@@ -8,7 +8,7 @@ import { closeNova, openNova, ordenaUnidades } from "./nova.js";
 import { bindImp, impFichaHTML } from "./proximas.js";
 import { bindPendentes, pendAberto, pendDe, pendFormHTML, pendListaHTML } from "./pendentes.js";
 import { bindDateInputs, bindDepPicker, concluirHoje, confirmar, dateInput, depPickerHTML, editarData, inicioRecalc, perguntar, recalcularFim, recalcularInicio, rotuloAt } from "./plano.js";
-import { bindFotoPickers, bindPctCtl, fotoPickerHTML, loadFotos, pctCtlHTML, pendentesHTML } from "./unidades.js";
+import { bindFotoPickers, bindPctCtl, editarComentario, fotoPickerHTML, loadFotos, pctCtlHTML, pendentesHTML } from "./unidades.js";
 
 /* ============================================================ ficha de atividade */
 export function openSheet(id, opts = {}) {
@@ -150,7 +150,7 @@ export function renderSheet() {
 
       ${can("vistoria") ? `<div class="formbox vbox"><h3>Vistoria</h3>
         <div class="f"><span>Percentagem verificada</span><div id="fPctW">${pctCtlHTML("sheet", Math.round(a.pctFiscal ?? a.pctEmp ?? 0), false)}</div></div>
-        ${a.fiscalNota ? `<p class="note" style="margin:0"><b>Último comentário:</b> ${esc(a.fiscalNota)}</p>` : ""}
+        ${a.fiscalNota ? `<p class="note" style="margin:0"><b>Último comentário:</b> ${esc(a.fiscalNota)} <button type="button" class="vult-ed" id="fNotaEd" title="Corrigir este comentário" aria-label="Corrigir o último comentário">${ICON.lapis}</button></p>` : ""}
         <label class="f">Comentário<textarea class="inp" id="fNota" rows="2" placeholder="O que viu, não conformidades, o que falta"></textarea></label>
         <div class="row">${fotoPickerHTML("sv", 0, "Juntar fotografias")}</div>
         <div id="fPend"></div>
@@ -343,6 +343,7 @@ export function renderSheet() {
     fotos = fotos.concat(novas); desenhaPend();
   });
   on("#bVist", () => guardarVist(pctVist, $("#fNota", sh).value.trim(), fotos));
+  on("#fNotaEd", () => editarComentario(id));
   const guardarVist = async (v, nota, fotos) => {
     const agora = new Date().toISOString();
     for (const f of fotos) await store.addFoto(id, a.unidade, f, nota);

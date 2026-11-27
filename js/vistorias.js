@@ -26,7 +26,7 @@ export function resumoVistorias(regs) {
     x.regs.push(r); if (r.unidade) x.us.add(r.unidade); if (r.ativ && !r.pend) x.ativs.add(r.ativ);
     if (r.pend) x.pends = (x.pends || 0) + 1;
     x.fotos += (r.dados && r.dados.nfotos) || (/(\d+) fotografia/.exec(r.texto || "") || [0, 0])[1] * 1;
-    if ((r.dados && r.dados.nota) || /comentário:/.test(r.texto || "")) x.coments++;
+    if (((r.dados && r.dados.nota) || /comentário:/.test(r.texto || "")) && !(r.dados && r.dados.notaSubstitui)) x.coments++;
     dias.set(k, x);
   }
   return [...dias.values()].sort((a, b) => b.dia.localeCompare(a.dia) || a.nome.localeCompare(b.nome));
@@ -134,7 +134,9 @@ export function relVistView() {
         const prim = x.regs[0], ult = x.regs[x.regs.length - 1];
         const d0 = prim.dados || {}, d1 = ult.dados || {};
         const depois = [...x.regs].reverse().map((r) => r.dados && r.dados.depois).find((v) => v != null);
-        const notas = [...new Set(x.regs.map((r) => r.dados ? r.dados.nota : (/comentário: (.*)$/.exec(r.texto || "") || [])[1]).filter(Boolean))];
+        // um comentário corrigido depois (lápis do Último comentário) sai do relatório: fica só o texto novo
+        const velhas = new Set(x.regs.map((r) => r.dados && r.dados.notaSubstitui).filter(Boolean));
+        const notas = [...new Set(x.regs.map((r) => r.dados ? r.dados.nota : (/comentário: (.*)$/.exec(r.texto || "") || [])[1]).filter(Boolean))].filter((t) => !velhas.has(t));
         // vistoria anterior ao período (de qualquer fiscal), para ver se a obra andou
         const ini0 = new Date(dias[0] + "T00:00:00").toISOString();
         const ant = x.ativ ? regs.filter((r) => !r.pend && r.ativ === x.ativ && r.em < ini0).sort((p, q) => q.em.localeCompare(p.em))[0] : null;
@@ -142,7 +144,7 @@ export function relVistView() {
         const prev = ant ? { pct: valDe(ant), em: ant.em } : null;
         const confirmado = x.regs.some((r) => r.dados && r.dados.confirmado);
         const corrigido = x.regs.map((r) => r.corrigidoEm).filter(Boolean).sort().pop() || null;
-        return { ...x, a, corrigido, nome: (a && nomeAtiv(a)) || d1.esp || "Atividade", antes: d0.antes ?? null, depois: depois ?? null, emp: d1.emp ?? (a ? Math.round(Number(a.pctEmp) || 0) : null), notas, semDados: !prim.dados, texto: ult.texto, prev, confirmado };
+        return { ...x, a, corrigido, nome: (a && nomeAtiv(a)) || d1.esp || "Atividade", antes: d0.antes ?? null, depois: depois ?? null, emp: [...x.regs].reverse().map((r) => r.dados && r.dados.emp).find((v) => v != null) ?? (a ? Math.round(Number(a.pctEmp) || 0) : null), notas, velhas: [...velhas], semDados: !prim.dados, texto: ult.texto, prev, confirmado };
       });
       const atencao = linhas.filter((l) => l.depois != null && l.emp != null && Math.abs(l.depois - l.emp) >= 15);
       const diasEntre = (a, b) => Math.round((new Date(b) - new Date(a)) / 86400000);
@@ -240,7 +242,7 @@ export function relVistView() {
           ${ordemU.map((uid) => `<div class="rv-u"><h3><span class="mono">${esc(nomeU(uid))}</span><small>${esc(descU(uid))}${S.uMap[uid] ? ` · avanço ${S.uMap[uid].pct}%` : ""}</small></h3>
             ${ganttFracaoHTML(uid, new Set(porU.get(uid).map((l) => l.ativ).filter(Boolean)))}
             <table class="rv-t"><thead><tr><th>Especialidade</th><th class="n">Vistoria anterior</th><th class="n">Agora</th><th class="n">Evolução</th><th class="n">Empreiteiro</th></tr></thead>
-            ${porU.get(uid).map((l) => { const at = atencao.includes(l) ? "at" : "", figs = fotosDe(l.ativ, l.nome, l.notas), notas = l.notas.map((t) => esc(t)).join(" · ");
+            ${porU.get(uid).map((l) => { const at = atencao.includes(l) ? "at" : "", figs = fotosDe(l.ativ, l.nome, [...l.notas, ...l.velhas]), notas = l.notas.map((t) => esc(t)).join(" · ");
               const obs = l.confirmado || notas || figs ? `<tr class="rv-obs ${at}"><td colspan="5">${l.confirmado || notas ? `<div>${l.confirmado ? `<span class="rv-conf">Confirmado sem alteração</span> ` : ""}${notas}</div>` : ""}${figs ? `<div class="rv-fl">${figs}</div>` : ""}</td></tr>` : "";
               return `<tbody class="rv-esp${obs ? " com-obs" : ""}${figs ? " com-fotos" : ""}"><tr class="${at}"><td><b>${esc(l.nome)}</b>${l.a ? ` <button class="lnk-b no-print rv-fic" data-a="${l.a.id}">ficha</button>` : ""}</td>
               ${l.semDados && l.depois == null ? `<td colspan="4" class="rv-ant">${esc(l.texto || "")}</td>` : (() => {

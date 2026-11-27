@@ -151,7 +151,7 @@ export function unidadeView(id) {
     return `<div class="vrow ${vista(a) ? "vista" : ""}" id="vr-${a.id}">
       <div class="nm" style="display:flex;flex-direction:column;gap:3px;min-width:0"><b style="overflow-wrap:anywhere">${vista(a) ? `<span class="vok" aria-label="Vista">✓</span> ` : ""}${esc(nomeAtiv(a))}</b>
         <small class="muted">Empreiteiro diz ${Math.round(a.pctEmp ?? 0)}% · <span class="pill st-${r.estado}" style="font-size:.7rem">${ESTADO[r.estado]}</span>${a.fiscalEm ? ` · última vistoria ${fdt(a.fiscalEm)}` : ""}</small>
-        ${a.fiscalNota ? `<small class="vult">Último comentário: ${esc(a.fiscalNota)}</small>` : ""}
+        ${a.fiscalNota ? `<small class="vult">Último comentário: ${esc(a.fiscalNota)}${can("vistoria") ? ` <button type="button" class="vult-ed" data-vced="${a.id}" title="Corrigir este comentário" aria-label="Corrigir o último comentário de ${esc(nomeAtiv(a))}">${ICON.lapis}</button>` : ""}</small>` : ""}
         ${corrDia ? `<small class="vcorr-n ${regsDia[a.id] ? "" : "nao"}">${regsDia[a.id] ? `A ${fd(corrDia)} ficou ${(() => { const d = regsDia[a.id].dados || {}; return [d.depois != null ? `<b>${d.depois}%</b>` : "sem percentagem", d.nota ? "com comentário" : "", d.nfotos ? pl(d.nfotos, "fotografia", "fotografias") : ""].filter(Boolean).join(", "); })()}` : `A ${fd(corrDia)} não foi registada`}</small>` : ""}</div>
       <div class="ctl">
         <button type="button" class="btn sm ${comAberto ? "on-c" : ""}" data-vc="${a.id}" title="Escrever comentário" aria-label="Comentário">${ICON.coment}</button>
@@ -252,6 +252,7 @@ export function bindUnidade(u) {
       render();
     }));
     view.querySelectorAll("[data-prm]").forEach((b) => (b.onclick = () => { const [id, i] = b.dataset.prm.split("|"); ui.vistoria[id].fotos.splice(+i, 1); render(); }));
+    view.querySelectorAll("[data-vced]").forEach((b) => (b.onclick = (e) => { e.preventDefault(); e.stopPropagation(); editarComentario(b.dataset.vced); }));
     view.querySelectorAll("[data-vc]").forEach((b) => (b.onclick = () => { const v = vist(b.dataset.vc); v.abrirC = !v.abrirC || !!(v.coment && v.coment.length); render(); const i = view.querySelector(`[data-vct="${b.dataset.vc}"]`); if (i) i.focus(); }));
     const contar = () => {
       const n = Object.values(ui.vistoria).filter((v) => v.unidade === u.id && (v.pct != null || (v.fotos && v.fotos.length) || (v.coment && v.coment.trim()))).length;
@@ -378,6 +379,32 @@ export function refCorrecao(a, dia) {
   return { antes: a.pctFiscal != null && a.fiscalEm && a.fiscalEm < ini ? Math.round(a.pctFiscal) : null, emp: null };
 }
 export const diaCurto = (dia) => `${DIAS_SEM[new Date(dia + "T12:00:00").getDay()]}, ${fd(dia, dia.slice(0, 4) !== S.hoje.slice(0, 4))}`;
+/** Corrigir o último comentário do fiscal ali mesmo (lápis). A correção fica no dia em que o comentário foi escrito
+ *  e o relatório desse dia passa a mostrar só o texto novo; o antigo fica no histórico da atividade. */
+export async function editarComentario(id) {
+  const a = S.acts[id];
+  if (!a || !a.fiscalNota || !can("vistoria")) return;
+  const antigo = a.fiscalNota, quando = a.fiscalNotaEm || a.fiscalEm || null;
+  const dia = quando ? diaLocal(quando) : S.hoje, N = `${nomeAtiv(a)} em ${a.unidade}`;
+  const novo = await pedirTexto({
+    titulo: "Corrigir o comentário",
+    texto: `<p class="note" style="margin-top:0">${esc(N)}, comentário ${quando ? `da vistoria de ${esc(fdt(quando))}` : "de uma vistoria anterior"}. A correção fica nesse dia e o relatório desse dia passa a mostrar o texto novo. Para apagar o comentário, deixe a caixa em branco.</p>`,
+    valor: antigo, sim: "Guardar correção",
+  });
+  if (novo == null || novo === antigo) return;
+  if (!novo && !(await confirmar("Apagar o comentário?", `<p>«${esc(antigo)}» deixa de aparecer em ${esc(N)} e no relatório de ${fd(dia, true)}. Continua no histórico da atividade.</p>`, "Sim, apagar"))) return;
+  try {
+    if (dia < S.hoje) await carregarHistVist(true);
+    const agora = new Date().toISOString();
+    const em = dia < S.hoje ? emCorrecao(dia) : agora;
+    const dados = { esp: nomeAtiv(a), antes: null, depois: null, emp: null, nota: novo || null, notaSubstitui: antigo, nfotos: 0, confirmado: false, correcao: true };
+    await store.updateAtividade(id, { fiscalNota: novo || null }, { tipo: "vistoria", em, corrigidoEm: agora, dados,
+      texto: novo ? `Corrigiu o comentário da vistoria de ${fd(dia, true)}, ${N}: «${novo}» (era «${antigo}»)` : `Apagou o comentário da vistoria de ${fd(dia, true)}, ${N} (era «${antigo}»)` });
+    if (dia < S.hoje) await carregarHistVist(true);
+    toast(novo ? `Comentário corrigido${dia < S.hoje ? ` na vistoria de ${fd(dia, true)}` : ""}` : "Comentário apagado", { anular: false });
+    render();
+  } catch (e) { toast("Não foi possível guardar: " + erroSimples(e), { anular: false }); }
+}
 export function vistDiaHTML(uid, corrDia) {
   const dias = diasVistFracao(uid);
   return `<div class="vcorr-sel"><label class="f">Dia da vistoria<select class="inp" id="vDia">

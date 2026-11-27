@@ -471,6 +471,10 @@ a.btn.pri { color: var(--accent-ink); }
 .sheet .fmenu { left: 0; right: auto; }
 .vextra { grid-column: 1 / -1; display: flex; flex-direction: column; gap: 8px; }
 .vult { color: var(--accent); font-size: .8rem; }
+.vult-ed { display: inline-flex; align-items: center; justify-content: center; vertical-align: middle; width: 26px; height: 26px; margin-left: 4px; padding: 0; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); color: var(--accent); cursor: pointer; }
+.vult-ed svg { width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.vult-ed:hover { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 10%, var(--surface)); }
+@media print { .vult-ed { display: none; } }
 .btn.on-c { border-color: var(--accent); color: var(--accent); }
 .pend { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
 .pth { position: relative; width: 64px; height: 64px; }
